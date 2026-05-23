@@ -1,4 +1,4 @@
-# MeshCurvKit
+# Mite (Mesh Curve Kit)
 
 Open-source C# toolkit for mesh curvature analysis and form-finding. Pure .NET with zero native dependencies — runs on Windows, macOS, and Linux.
 
