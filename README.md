@@ -1,4 +1,4 @@
-# Mite (Mesh Curve Kit)
+# Mite
 
 Open-source C# toolkit for mesh curvature analysis and form-finding. Pure .NET with zero native dependencies — runs on Windows, macOS, and Linux.
 
@@ -25,15 +25,31 @@ Open-source C# toolkit for mesh curvature analysis and form-finding. Pure .NET w
 
 | Project | Target | Description |
 |---------|--------|-------------|
-| `MeshCurvKit.Core` | net10.0 | Core library, no Rhino dependency |
-| `MeshCurvKit.Grasshopper` | net48 | Grasshopper plugin (7 components) |
-| `MeshCurvKit.Tests` | net10.0 | Unit tests against analytic surfaces |
+| `Mite.Core` | net10.0 | Core library, no Rhino dependency |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (7 components) |
+| `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
+
+## Install
+
+### Via Yak (recommended)
+
+In the Rhino command line:
+
+```
+_PackageManager
+```
+
+Search for **mite** and click Install.
+
+### Manual
+
+Drop `Mite.Grasshopper.gha` and `Mite.Core.dll` into your Grasshopper Libraries folder.
 
 ## Quick Start
 
 ```csharp
-using MeshCurvKit.Core.Geometry;
-using MeshCurvKit.Core.Curvature;
+using Mite.Core.Geometry;
+using Mite.Core.Curvature;
 
 // Load a mesh
 var mesh = MeshData.LoadObj("model.obj");
@@ -59,9 +75,17 @@ dotnet build
 dotnet test
 ```
 
+### Build Yak Package
+
+```powershell
+.\build-yak.ps1
+```
+
+This builds the Grasshopper project in Release mode, stages the files into `dist/`, and runs `yak build` to produce the `.yak` package. Requires the [Yak CLI](https://developer.rhino3d.com/guides/yak/the-package-manager-command-line-tool/).
+
 ## Grasshopper Components
 
-Drop `MeshCurvKit.Grasshopper.gha` into your Grasshopper Libraries folder. Components appear under the **MeshCurvKit** tab:
+Components appear under the **Mite** tab:
 
 - **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines
 - **FormFinding** — Planarize Mesh, Minimal Surface, Force Density Method
