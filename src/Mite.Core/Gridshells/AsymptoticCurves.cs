@@ -1,0 +1,92 @@
+using System;
+using System.Collections.Generic;
+using Mite.Core.Geometry;
+using Mite.Core.Curvature;
+
+namespace Mite.Core.Gridshells;
+
+/// <summary>
+/// Asymptotic direction fields and curve tracing. Asymptotic curves follow
+/// directions of zero normal curvature and exist only where Gaussian curvature
+/// is negative. They are the natural layout for gridshells built from straight
+/// flat strips (asymptotic gridshells).
+/// </summary>
+public static class AsymptoticCurves
+{
+    public class Options
+    {
+        public double StepSize { get; set; } = 0.01;
+        public int MaxSteps { get; set; } = 1000;
+    }
+
+    public readonly struct DirectionField
+    {
+        public readonly Vec3d[] Family1;
+        public readonly Vec3d[] Family2;
+        public readonly bool[] Exists;
+
+        public DirectionField(Vec3d[] family1, Vec3d[] family2, bool[] exists)
+        {
+            Family1 = family1;
+            Family2 = family2;
+            Exists = exists;
+        }
+    }
+
+    /// <summary>
+    /// Computes the two asymptotic direction fields from principal curvatures.
+    /// The normal curvature at angle t from D1 is k1 cos^2(t) + k2 sin^2(t),
+    /// which vanishes at tan(t) = +/- sqrt(-k1/k2) when k1 * k2 &lt; 0.
+    /// </summary>
+    public static DirectionField ComputeDirections(PrincipalCurvature.Result curvature)
+    {
+        int nv = curvature.K1.Length;
+        var f1 = new Vec3d[nv];
+        var f2 = new Vec3d[nv];
+        var exists = new bool[nv];
+
+        for (int i = 0; i < nv; i++)
+        {
+            double k1 = curvature.K1[i], k2 = curvature.K2[i];
+            if (k1 * k2 >= -1e-18) continue;
+
+            double t = Math.Atan(Math.Sqrt(-k1 / k2));
+            double c = Math.Cos(t), s = Math.Sin(t);
+            f1[i] = (c * curvature.D1[i] + s * curvature.D2[i]).Normalized();
+            f2[i] = (c * curvature.D1[i] - s * curvature.D2[i]).Normalized();
+            exists[i] = true;
+        }
+
+        return new DirectionField(f1, f2, exists);
+    }
+
+    /// <summary>
+    /// Traces asymptotic curves of one family from each seed vertex.
+    /// Seeds in regions of non-negative Gaussian curvature are skipped;
+    /// traces stop when they leave the anticlastic region.
+    /// </summary>
+    public static List<Vec3d[]> Trace(
+        MeshData mesh, int[] seedVertices, PrincipalCurvature.Result curvature,
+        bool secondFamily, Options? options = null)
+    {
+        options ??= new Options();
+        var proj = new MeshProjection(mesh);
+        var field = ComputeDirections(curvature);
+        var dirs = secondFamily ? field.Family2 : field.Family1;
+
+        var result = new List<Vec3d[]>();
+        foreach (int seed in seedVertices)
+        {
+            if (seed < 0 || seed >= proj.Mesh.VertexCount || !field.Exists[seed]) continue;
+
+            var forward = FieldTracer.Trace(proj, seed, dirs, field.Exists, options.StepSize, options.MaxSteps, false);
+            var backward = FieldTracer.Trace(proj, seed, dirs, field.Exists, options.StepSize, options.MaxSteps, true);
+            var line = FieldTracer.Join(backward, forward);
+
+            if (line.Length > 1)
+                result.Add(line);
+        }
+
+        return result;
+    }
+}

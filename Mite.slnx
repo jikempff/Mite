@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mite.Core/Mite.Core.csproj" />
+    <Project Path="src/Mite.Grasshopper/Mite.Grasshopper.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Mite.Tests/Mite.Tests.csproj" />
+  </Folder>
+</Solution>

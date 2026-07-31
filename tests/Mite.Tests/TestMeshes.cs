@@ -94,6 +94,38 @@ public static class TestMeshes
         return new MeshData(verts.ToArray(), faces.ToArray());
     }
 
+    public static MeshData CreateSaddle(int div = 20, double size = 2.0)
+    {
+        // z = x^2 - y^2 over [-size/2, size/2]^2, triangulated
+        var verts = new Vec3d[(div + 1) * (div + 1)];
+        var faces = new List<int[]>();
+
+        for (int j = 0; j <= div; j++)
+        {
+            for (int i = 0; i <= div; i++)
+            {
+                double x = size * (i / (double)div - 0.5);
+                double y = size * (j / (double)div - 0.5);
+                verts[j * (div + 1) + i] = new Vec3d(x, y, x * x - y * y);
+            }
+        }
+
+        for (int j = 0; j < div; j++)
+        {
+            for (int i = 0; i < div; i++)
+            {
+                int a = j * (div + 1) + i;
+                int b = a + 1;
+                int c = b + (div + 1);
+                int d = a + (div + 1);
+                faces.Add(new[] { a, b, c });
+                faces.Add(new[] { a, c, d });
+            }
+        }
+
+        return new MeshData(verts, faces.ToArray());
+    }
+
     public static MeshData CreateQuadGrid(int nx = 5, int ny = 5, double size = 1.0)
     {
         var verts = new Vec3d[(nx + 1) * (ny + 1)];
