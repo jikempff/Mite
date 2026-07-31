@@ -6,3 +6,9 @@ obj/
 *.DotSettings.user
 *.nupkg
 TestResults/
+
+# Yak packaging (built artifacts — manifest.yml is tracked)
+dist/*.gha
+dist/*.dll
+dist/*.yak
+dist/*.png

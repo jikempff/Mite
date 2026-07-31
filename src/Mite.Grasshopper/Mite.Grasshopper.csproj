@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>Mite.Grasshopper</RootNamespace>
+    <AssemblyName>Mite.Grasshopper</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <Version>1.0.1-beta</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grasshopper" Version="8.*" IncludeAssets="compile;build" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mite.Core\Mite.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Mite_Tab.png" />
+    <EmbeddedResource Include="Resources\PrincipalCurvature.png" />
+    <EmbeddedResource Include="Resources\GaussianCurvature.png" />
+    <EmbeddedResource Include="Resources\MeanCurvature.png" />
+    <EmbeddedResource Include="Resources\Streamlines.png" />
+    <EmbeddedResource Include="Resources\Planarization.png" />
+    <EmbeddedResource Include="Resources\MinimalSurface.png" />
+    <EmbeddedResource Include="Resources\ForceDensity.png" />
+  </ItemGroup>
+</Project>
