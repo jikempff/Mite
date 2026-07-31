@@ -5,7 +5,7 @@
     <AssemblyName>Mite.Grasshopper</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <Version>1.0.2-beta.2</Version>
+    <Version>1.0.2-beta.3</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,5 +27,6 @@
     <EmbeddedResource Include="Resources\ForceDensity.png" />
     <EmbeddedResource Include="Resources\AsymptoticNet.png" />
     <EmbeddedResource Include="Resources\GeodesicNet.png" />
+    <EmbeddedResource Include="Resources\LathAnalysis.png" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,5 @@
 name: mite
-version: 1.0.2-beta.2
+version: 1.0.2-beta.3
 authors:
   - Mite Contributors
 description: >-
@@ -7,6 +7,7 @@ description: >-
   Principal, Gaussian, and mean curvature. Curvature streamlines.
   Planarization, minimal surfaces, and force density method.
   Asymptotic and geodesic nets for gridshell design.
+  Lath buildability analysis with bending and twist strain checks.
 url: https://github.com/jikempff/Mite
 keywords:
   - mesh
@@ -22,3 +23,5 @@ keywords:
   - gridshell
   - asymptotic
   - geodesic
+  - lath
+  - buildability
