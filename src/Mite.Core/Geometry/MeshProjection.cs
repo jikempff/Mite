@@ -13,6 +13,7 @@ public class MeshProjection
     private readonly int[][] _vertexFaces;
     private readonly int[][] _vertexNeighbors;
     private readonly Vec3d[] _faceNormals;
+    private readonly Vec3d[] _vertexNormals;
 
     public MeshData Mesh => _mesh;
 
@@ -22,18 +23,29 @@ public class MeshProjection
         _vertexFaces = _mesh.BuildVertexFaces();
         _vertexNeighbors = _mesh.BuildVertexNeighbors();
         _faceNormals = _mesh.ComputeFaceNormals();
+        _vertexNormals = _mesh.ComputeVertexNormals();
     }
 
     public readonly struct Hit
     {
         public readonly Vec3d Point;
+
+        /// <summary>Flat normal of the face containing the hit.</summary>
         public readonly Vec3d Normal;
+
+        /// <summary>
+        /// Barycentric-interpolated vertex normal: varies continuously across
+        /// the surface, so it can be finite-differenced (e.g. for torsion).
+        /// </summary>
+        public readonly Vec3d SmoothNormal;
+
         public readonly int NearestVertex;
 
-        public Hit(Vec3d point, Vec3d normal, int nearestVertex)
+        public Hit(Vec3d point, Vec3d normal, Vec3d smoothNormal, int nearestVertex)
         {
             Point = point;
             Normal = normal;
+            SmoothNormal = smoothNormal;
             NearestVertex = nearestVertex;
         }
     }
@@ -85,7 +97,7 @@ public class MeshProjection
         }
 
         if (bestFace < 0)
-            return new Hit(_mesh.Vertices[v], Vec3d.Zero, v);
+            return new Hit(_mesh.Vertices[v], Vec3d.Zero, Vec3d.Zero, v);
 
         // Nearest vertex of the winning face, used as the next query hint
         var face = _mesh.Faces[bestFace];
@@ -97,7 +109,28 @@ public class MeshProjection
             if (d < nd) { nd = d; nearest = face[j]; }
         }
 
-        return new Hit(bestPoint, _faceNormals[bestFace], nearest);
+        Vec3d smooth = InterpolateNormal(bestPoint, face);
+        return new Hit(bestPoint, _faceNormals[bestFace], smooth, nearest);
+    }
+
+    private Vec3d InterpolateNormal(Vec3d p, int[] face)
+    {
+        Vec3d a = _mesh.Vertices[face[0]], b = _mesh.Vertices[face[1]], c = _mesh.Vertices[face[2]];
+        Vec3d v0 = b - a, v1 = c - a, v2 = p - a;
+
+        double d00 = Vec3d.Dot(v0, v0), d01 = Vec3d.Dot(v0, v1), d11 = Vec3d.Dot(v1, v1);
+        double d20 = Vec3d.Dot(v2, v0), d21 = Vec3d.Dot(v2, v1);
+        double denom = d00 * d11 - d01 * d01;
+        if (Math.Abs(denom) < 1e-20)
+            return _vertexNormals[face[0]];
+
+        double bv = (d11 * d20 - d01 * d21) / denom;
+        double bw = (d00 * d21 - d01 * d20) / denom;
+        double bu = 1.0 - bv - bw;
+
+        return (bu * _vertexNormals[face[0]] +
+                bv * _vertexNormals[face[1]] +
+                bw * _vertexNormals[face[2]]).Normalized();
     }
 
     // Ericson, "Real-Time Collision Detection", closest point on triangle

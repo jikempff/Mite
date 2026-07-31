@@ -20,6 +20,7 @@ Open-source C# toolkit for mesh curvature analysis and form-finding. Pure .NET w
 ### Gridshells
 - **Asymptotic Net** — both families of asymptotic curves (zero normal curvature) for asymptotic gridshells
 - **Geodesic Net** — straightest geodesics traced on the mesh for geodesic (lath) gridshells
+- **Lath Analysis** — buildability check for strip laths: Darboux-frame decomposition (geodesic curvature, normal curvature, geodesic torsion) converted to bending strains against a material limit
 
 ### Dynamics
 - Spring, gravity, drag, smoothness, and area minimization forces
@@ -30,7 +31,7 @@ Open-source C# toolkit for mesh curvature analysis and form-finding. Pure .NET w
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (9 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (10 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -93,7 +94,7 @@ Components appear under the **Mite** tab:
 
 - **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines
 - **FormFinding** — Planarize Mesh, Minimal Surface, Force Density Method
-- **Gridshells** — Asymptotic Net, Geodesic Net
+- **Gridshells** — Asymptotic Net, Geodesic Net, Lath Analysis
 
 ## License
 
