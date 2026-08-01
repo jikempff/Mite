@@ -12,7 +12,7 @@ public class MiteInfo : GH_AssemblyInfo
     public override Guid Id => new("A1B2C3D4-E5F6-7890-ABCD-EF1234567890");
     public override string AuthorName => "Mite Contributors";
     public override string AuthorContact => "https://github.com/jikempff/Mite";
-    public override string Version => "1.0.2-beta.3";
+    public override string Version => "1.0.2-beta.4";
 
     public override Bitmap? Icon
     {

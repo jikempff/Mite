@@ -15,13 +15,20 @@ internal static class FieldTracer
         MeshProjection proj, int startVertex, Vec3d[] dirs, bool[]? mask,
         double stepSize, int maxSteps, bool reverse)
     {
-        var mesh = proj.Mesh;
+        return Trace(proj, proj.Mesh.Vertices[startVertex], startVertex, dirs, mask,
+            stepSize, maxSteps, reverse, null);
+    }
+
+    internal static List<Vec3d> Trace(
+        MeshProjection proj, Vec3d startPos, int startHint, Vec3d[] dirs, bool[]? mask,
+        double stepSize, int maxSteps, bool reverse, Func<Vec3d, bool>? stopNear)
+    {
         var points = new List<Vec3d>();
-        Vec3d pos = mesh.Vertices[startVertex];
+        Vec3d pos = startPos;
         points.Add(pos);
 
-        int vert = startVertex;
-        Vec3d prevDir = (reverse ? -1.0 : 1.0) * dirs[startVertex];
+        int vert = startHint;
+        Vec3d prevDir = (reverse ? -1.0 : 1.0) * dirs[vert];
         if (prevDir.LengthSquared < 1e-20) return points;
 
         for (int step = 0; step < maxSteps; step++)
@@ -37,6 +44,9 @@ internal static class FieldTracer
 
             // Stalled against a boundary
             if ((newPos - pos).LengthSquared < 0.01 * stepSize * stepSize) break;
+
+            // Ran into an already-traced curve
+            if (stopNear != null && stopNear(newPos)) break;
 
             prevDir = (newPos - pos).Normalized();
             pos = newPos;
