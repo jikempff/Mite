@@ -1,12 +1,13 @@
 name: mite
-version: 1.0.2-beta.3
+version: 1.0.2-beta.4
 authors:
   - Mite Contributors
 description: >-
   Open-source mesh curvature analysis and form-finding toolkit.
   Principal, Gaussian, and mean curvature. Curvature streamlines.
   Planarization, minimal surfaces, and force density method.
-  Asymptotic and geodesic nets for gridshell design.
+  Asymptotic, geodesic, and Chebyshev nets for gridshell design
+  with evenly-spaced auto-seeding.
   Lath buildability analysis with bending and twist strain checks.
 url: https://github.com/jikempff/Mite
 keywords:
@@ -25,3 +26,5 @@ keywords:
   - geodesic
   - lath
   - buildability
+  - chebyshev
+  - elastic-gridshell

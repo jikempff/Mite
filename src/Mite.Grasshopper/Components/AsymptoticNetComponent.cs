@@ -26,9 +26,12 @@ public class AsymptoticNetComponent : GH_Component
     protected override void RegisterInputParams(GH_InputParamManager pManager)
     {
         pManager.AddMeshParameter("Mesh", "M", "Input mesh", GH_ParamAccess.item);
-        pManager.AddIntegerParameter("Seeds", "S", "Seed vertex indices", GH_ParamAccess.list);
+        pManager.AddIntegerParameter("Seeds", "S", "Seed vertex indices (optional when AutoSpace is on)", GH_ParamAccess.list);
         pManager.AddNumberParameter("Step", "St", "Step size (default 0.01)", GH_ParamAccess.item, 0.01);
         pManager.AddIntegerParameter("MaxSteps", "N", "Maximum integration steps (default 1000)", GH_ParamAccess.item, 1000);
+        pManager.AddBooleanParameter("AutoSpace", "A", "Fill the anticlastic region with evenly-spaced curves instead of tracing only from seeds", GH_ParamAccess.item, false);
+        pManager.AddNumberParameter("Spacing", "Sp", "Target distance between adjacent curves (AutoSpace only)", GH_ParamAccess.item, 0.0);
+        pManager[1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -43,18 +46,52 @@ public class AsymptoticNetComponent : GH_Component
         var seeds = new List<int>();
         double stepSize = 0.01;
         int maxSteps = 1000;
+        bool autoSpace = false;
+        double spacing = 0.0;
 
         if (!DA.GetData(0, ref mesh) || mesh == null) return;
-        if (!DA.GetDataList(1, seeds)) return;
+        DA.GetDataList(1, seeds);
         DA.GetData(2, ref stepSize);
         DA.GetData(3, ref maxSteps);
+        DA.GetData(4, ref autoSpace);
+        DA.GetData(5, ref spacing);
 
         var data = MeshConvert.ToMeshData(mesh);
         var curvature = PrincipalCurvature.Compute(data);
 
-        var opts = new AsymptoticCurves.Options { StepSize = stepSize, MaxSteps = maxSteps };
-        var familyA = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, false, opts);
-        var familyB = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, true, opts);
+        List<Mite.Core.Geometry.Vec3d[]> familyA, familyB;
+
+        if (autoSpace)
+        {
+            if (spacing <= 0)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "AutoSpace requires a positive Spacing.");
+                return;
+            }
+
+            var field = AsymptoticCurves.ComputeDirections(curvature);
+            var opts = new EvenlySpacedNet.Options
+            {
+                Spacing = spacing,
+                StepSize = stepSize,
+                MaxSteps = maxSteps
+            };
+            int firstSeed = seeds.Count > 0 ? seeds[0] : -1;
+            familyA = EvenlySpacedNet.TraceField(data, field.Family1, field.Exists, firstSeed, opts);
+            familyB = EvenlySpacedNet.TraceField(data, field.Family2, field.Exists, firstSeed, opts);
+        }
+        else
+        {
+            if (seeds.Count == 0)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Provide Seeds, or enable AutoSpace with a Spacing.");
+                return;
+            }
+
+            var opts = new AsymptoticCurves.Options { StepSize = stepSize, MaxSteps = maxSteps };
+            familyA = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, false, opts);
+            familyB = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, true, opts);
+        }
 
         if (familyA.Count == 0 && familyB.Count == 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,

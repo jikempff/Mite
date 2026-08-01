@@ -30,6 +30,8 @@ public class GeodesicNetComponent : GH_Component
         pManager.AddVectorParameter("Directions", "D", "Initial direction per seed (last reused if fewer)", GH_ParamAccess.list);
         pManager.AddNumberParameter("Step", "St", "Step size (default 0.01)", GH_ParamAccess.item, 0.01);
         pManager.AddIntegerParameter("MaxSteps", "N", "Maximum integration steps (default 1000)", GH_ParamAccess.item, 1000);
+        pManager.AddBooleanParameter("AutoSpace", "A", "Fill the surface with evenly-spaced geodesics of one family, grown from the first seed and direction", GH_ParamAccess.item, false);
+        pManager.AddNumberParameter("Spacing", "Sp", "Target distance between adjacent curves (AutoSpace only)", GH_ParamAccess.item, 0.0);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -45,11 +47,16 @@ public class GeodesicNetComponent : GH_Component
         double stepSize = 0.01;
         int maxSteps = 1000;
 
+        bool autoSpace = false;
+        double spacing = 0.0;
+
         if (!DA.GetData(0, ref mesh) || mesh == null) return;
         if (!DA.GetDataList(1, seeds)) return;
         if (!DA.GetDataList(2, directions)) return;
         DA.GetData(3, ref stepSize);
         DA.GetData(4, ref maxSteps);
+        DA.GetData(5, ref autoSpace);
+        DA.GetData(6, ref spacing);
 
         var data = MeshConvert.ToMeshData(mesh);
 
@@ -57,8 +64,27 @@ public class GeodesicNetComponent : GH_Component
         for (int i = 0; i < directions.Count; i++)
             dirs[i] = new Vec3d(directions[i].X, directions[i].Y, directions[i].Z);
 
-        var opts = new GeodesicCurves.Options { StepSize = stepSize, MaxSteps = maxSteps };
-        var lines = GeodesicCurves.Trace(data, seeds.ToArray(), dirs, opts);
+        List<Vec3d[]> lines;
+        if (autoSpace)
+        {
+            if (spacing <= 0)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "AutoSpace requires a positive Spacing.");
+                return;
+            }
+            var netOpts = new EvenlySpacedNet.Options
+            {
+                Spacing = spacing,
+                StepSize = stepSize,
+                MaxSteps = maxSteps
+            };
+            lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], netOpts);
+        }
+        else
+        {
+            var opts = new GeodesicCurves.Options { StepSize = stepSize, MaxSteps = maxSteps };
+            lines = GeodesicCurves.Trace(data, seeds.ToArray(), dirs, opts);
+        }
 
         var curves = new List<PolylineCurve>();
         foreach (var line in lines)

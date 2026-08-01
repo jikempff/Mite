@@ -53,25 +53,35 @@ public static class GeodesicCurves
 
     private static List<Vec3d> TraceOne(MeshProjection proj, int startVertex, Vec3d dir, Options opts)
     {
-        var mesh = proj.Mesh;
+        return TraceOneFrom(proj, proj.Mesh.Vertices[startVertex], startVertex, dir,
+            opts.StepSize, opts.MaxSteps, null);
+    }
+
+    internal static List<Vec3d> TraceOneFrom(
+        MeshProjection proj, Vec3d startPos, int startHint, Vec3d dir,
+        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear)
+    {
         var points = new List<Vec3d>();
-        Vec3d pos = mesh.Vertices[startVertex];
+        Vec3d pos = startPos;
         points.Add(pos);
 
         // Flatten the requested direction into the surface at the seed
-        var start = proj.ClosestPoint(pos, startVertex);
+        var start = proj.ClosestPoint(pos, startHint);
         dir = TangentComponent(dir, start.Normal);
         if (dir.LengthSquared < 1e-20) return points;
         dir = dir.Normalized();
 
-        int vert = startVertex;
-        for (int step = 0; step < opts.MaxSteps; step++)
+        int vert = startHint;
+        for (int step = 0; step < maxSteps; step++)
         {
-            var hit = proj.ClosestPoint(pos + opts.StepSize * dir, vert);
+            var hit = proj.ClosestPoint(pos + stepSize * dir, vert);
             Vec3d newPos = hit.Point;
 
             // Stalled against a boundary
-            if ((newPos - pos).LengthSquared < 0.01 * opts.StepSize * opts.StepSize) break;
+            if ((newPos - pos).LengthSquared < 0.01 * stepSize * stepSize) break;
+
+            // Ran into an already-traced curve
+            if (stopNear != null && stopNear(newPos)) break;
 
             Vec3d travel = newPos - pos;
             pos = newPos;

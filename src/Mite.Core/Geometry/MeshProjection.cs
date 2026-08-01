@@ -50,6 +50,19 @@ public class MeshProjection
         }
     }
 
+    /// <summary>Linear scan for the globally nearest vertex. Use once to seed hints.</summary>
+    public int NearestVertexGlobal(Vec3d p)
+    {
+        int best = 0;
+        double bestDist = double.MaxValue;
+        for (int i = 0; i < _mesh.VertexCount; i++)
+        {
+            double d = (_mesh.Vertices[i] - p).LengthSquared;
+            if (d < bestDist) { bestDist = d; best = i; }
+        }
+        return best;
+    }
+
     /// <summary>
     /// Finds the closest point on the mesh near the given vertex hint.
     /// Walks vertex-to-vertex toward the query point, then projects onto the
