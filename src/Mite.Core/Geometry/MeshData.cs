@@ -102,6 +102,36 @@ public class MeshData
         return result;
     }
 
+    /// <summary>
+    /// Flags vertices lying on a mesh boundary. An edge is a boundary edge when
+    /// it belongs to exactly one face; both its vertices are boundary vertices.
+    /// </summary>
+    public bool[] BuildBoundaryVertexFlags()
+    {
+        var edgeFaceCount = new Dictionary<(int, int), int>();
+        foreach (var face in Faces)
+        {
+            for (int i = 0; i < face.Length; i++)
+            {
+                int a = face[i], b = face[(i + 1) % face.Length];
+                var key = a < b ? (a, b) : (b, a);
+                edgeFaceCount.TryGetValue(key, out int c);
+                edgeFaceCount[key] = c + 1;
+            }
+        }
+
+        var boundary = new bool[VertexCount];
+        foreach (var kv in edgeFaceCount)
+        {
+            if (kv.Value == 1)
+            {
+                boundary[kv.Key.Item1] = true;
+                boundary[kv.Key.Item2] = true;
+            }
+        }
+        return boundary;
+    }
+
     public Vec3d[] ComputeFaceNormals()
     {
         var normals = new Vec3d[FaceCount];
@@ -131,6 +161,37 @@ public class MeshData
                 Vec3d e2 = (Vertices[next] - Vertices[curr]).Normalized();
                 double angle = Math.Acos(Math.Max(-1.0, Math.Min(1.0, Vec3d.Dot(e1, e2))));
                 normals[curr] = normals[curr] + angle * faceNormals[fi];
+            }
+        }
+        for (int i = 0; i < VertexCount; i++)
+            normals[i] = normals[i].Normalized();
+        return normals;
+    }
+
+    /// <summary>
+    /// Vertex normals with Nelson Max's weights (face normal / product of the
+    /// squared lengths of the two adjacent edges). Exact for vertices lying on
+    /// a sphere, and markedly more accurate than angle weighting for curvature
+    /// estimation. Faces are fanned from their first vertex if not triangular.
+    /// </summary>
+    public Vec3d[] ComputeVertexNormalsMax()
+    {
+        var normals = new Vec3d[VertexCount];
+        foreach (var face in Faces)
+        {
+            for (int i = 1; i < face.Length - 1; i++)
+            {
+                int i0 = face[0], i1 = face[i], i2 = face[i + 1];
+                Vec3d a = Vertices[i0] - Vertices[i1];
+                Vec3d b = Vertices[i1] - Vertices[i2];
+                Vec3d c = Vertices[i2] - Vertices[i0];
+                double l2a = a.LengthSquared, l2b = b.LengthSquared, l2c = c.LengthSquared;
+                if (l2a < 1e-30 || l2b < 1e-30 || l2c < 1e-30) continue;
+
+                Vec3d fn = Vec3d.Cross(a, b);
+                normals[i0] = normals[i0] + (1.0 / (l2a * l2c)) * fn;
+                normals[i1] = normals[i1] + (1.0 / (l2b * l2a)) * fn;
+                normals[i2] = normals[i2] + (1.0 / (l2c * l2b)) * fn;
             }
         }
         for (int i = 0; i < VertexCount; i++)
