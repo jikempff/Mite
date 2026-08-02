@@ -77,6 +77,75 @@ public class CurvatureTests
     }
 
     [Fact]
+    public void PrincipalCurvature_Sphere_MagnitudeIsOne()
+    {
+        // On a unit sphere k1 = k2 = 1/r = 1.0 — this catches scale bugs
+        // (an unsolved least-squares fit gives magnitudes that shrink with
+        // mesh refinement instead of converging)
+        var sphere = TestMeshes.CreateUnitSphere(32);
+        var result = PrincipalCurvature.Compute(sphere);
+
+        double sum1 = 0, sum2 = 0;
+        int n = 0;
+        for (int i = 1; i < result.K1.Length - 1; i++)
+        {
+            sum1 += result.K1[i];
+            sum2 += result.K2[i];
+            n++;
+        }
+        double mean1 = sum1 / n, mean2 = sum2 / n;
+        Assert.True(Math.Abs(mean1 - 1.0) < 0.15, $"Mean K1 should be ≈1.0 on unit sphere, got {mean1:F4}");
+        Assert.True(Math.Abs(mean2 - 1.0) < 0.15, $"Mean K2 should be ≈1.0 on unit sphere, got {mean2:F4}");
+    }
+
+    [Fact]
+    public void MeanCurvature_Sphere_MagnitudeIsOne()
+    {
+        // On a unit sphere H = 1/r = 1.0 — this catches the classic factor-2
+        // error in the cotangent Laplacian normalization
+        var sphere = TestMeshes.CreateUnitSphere(32);
+        var result = MeanCurvature.Compute(sphere);
+
+        double sum = 0;
+        int n = 0;
+        for (int i = 1; i < result.Values.Length - 1; i++)
+        {
+            sum += result.Values[i];
+            n++;
+        }
+        double mean = sum / n;
+        Assert.True(Math.Abs(mean - 1.0) < 0.1, $"Mean H should be ≈1.0 on unit sphere, got {mean:F4}");
+    }
+
+    [Fact]
+    public void GaussianCurvature_OpenMesh_BoundaryIsZero()
+    {
+        // The 2π angle deficit is meaningless on boundary vertices — they must
+        // report zero instead of huge spurious values
+        int nx = 10, ny = 10;
+        var grid = TestMeshes.CreateQuadGrid(nx, ny);
+        var K = GaussianCurvature.Compute(grid.ToTriangulated());
+
+        for (int i = 0; i < K.Length; i++)
+        {
+            int x = i % (nx + 1), y = i / (nx + 1);
+            bool isBoundary = x == 0 || x == nx || y == 0 || y == ny;
+            if (isBoundary)
+                Assert.True(K[i] == 0.0, $"Boundary vertex should have K=0, got {K[i]} at vertex {i}");
+        }
+    }
+
+    [Fact]
+    public void MeanCurvature_OpenMesh_BoundaryIsZero()
+    {
+        var grid = TestMeshes.CreateQuadGrid(10, 10);
+        var result = MeanCurvature.Compute(grid.ToTriangulated());
+
+        for (int i = 0; i < 11; i++)
+            Assert.True(result.Values[i] == 0.0, $"Boundary vertex should have H=0, got {result.Values[i]} at vertex {i}");
+    }
+
+    [Fact]
     public void PrincipalCurvature_DirectionsAreOrthogonal()
     {
         var sphere = TestMeshes.CreateUnitSphere(32);
