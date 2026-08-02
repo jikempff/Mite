@@ -41,12 +41,21 @@ public class MeshProjection
 
         public readonly int NearestVertex;
 
-        public Hit(Vec3d point, Vec3d normal, Vec3d smoothNormal, int nearestVertex)
+        /// <summary>Index of the face containing the hit, -1 if degenerate.</summary>
+        public readonly int Face;
+
+        /// <summary>Barycentric coordinates of the hit within Face.</summary>
+        public readonly Vec3d Bary;
+
+        public Hit(Vec3d point, Vec3d normal, Vec3d smoothNormal, int nearestVertex,
+            int face, Vec3d bary)
         {
             Point = point;
             Normal = normal;
             SmoothNormal = smoothNormal;
             NearestVertex = nearestVertex;
+            Face = face;
+            Bary = bary;
         }
     }
 
@@ -110,7 +119,7 @@ public class MeshProjection
         }
 
         if (bestFace < 0)
-            return new Hit(_mesh.Vertices[v], Vec3d.Zero, Vec3d.Zero, v);
+            return new Hit(_mesh.Vertices[v], Vec3d.Zero, Vec3d.Zero, v, -1, new Vec3d(1, 0, 0));
 
         // Nearest vertex of the winning face, used as the next query hint
         var face = _mesh.Faces[bestFace];
@@ -122,11 +131,14 @@ public class MeshProjection
             if (d < nd) { nd = d; nearest = face[j]; }
         }
 
-        Vec3d smooth = InterpolateNormal(bestPoint, face);
-        return new Hit(bestPoint, _faceNormals[bestFace], smooth, nearest);
+        Vec3d bary = Barycentric(bestPoint, face);
+        Vec3d smooth = (bary.X * _vertexNormals[face[0]] +
+                        bary.Y * _vertexNormals[face[1]] +
+                        bary.Z * _vertexNormals[face[2]]).Normalized();
+        return new Hit(bestPoint, _faceNormals[bestFace], smooth, nearest, bestFace, bary);
     }
 
-    private Vec3d InterpolateNormal(Vec3d p, int[] face)
+    private Vec3d Barycentric(Vec3d p, int[] face)
     {
         Vec3d a = _mesh.Vertices[face[0]], b = _mesh.Vertices[face[1]], c = _mesh.Vertices[face[2]];
         Vec3d v0 = b - a, v1 = c - a, v2 = p - a;
@@ -135,15 +147,11 @@ public class MeshProjection
         double d20 = Vec3d.Dot(v2, v0), d21 = Vec3d.Dot(v2, v1);
         double denom = d00 * d11 - d01 * d01;
         if (Math.Abs(denom) < 1e-20)
-            return _vertexNormals[face[0]];
+            return new Vec3d(1, 0, 0);
 
         double bv = (d11 * d20 - d01 * d21) / denom;
         double bw = (d00 * d21 - d01 * d20) / denom;
-        double bu = 1.0 - bv - bw;
-
-        return (bu * _vertexNormals[face[0]] +
-                bv * _vertexNormals[face[1]] +
-                bw * _vertexNormals[face[2]]).Normalized();
+        return new Vec3d(1.0 - bv - bw, bv, bw);
     }
 
     // Ericson, "Real-Time Collision Detection", closest point on triangle
