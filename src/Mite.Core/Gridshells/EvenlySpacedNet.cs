@@ -26,15 +26,21 @@ public static class EvenlySpacedNet
 
         /// <summary>Traces stop when closer than TestFactor * Spacing to an accepted curve.</summary>
         public double TestFactor { get; set; } = 0.5;
+
+        /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
+        public int SmoothingPasses { get; set; } = 10;
     }
 
     /// <summary>
     /// Fills the surface with evenly-spaced curves following a per-vertex
     /// direction field (principal or asymptotic directions). Pass firstSeed -1
-    /// to start from the masked vertex nearest the mesh centroid.
+    /// to start from the masked vertex nearest the mesh centroid. A secondary
+    /// field (the other asymptotic family) may be supplied so traces keep
+    /// continuity across per-vertex family label swaps.
     /// </summary>
     public static List<Vec3d[]> TraceField(
-        MeshData mesh, Vec3d[] dirs, bool[]? mask, int firstSeed, Options? options = null)
+        MeshData mesh, Vec3d[] dirs, bool[]? mask, int firstSeed, Options? options = null,
+        Vec3d[]? secondaryDirs = null)
     {
         options ??= new Options();
         var proj = new MeshProjection(mesh);
@@ -51,9 +57,9 @@ public static class EvenlySpacedNet
 
         Vec3d[] TraceFrom(Vec3d pos, int hint)
         {
-            var fwd = FieldTracer.Trace(proj, pos, hint, dirs, mask, options.StepSize, options.MaxSteps, false, stop);
-            var bwd = FieldTracer.Trace(proj, pos, hint, dirs, mask, options.StepSize, options.MaxSteps, true, stop);
-            return FieldTracer.Join(bwd, fwd);
+            var line = FieldTracer.TraceBoth(proj, pos, hint, dirs, secondaryDirs, mask,
+                options.StepSize, options.MaxSteps, stop);
+            return line.Length > 1 ? CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses) : line;
         }
 
         bool CandidateBlocked(MeshProjection.Hit chit) =>
@@ -81,15 +87,18 @@ public static class EvenlySpacedNet
         if (firstSeed < 0 || firstSeed >= proj.Mesh.VertexCount) return results;
         if (firstDir.LengthSquared < 1e-20) return results;
 
+        firstDir = GeodesicCurves.SeedTangent(proj, firstSeed, firstDir);
+        if (firstDir.LengthSquared < 1e-20) return results;
+
         var registry = new PointRegistry(options.Spacing);
         double dtest = options.TestFactor * options.Spacing;
         Func<Vec3d, bool> stop = p => registry.HasPointWithin(p, dtest);
 
         Vec3d[] TraceFrom(Vec3d pos, int hint, Vec3d dir)
         {
-            var fwd = GeodesicCurves.TraceOneFrom(proj, pos, hint, dir, options.StepSize, options.MaxSteps, stop);
-            var bwd = GeodesicCurves.TraceOneFrom(proj, pos, hint, -dir, options.StepSize, options.MaxSteps, stop);
-            return FieldTracer.Join(bwd, fwd);
+            var line = GeodesicCurves.TraceBothFrom(proj, pos, hint, dir,
+                options.StepSize, options.MaxSteps, stop);
+            return line.Length > 1 ? CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses) : line;
         }
 
         Grow(proj, results, registry, options,

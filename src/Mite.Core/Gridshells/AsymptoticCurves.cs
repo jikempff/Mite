@@ -17,6 +17,9 @@ public static class AsymptoticCurves
     {
         public double StepSize { get; set; } = 0.01;
         public int MaxSteps { get; set; } = 1000;
+
+        /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
+        public int SmoothingPasses { get; set; } = 10;
     }
 
     public readonly struct DirectionField
@@ -72,19 +75,25 @@ public static class AsymptoticCurves
         options ??= new Options();
         var proj = new MeshProjection(mesh);
         var field = ComputeDirections(curvature);
-        var dirs = secondFamily ? field.Family2 : field.Family1;
+
+        // Both families are passed to the tracer: the family labels are derived
+        // from principal directions whose signs are arbitrary per vertex, so a
+        // single label does not identify a geometrically consistent family. The
+        // tracer keeps continuity by picking the best-aligned candidate; the
+        // primary field only selects which family the curve starts in.
+        var primary = secondFamily ? field.Family2 : field.Family1;
+        var secondary = secondFamily ? field.Family1 : field.Family2;
 
         var result = new List<Vec3d[]>();
         foreach (int seed in seedVertices)
         {
             if (seed < 0 || seed >= proj.Mesh.VertexCount || !field.Exists[seed]) continue;
 
-            var forward = FieldTracer.Trace(proj, seed, dirs, field.Exists, options.StepSize, options.MaxSteps, false);
-            var backward = FieldTracer.Trace(proj, seed, dirs, field.Exists, options.StepSize, options.MaxSteps, true);
-            var line = FieldTracer.Join(backward, forward);
+            var line = FieldTracer.TraceBoth(proj, proj.Mesh.Vertices[seed], seed,
+                primary, secondary, field.Exists, options.StepSize, options.MaxSteps, null);
 
             if (line.Length > 1)
-                result.Add(line);
+                result.Add(CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses));
         }
 
         return result;
