@@ -1,7 +1,4 @@
 using System;
-using System.Collections.Generic;
-using MathNet.Numerics.LinearAlgebra;
-using MathNet.Numerics.LinearAlgebra.Double;
 using Mite.Core.Geometry;
 
 namespace Mite.Core.Curvature;
@@ -23,7 +20,10 @@ public static class PrincipalCurvature
 
     /// <summary>
     /// Computes principal curvatures and directions via per-face shape operator averaging.
-    /// Based on "Estimating Curvatures and Their Derivatives on Triangle Meshes" (Rusinkiewicz 2004).
+    /// Based on "Estimating Curvatures and Their Derivatives on Triangle Meshes" (Rusinkiewicz 2004):
+    /// the second fundamental form is least-squares fitted per face from finite normal
+    /// differences along the three edges, then rotated into each vertex's tangent frame
+    /// and averaged with corner-angle weights.
     /// </summary>
     public static Result Compute(MeshData mesh, int radius = 2)
     {
@@ -31,15 +31,20 @@ public static class PrincipalCurvature
         int nv = triMesh.VertexCount;
         int nf = triMesh.FaceCount;
 
-        var vertexNormals = triMesh.ComputeVertexNormals();
-        var vertexFaces = triMesh.BuildVertexFaces();
+        // Max-weighted normals are exact on spheres, which keeps the normal
+        // finite differences (and hence curvature magnitudes) unbiased
+        var vertexNormals = triMesh.ComputeVertexNormalsMax();
 
         var e1Basis = new Vec3d[nv];
         var e2Basis = new Vec3d[nv];
         for (int i = 0; i < nv; i++)
             ComputeTangentBasis(vertexNormals[i], out e1Basis[i], out e2Basis[i]);
 
-        var curv = new double[nv, 3];
+        // Accumulated second fundamental form per vertex, in the vertex frame
+        var accA = new double[nv];
+        var accB = new double[nv];
+        var accC = new double[nv];
+        var accW = new double[nv];
 
         for (int fi = 0; fi < nf; fi++)
         {
@@ -48,26 +53,69 @@ public static class PrincipalCurvature
             Vec3d p1 = triMesh.Vertices[f[1]];
             Vec3d p2 = triMesh.Vertices[f[2]];
 
+            // Edge j is opposite vertex j
             Vec3d[] edges = { p2 - p1, p0 - p2, p1 - p0 };
 
-            Vec3d faceNormal = Vec3d.Cross(edges[2], -edges[1]).Normalized();
+            Vec3d faceNormal = Vec3d.Cross(edges[2], -edges[1]);
+            if (faceNormal.LengthSquared < 1e-30) continue;
+            faceNormal = faceNormal.Normalized();
+
+            // Face tangent frame
+            Vec3d t = edges[2].Normalized();
+            Vec3d b = Vec3d.Cross(faceNormal, t).Normalized();
+
+            // Least-squares fit of II = [[a, m], [m, c]] in the face frame from
+            // II * e_uv ≈ dn_uv along the three edges (6 equations, 3 unknowns).
+            double m00 = 0, m01 = 0, m11 = 0, m12 = 0, m22 = 0;
+            double r0 = 0, r1 = 0, r2 = 0;
 
             for (int j = 0; j < 3; j++)
             {
+                // Edge j runs between the two vertices other than j
+                Vec3d dn = vertexNormals[f[(j + 2) % 3]] - vertexNormals[f[(j + 1) % 3]];
+
+                double u = Vec3d.Dot(edges[j], t);
+                double v = Vec3d.Dot(edges[j], b);
+                double dnU = Vec3d.Dot(dn, t);
+                double dnV = Vec3d.Dot(dn, b);
+
+                // Row [u, v, 0] -> dnU
+                m00 += u * u;
+                m01 += u * v;
+                r0 += u * dnU;
+                // Row [0, u, v] -> dnV
+                m11 += u * u;
+                m12 += u * v;
+                r2 += v * dnV;
+                // Shared terms
+                m11 += v * v;
+                m22 += v * v;
+                r1 += v * dnU + u * dnV;
+            }
+
+            Solve3x3Symmetric(m00, m01, 0, m11, m12, m22, r0, r1, r2,
+                out double fa, out double fm, out double fc);
+
+            // Distribute to the face's vertices: rotate the face-frame tensor into
+            // each vertex's tangent frame, weight by the corner angle
+            for (int j = 0; j < 3; j++)
+            {
                 int vi = f[j];
-                int vj = f[(j + 1) % 3];
 
-                Vec3d edge = triMesh.Vertices[vj] - triMesh.Vertices[vi];
-                Vec3d dn = vertexNormals[vj] - vertexNormals[vi];
+                // The two face edges emanating from vertex j
+                Vec3d cornerE1 = -edges[(j + 1) % 3];
+                Vec3d cornerE2 = edges[(j + 2) % 3];
+                double w = CornerAngle(cornerE1, cornerE2);
+                if (w < 1e-12) continue;
 
-                double u = Vec3d.Dot(edge, e1Basis[vi]);
-                double v = Vec3d.Dot(edge, e2Basis[vi]);
-                double dnU = Vec3d.Dot(dn, e1Basis[vi]);
-                double dnV = Vec3d.Dot(dn, e2Basis[vi]);
+                ProjectCurvatureTensor(t, b, faceNormal, fa, fm, fc,
+                    e1Basis[vi], e2Basis[vi], vertexNormals[vi],
+                    out double pa, out double pm, out double pc);
 
-                curv[vi, 0] += dnU * u;
-                curv[vi, 1] += dnU * v + dnV * u;
-                curv[vi, 2] += dnV * v;
+                accA[vi] += w * pa;
+                accB[vi] += w * pm;
+                accC[vi] += w * pc;
+                accW[vi] += w;
             }
         }
 
@@ -78,9 +126,13 @@ public static class PrincipalCurvature
 
         for (int i = 0; i < nv; i++)
         {
-            double a = curv[i, 0];
-            double b = curv[i, 1] * 0.5;
-            double c = curv[i, 2];
+            double a = 0, b = 0, c = 0;
+            if (accW[i] > 1e-15)
+            {
+                a = accA[i] / accW[i];
+                b = accB[i] / accW[i];
+                c = accC[i] / accW[i];
+            }
 
             DiagonalizeShapeOperator(a, b, c, out double kappa1, out double kappa2, out double theta);
 
@@ -100,6 +152,96 @@ public static class PrincipalCurvature
             SmoothCurvature(triMesh, radius - 1, k1, k2, d1, d2, vertexNormals, e1Basis, e2Basis);
 
         return new Result(k1, k2, d1, d2);
+    }
+
+    /// <summary>
+    /// Solves the symmetric 3x3 system M x = r via Cramer's rule, where
+    /// M = [[m00,m01,m02],[m01,m11,m12],[m02,m12,m22]]. Returns zeros when singular
+    /// (isolated vertices or degenerate 1-rings).
+    /// </summary>
+    private static void Solve3x3Symmetric(
+        double m00, double m01, double m02, double m11, double m12, double m22,
+        double r0, double r1, double r2,
+        out double a, out double b, out double c)
+    {
+        double det =
+            m00 * (m11 * m22 - m12 * m12)
+            - m01 * (m01 * m22 - m12 * m02)
+            + m02 * (m01 * m12 - m11 * m02);
+
+        double scale = Math.Max(Math.Max(Math.Abs(m00), Math.Abs(m11)), Math.Abs(m22));
+        if (Math.Abs(det) < 1e-12 * Math.Max(scale * scale * scale, 1e-30))
+        {
+            a = 0; b = 0; c = 0;
+            return;
+        }
+
+        a = (r0 * (m11 * m22 - m12 * m12)
+           - m01 * (r1 * m22 - m12 * r2)
+           + m02 * (r1 * m12 - m11 * r2)) / det;
+
+        b = (m00 * (r1 * m22 - r2 * m12)
+           - r0 * (m01 * m22 - m12 * m02)
+           + m02 * (m01 * r2 - r1 * m02)) / det;
+
+        c = (m00 * (m11 * r2 - m12 * r1)
+           - m01 * (m01 * r2 - r1 * m02)
+           + r0 * (m01 * m12 - m11 * m02)) / det;
+    }
+
+    private static double CornerAngle(Vec3d e1, Vec3d e2)
+    {
+        double l1 = e1.Length, l2 = e2.Length;
+        if (l1 < 1e-15 || l2 < 1e-15) return 0;
+        double d = Vec3d.Dot(e1, e2) / (l1 * l2);
+        return Math.Acos(Math.Max(-1.0, Math.Min(1.0, d)));
+    }
+
+    /// <summary>
+    /// Re-expresses a curvature tensor given in the (oldU, oldV) tangent frame
+    /// (with normal oldN) in the (newU, newV) frame with normal newN. The new
+    /// frame is first rotated so its normal coincides with the old one
+    /// (Rusinkiewicz 2004, "proj_curv").
+    /// </summary>
+    private static void ProjectCurvatureTensor(
+        Vec3d oldU, Vec3d oldV, Vec3d oldN,
+        double oldA, double oldB, double oldC,
+        Vec3d newU, Vec3d newV, Vec3d newN,
+        out double a, out double b, out double c)
+    {
+        RotateCoordSys(newU, newV, oldN, out Vec3d rU, out Vec3d rV);
+
+        double u1 = Vec3d.Dot(rU, oldU);
+        double v1 = Vec3d.Dot(rU, oldV);
+        double u2 = Vec3d.Dot(rV, oldU);
+        double v2 = Vec3d.Dot(rV, oldV);
+
+        a = oldA * u1 * u1 + oldB * (2.0 * u1 * v1) + oldC * v1 * v1;
+        b = oldA * u1 * u2 + oldB * (u1 * v2 + u2 * v1) + oldC * v1 * v2;
+        c = oldA * u2 * u2 + oldB * (2.0 * u2 * v2) + oldC * v2 * v2;
+    }
+
+    /// <summary>
+    /// Rotates the coordinate system (u, v) about the axis perpendicular to its
+    /// normal and the target normal, so the frame becomes perpendicular to newNorm.
+    /// </summary>
+    private static void RotateCoordSys(Vec3d u, Vec3d v, Vec3d newNorm, out Vec3d rU, out Vec3d rV)
+    {
+        rU = u;
+        rV = v;
+        Vec3d oldNorm = Vec3d.Cross(u, v);
+        double ndot = Vec3d.Dot(oldNorm, newNorm);
+        if (ndot <= -1.0)
+        {
+            rU = -rU;
+            rV = -rV;
+            return;
+        }
+
+        Vec3d perpOld = newNorm - ndot * oldNorm;
+        Vec3d dperp = (1.0 / (1.0 + ndot)) * (oldNorm + newNorm);
+        rU = rU - Vec3d.Dot(rU, perpOld) * dperp;
+        rV = rV - Vec3d.Dot(rV, perpOld) * dperp;
     }
 
     private static void ComputeTangentBasis(Vec3d normal, out Vec3d e1, out Vec3d e2)

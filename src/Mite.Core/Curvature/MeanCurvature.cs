@@ -15,7 +15,9 @@ public static class MeanCurvature
 
     /// <summary>
     /// Computes per-vertex mean curvature via the cotangent Laplacian.
-    /// H_i = |Δx_i| / (2 * A_i), where Δ is the cotangent-weight Laplacian.
+    /// The mean curvature normal is K_i = Δx_i / (2 * A_i) with |K_i| = 2H,
+    /// so H_i = |Δx_i| / (4 * A_i). Boundary vertices are set to zero: the
+    /// one-sided Laplacian there measures boundary shape, not surface curvature.
     /// </summary>
     public static Result Compute(MeshData mesh)
     {
@@ -55,11 +57,13 @@ public static class MeanCurvature
         var H = new double[nv];
         var Hn = new Vec3d[nv];
         var vertexNormals = triMesh.ComputeVertexNormals();
+        var boundary = triMesh.BuildBoundaryVertexFlags();
 
         for (int i = 0; i < nv; i++)
         {
-            if (areas[i] < 1e-15) continue;
-            Vec3d hn = laplacian[i] / (2.0 * areas[i]);
+            if (areas[i] < 1e-15 || boundary[i]) continue;
+            // laplacian/(2A) is the mean curvature normal, magnitude 2H
+            Vec3d hn = laplacian[i] / (4.0 * areas[i]);
             double sign = Vec3d.Dot(hn, vertexNormals[i]) > 0 ? 1.0 : -1.0;
             H[i] = sign * hn.Length;
             Hn[i] = hn;

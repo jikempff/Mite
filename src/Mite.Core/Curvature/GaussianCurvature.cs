@@ -7,12 +7,15 @@ public static class GaussianCurvature
 {
     /// <summary>
     /// Computes per-vertex Gaussian curvature using the angle deficit method.
-    /// K_i = (2π - Σ angles_i) / A_i (mixed Voronoi area).
+    /// K_i = (2π - Σ angles_i) / A_i (mixed Voronoi area). Boundary vertices are
+    /// set to zero: the 2π deficit only applies to full vertex stars, so open
+    /// mesh edges would otherwise report huge spurious curvature.
     /// </summary>
     public static double[] Compute(MeshData mesh)
     {
         var triMesh = mesh.ToTriangulated();
         int nv = triMesh.VertexCount;
+        var boundary = triMesh.BuildBoundaryVertexFlags();
         var angleSum = new double[nv];
         var areas = new double[nv];
 
@@ -41,7 +44,7 @@ public static class GaussianCurvature
         var K = new double[nv];
         for (int i = 0; i < nv; i++)
         {
-            if (areas[i] > 1e-15)
+            if (areas[i] > 1e-15 && !boundary[i])
                 K[i] = (2.0 * Math.PI - angleSum[i]) / areas[i];
         }
         return K;
