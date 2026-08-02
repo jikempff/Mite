@@ -77,8 +77,8 @@ public class AsymptoticNetComponent : GH_Component
                 MaxSteps = maxSteps
             };
             int firstSeed = seeds.Count > 0 ? seeds[0] : -1;
-            familyA = EvenlySpacedNet.TraceField(data, field.Family1, field.Exists, firstSeed, opts);
-            familyB = EvenlySpacedNet.TraceField(data, field.Family2, field.Exists, firstSeed, opts);
+            familyA = EvenlySpacedNet.TraceField(data, field.Family1, field.Exists, firstSeed, opts, field.Family2);
+            familyB = EvenlySpacedNet.TraceField(data, field.Family2, field.Exists, firstSeed, opts, field.Family1);
         }
         else
         {
@@ -97,20 +97,20 @@ public class AsymptoticNetComponent : GH_Component
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
                 "No asymptotic curves traced. Seeds may lie in regions of non-negative Gaussian curvature.");
 
-        DA.SetDataList(0, ToPolylines(familyA));
-        DA.SetDataList(1, ToPolylines(familyB));
+        DA.SetDataList(0, ToCurves(familyA));
+        DA.SetDataList(1, ToCurves(familyB));
     }
 
-    private static List<PolylineCurve> ToPolylines(List<Mite.Core.Geometry.Vec3d[]> lines)
+    private static List<Curve> ToCurves(List<Mite.Core.Geometry.Vec3d[]> lines)
     {
-        var curves = new List<PolylineCurve>();
+        var curves = new List<Curve>();
         foreach (var line in lines)
         {
             var pts = new List<Point3d>(line.Length);
             foreach (var p in line)
                 pts.Add(MeshConvert.ToRhinoPoint(p));
-            if (pts.Count > 1)
-                curves.Add(new PolylineCurve(pts));
+            var c = CurveBuild.Interpolated(pts);
+            if (c != null) curves.Add(c);
         }
         return curves;
     }

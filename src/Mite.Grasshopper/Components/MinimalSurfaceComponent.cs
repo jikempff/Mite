@@ -49,9 +49,23 @@ public class MinimalSurfaceComponent : GH_Component
         DA.GetData(3, ref stepSize);
 
         var data = MeshConvert.ToMeshData(mesh);
-        var fixedVerts = fixedList.Count == data.VertexCount
-            ? fixedList.ToArray()
-            : new bool[data.VertexCount];
+
+        if (fixedList.Count != data.VertexCount)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                $"Fixed needs one flag per vertex: got {fixedList.Count}, mesh has {data.VertexCount}.");
+            return;
+        }
+        var fixedVerts = fixedList.ToArray();
+
+        bool anyFixed = false;
+        foreach (bool b in fixedVerts) if (b) { anyFixed = true; break; }
+        if (!anyFixed)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                "At least one vertex must be fixed (typically the boundary), or the mesh collapses to a point.");
+            return;
+        }
 
         var opts = new MinimalSurface.Options { MaxIterations = maxIter, StepSize = stepSize };
         var result = MinimalSurface.Compute(data, fixedVerts, opts);

@@ -51,9 +51,22 @@ public class PlanarizationComponent : GH_Component
         DA.GetDataList(3, fixedList);
 
         var data = MeshConvert.ToMeshDataKeepQuads(mesh);
-        var fixedVerts = fixedList.Count == data.VertexCount
-            ? fixedList.ToArray()
-            : new bool[data.VertexCount];
+
+        bool[] fixedVerts;
+        if (fixedList.Count == 0)
+        {
+            fixedVerts = new bool[data.VertexCount];
+        }
+        else if (fixedList.Count == data.VertexCount)
+        {
+            fixedVerts = fixedList.ToArray();
+        }
+        else
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                $"Fixed needs one flag per vertex: got {fixedList.Count}, mesh has {data.VertexCount}.");
+            return;
+        }
 
         var opts = new Planarization.Options { MaxIterations = maxIter, Tolerance = tol };
         var result = Planarization.Compute(data, fixedVerts, opts);

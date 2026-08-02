@@ -5,6 +5,7 @@ using System.Reflection;
 using Grasshopper;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
+using Grasshopper.Kernel.Parameters;
 using Rhino.Geometry;
 using Mite.Core.Geometry;
 using Mite.Core.Gridshells;
@@ -61,6 +62,10 @@ public class ChebyshevNetComponent : GH_Component
         DA.GetData(5, ref countV);
         DA.GetData(6, ref angle);
 
+        // Angle parameters deliver the raw number; honor the user's Degrees toggle
+        if (Params.Input[6] is Param_Number angleParam && angleParam.UseDegrees)
+            angle = Rhino.RhinoMath.ToRadians(angle);
+
         if (edgeLength <= 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "EdgeLength must be positive.");
@@ -109,13 +114,23 @@ public class ChebyshevNetComponent : GH_Component
         DA.SetData(3, BuildNetMesh(net));
     }
 
-    private static List<PolylineCurve> ExtractCurves(ChebyshevNet.Result net, bool alongU)
+    private static List<Curve> ExtractCurves(ChebyshevNet.Result net, bool alongU)
     {
         int nu = net.Points.GetLength(0), nv = net.Points.GetLength(1);
         int outer = alongU ? nv : nu;
         int inner = alongU ? nu : nv;
 
-        var curves = new List<PolylineCurve>();
+        var curves = new List<Curve>();
+        void Flush(List<Point3d> run)
+        {
+            if (run.Count > 1)
+            {
+                var c = CurveBuild.Interpolated(run);
+                if (c != null) curves.Add(c);
+            }
+            run.Clear();
+        }
+
         for (int o = 0; o < outer; o++)
         {
             var run = new List<Point3d>();
@@ -124,16 +139,11 @@ public class ChebyshevNetComponent : GH_Component
                 int i = alongU ? k : o;
                 int j = alongU ? o : k;
                 if (net.Valid[i, j])
-                {
                     run.Add(MeshConvert.ToRhinoPoint(net.Points[i, j]));
-                }
                 else
-                {
-                    if (run.Count > 1) curves.Add(new PolylineCurve(run));
-                    run.Clear();
-                }
+                    Flush(run);
             }
-            if (run.Count > 1) curves.Add(new PolylineCurve(run));
+            Flush(run);
         }
         return curves;
     }
