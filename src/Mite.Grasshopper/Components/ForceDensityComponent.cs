@@ -50,20 +50,67 @@ public class ForceDensityComponent : GH_Component
         if (!DA.GetDataList(3, fixedList)) return;
 
         var data = MeshConvert.ToMeshDataKeepQuads(mesh);
+        int edgeCount = data.BuildEdges().Length;
 
-        Vec3d[]? loads = null;
-        if (loadList.Count > 0)
+        // Force densities: single value broadcasts to all edges
+        var q = new double[edgeCount];
+        if (qList.Count == 1)
         {
-            loads = new Vec3d[data.VertexCount];
+            for (int i = 0; i < edgeCount; i++) q[i] = qList[0];
+        }
+        else if (qList.Count == edgeCount)
+        {
+            qList.CopyTo(q);
+        }
+        else
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                $"ForceDensity count ({qList.Count}) does not match edge count ({edgeCount}); missing entries use the last value.");
+            for (int i = 0; i < edgeCount; i++)
+                q[i] = qList[Math.Min(i, qList.Count - 1)];
+        }
+
+        // Loads: single vector broadcasts to all vertices
+        var loads = new Vec3d[data.VertexCount];
+        if (loadList.Count == 1)
+        {
+            var l = new Vec3d(loadList[0].X, loadList[0].Y, loadList[0].Z);
+            for (int i = 0; i < data.VertexCount; i++) loads[i] = l;
+        }
+        else if (loadList.Count > 0)
+        {
+            if (loadList.Count != data.VertexCount)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                    $"Loads count ({loadList.Count}) does not match vertex count ({data.VertexCount}); missing entries are zero.");
             for (int i = 0; i < Math.Min(loadList.Count, data.VertexCount); i++)
                 loads[i] = new Vec3d(loadList[i].X, loadList[i].Y, loadList[i].Z);
         }
 
-        var fixedVerts = fixedList.Count == data.VertexCount
-            ? fixedList.ToArray()
-            : new bool[data.VertexCount];
+        // Fixed flags: must match the vertex count, and something must be fixed,
+        // otherwise the equilibrium system is singular and the solve returns NaNs
+        bool[] fixedVerts;
+        if (fixedList.Count == data.VertexCount)
+        {
+            fixedVerts = fixedList.ToArray();
+        }
+        else
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                $"Fixed needs one flag per vertex: got {fixedList.Count}, mesh has {data.VertexCount}. " +
+                "Tip: use vertex indices with a 'Member Index' pattern or supply a full boolean list.");
+            return;
+        }
 
-        var result = ForceDensityMethod.Compute(data, qList.ToArray(), loads ?? new Vec3d[data.VertexCount], fixedVerts);
+        bool anyFixed = false;
+        foreach (bool b in fixedVerts) if (b) { anyFixed = true; break; }
+        if (!anyFixed)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
+                "At least one vertex must be fixed, or the net has no anchors and no equilibrium exists.");
+            return;
+        }
+
+        var result = ForceDensityMethod.Compute(data, q, loads, fixedVerts);
 
         var outMesh = mesh.DuplicateMesh();
         var points = new List<Point3d>();

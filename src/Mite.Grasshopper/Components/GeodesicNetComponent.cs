@@ -86,14 +86,14 @@ public class GeodesicNetComponent : GH_Component
             lines = GeodesicCurves.Trace(data, seeds.ToArray(), dirs, opts);
         }
 
-        var curves = new List<PolylineCurve>();
+        var curves = new List<Curve>();
         foreach (var line in lines)
         {
             var pts = new List<Point3d>(line.Length);
             foreach (var p in line)
                 pts.Add(MeshConvert.ToRhinoPoint(p));
-            if (pts.Count > 1)
-                curves.Add(new PolylineCurve(pts));
+            var c = CurveBuild.Interpolated(pts);
+            if (c != null) curves.Add(c);
         }
         DA.SetDataList(0, curves);
     }

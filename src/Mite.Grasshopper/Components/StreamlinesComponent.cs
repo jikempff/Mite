@@ -52,6 +52,22 @@ public class StreamlinesComponent : GH_Component
         DA.GetData(4, ref maxDir);
 
         var data = MeshConvert.ToMeshData(mesh);
+
+        var validSeeds = new List<int>();
+        foreach (int s in seeds)
+        {
+            if (s >= 0 && s < data.VertexCount) validSeeds.Add(s);
+        }
+        if (validSeeds.Count < seeds.Count)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                $"{seeds.Count - validSeeds.Count} seed(s) outside 0..{data.VertexCount - 1} were skipped.");
+        if (validSeeds.Count == 0)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "No valid seed vertex indices.");
+            return;
+        }
+        seeds = validSeeds;
+
         var curvature = PrincipalCurvature.Compute(data);
 
         var opts = new CurvatureStreamlines.Options
@@ -63,15 +79,15 @@ public class StreamlinesComponent : GH_Component
 
         var lines = CurvatureStreamlines.Trace(data, seeds.ToArray(), curvature, opts);
 
-        var polylines = new List<PolylineCurve>();
+        var curves = new List<Curve>();
         foreach (var line in lines)
         {
             var pts = new List<Point3d>(line.Length);
             foreach (var p in line)
                 pts.Add(MeshConvert.ToRhinoPoint(p));
-            if (pts.Count > 1)
-                polylines.Add(new PolylineCurve(pts));
+            var c = CurveBuild.Interpolated(pts);
+            if (c != null) curves.Add(c);
         }
-        DA.SetDataList(0, polylines);
+        DA.SetDataList(0, curves);
     }
 }
