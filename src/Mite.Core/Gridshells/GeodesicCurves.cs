@@ -5,10 +5,13 @@ using Mite.Core.Geometry;
 namespace Mite.Core.Gridshells;
 
 /// <summary>
-/// Straightest-geodesic tracing on meshes: step in the tangent direction,
-/// project back onto the surface, and keep the in-surface component of the
-/// travel direction. Geodesics minimize bending about the strong axis, making
-/// them the natural layout for geodesic (lath) gridshells.
+/// Straightest-geodesic tracing on meshes: step in the tangent direction with a
+/// midpoint scheme, project back onto the surface, and keep the in-surface
+/// component of the travel direction. The smooth (barycentric-interpolated)
+/// normal is used for all tangent projections so the direction varies
+/// continuously across facet boundaries instead of jumping with face normals.
+/// Geodesics minimize bending about the strong axis, making them the natural
+/// layout for geodesic (lath) gridshells.
 /// </summary>
 public static class GeodesicCurves
 {
@@ -16,12 +19,16 @@ public static class GeodesicCurves
     {
         public double StepSize { get; set; } = 0.01;
         public int MaxSteps { get; set; } = 1000;
+
+        /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
+        public int SmoothingPasses { get; set; } = 10;
     }
 
     /// <summary>
     /// Traces a geodesic through each seed vertex along the corresponding
-    /// direction (the geodesic extends both ways from the seed). If fewer
-    /// directions than seeds are supplied, the last direction is reused.
+    /// direction (the geodesic extends both ways from the seed; closed loops
+    /// are detected and returned as a single cycle). If fewer directions than
+    /// seeds are supplied, the last direction is reused.
     /// </summary>
     public static List<Vec3d[]> Trace(MeshData mesh, int[] seedVertices, Vec3d[] directions, Options? options = null)
     {
@@ -38,43 +45,69 @@ public static class GeodesicCurves
 
             Vec3d dir = directions[Math.Min(i, directions.Length - 1)];
             if (dir.LengthSquared < 1e-20) continue;
-            dir = dir.Normalized();
 
-            var forward = TraceOne(proj, seed, dir, options);
-            var backward = TraceOne(proj, seed, -dir, options);
-            var line = FieldTracer.Join(backward, forward);
+            dir = SeedTangent(proj, seed, dir);
+            if (dir.LengthSquared < 1e-20) continue;
+
+            var line = TraceBothFrom(proj, proj.Mesh.Vertices[seed], seed, dir,
+                options.StepSize, options.MaxSteps, null);
 
             if (line.Length > 1)
-                result.Add(line);
+                result.Add(CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses));
         }
 
         return result;
     }
 
-    private static List<Vec3d> TraceOne(MeshProjection proj, int startVertex, Vec3d dir, Options opts)
+    /// <summary>
+    /// Traces both ways from a point and joins the halves. A forward half that
+    /// closes into a loop is returned directly, without duplicating the cycle.
+    /// </summary>
+    internal static Vec3d[] TraceBothFrom(
+        MeshProjection proj, Vec3d startPos, int startHint, Vec3d dir,
+        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear)
     {
-        return TraceOneFrom(proj, proj.Mesh.Vertices[startVertex], startVertex, dir,
-            opts.StepSize, opts.MaxSteps, null);
+        var forward = TraceOneFrom(proj, startPos, startHint, dir, stepSize, maxSteps, stopNear, out bool closed);
+        if (closed) return forward.ToArray();
+
+        var backward = TraceOneFrom(proj, startPos, startHint, -dir, stepSize, maxSteps, stopNear, out _);
+        return FieldTracer.Join(backward, forward);
     }
 
     internal static List<Vec3d> TraceOneFrom(
         MeshProjection proj, Vec3d startPos, int startHint, Vec3d dir,
         double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear)
     {
+        return TraceOneFrom(proj, startPos, startHint, dir, stepSize, maxSteps, stopNear, out _);
+    }
+
+    internal static List<Vec3d> TraceOneFrom(
+        MeshProjection proj, Vec3d startPos, int startHint, Vec3d dir,
+        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear, out bool closedLoop)
+    {
+        closedLoop = false;
         var points = new List<Vec3d>();
-        Vec3d pos = startPos;
+
+        var start = proj.ClosestPoint(startPos, startHint);
+        Vec3d pos = start.Point;
         points.Add(pos);
 
         // Flatten the requested direction into the surface at the seed
-        var start = proj.ClosestPoint(pos, startHint);
-        dir = TangentComponent(dir, start.Normal);
+        dir = TangentComponent(dir, start.SmoothNormal);
         if (dir.LengthSquared < 1e-20) return points;
         dir = dir.Normalized();
 
-        int vert = startHint;
+        int vert = start.NearestVertex;
         for (int step = 0; step < maxSteps; step++)
         {
-            var hit = proj.ClosestPoint(pos + stepSize * dir, vert);
+            // Midpoint scheme: transport the direction to the half-step point
+            // before taking the full step
+            var midHit = proj.ClosestPoint(pos + 0.5 * stepSize * dir, vert);
+            Vec3d dMid = TangentComponent(dir, midHit.SmoothNormal);
+            if (dMid.LengthSquared < 1e-20) break;
+            dMid = dMid.Normalized();
+
+            var hit = proj.ClosestPoint(pos + stepSize * dMid, midHit.NearestVertex);
             Vec3d newPos = hit.Point;
 
             // Stalled against a boundary
@@ -88,13 +121,39 @@ public static class GeodesicCurves
             vert = hit.NearestVertex;
             points.Add(pos);
 
+            // Closed loop: returned to the start after traveling away
+            if (step > 4 && (pos - startPos).Length < 0.75 * stepSize)
+            {
+                points.Add(startPos);
+                closedLoop = true;
+                break;
+            }
+
             // Continue straight: the travel direction flattened into the new tangent plane
-            Vec3d t = TangentComponent(travel, hit.Normal);
+            Vec3d t = TangentComponent(travel, hit.SmoothNormal);
             if (t.LengthSquared < 1e-20) break;
             dir = t.Normalized();
         }
 
         return points;
+    }
+
+    /// <summary>
+    /// Flattens a requested seed direction into the surface. When the request is
+    /// (near) parallel to the normal — where the tangent component vanishes — an
+    /// arbitrary but deterministic tangent is used so the trace can still start.
+    /// </summary>
+    internal static Vec3d SeedTangent(MeshProjection proj, int seedVertex, Vec3d dir)
+    {
+        var hit = proj.ClosestPoint(proj.Mesh.Vertices[seedVertex], seedVertex);
+        Vec3d n = hit.SmoothNormal;
+        Vec3d t = TangentComponent(dir, n);
+        if (t.LengthSquared > 1e-12 * dir.LengthSquared)
+            return t.Normalized();
+
+        Vec3d axis = Math.Abs(n.Y) < 0.9 ? new Vec3d(0, 1, 0) : new Vec3d(1, 0, 0);
+        t = Vec3d.Cross(n, axis);
+        return t.LengthSquared < 1e-20 ? Vec3d.Zero : t.Normalized();
     }
 
     private static Vec3d TangentComponent(Vec3d v, Vec3d normal) =>
