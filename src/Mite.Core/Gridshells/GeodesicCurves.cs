@@ -22,6 +22,14 @@ public static class GeodesicCurves
 
         /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
         public int SmoothingPasses { get; set; } = 10;
+
+        /// <summary>
+        /// Optional cancellation probe checked between curves; return true to
+        /// stop tracing and keep the curves produced so far (e.g. wire this to
+        /// the host's Esc-key check so long solves stay interruptible).
+        /// </summary>
+        public Func<bool>? ShouldCancel { get; set; }
+
     }
 
     /// <summary>
@@ -40,6 +48,7 @@ public static class GeodesicCurves
 
         for (int i = 0; i < seedVertices.Length; i++)
         {
+            if (options.ShouldCancel?.Invoke() == true) break;
             int seed = seedVertices[i];
             if (seed < 0 || seed >= proj.Mesh.VertexCount) continue;
 

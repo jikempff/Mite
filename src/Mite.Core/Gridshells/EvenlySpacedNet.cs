@@ -36,6 +36,14 @@ public static class EvenlySpacedNet
         /// existing curves and region borders.
         /// </summary>
         public double MinCurveLength { get; set; } = 0.0;
+
+        /// <summary>
+        /// Optional cancellation probe checked between curves; return true to
+        /// stop tracing and keep the curves produced so far (e.g. wire this to
+        /// the host's Esc-key check so long solves stay interruptible).
+        /// </summary>
+        public Func<bool>? ShouldCancel { get; set; }
+
     }
 
     private static double EffectiveMinLength(Options opts) =>
@@ -151,6 +159,7 @@ public static class EvenlySpacedNet
 
         while (queue.Count > 0 && results.Count < opts.MaxCurves)
         {
+            if (opts.ShouldCancel?.Invoke() == true) break;
             var source = queue.Dequeue();
             int hint = proj.NearestVertexGlobal(source[0]);
 
