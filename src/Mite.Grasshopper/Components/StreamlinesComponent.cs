@@ -54,18 +54,23 @@ public class StreamlinesComponent : GH_Component
         var data = MeshConvert.ToMeshData(mesh);
 
         var validSeeds = new List<int>();
+        var seen = new HashSet<int>();
         foreach (int s in seeds)
         {
-            if (s >= 0 && s < data.VertexCount) validSeeds.Add(s);
+            if (s >= 0 && s < data.VertexCount && seen.Add(s)) validSeeds.Add(s);
         }
-        if (validSeeds.Count < seeds.Count)
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
-                $"{seeds.Count - validSeeds.Count} seed(s) outside 0..{data.VertexCount - 1} were skipped.");
+        if (validSeeds.Count < seeds.Count && seen.Count < seeds.Count)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                "Out-of-range or duplicate seeds were skipped.");
         if (validSeeds.Count == 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "No valid seed vertex indices.");
             return;
         }
+        if (validSeeds.Count > 100)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                $"{validSeeds.Count} seeds = {validSeeds.Count} traced streamlines - this can take a long time. " +
+                "Press Esc to cancel. Seeds are meant to be a few chosen start vertices, not every mesh vertex.");
         seeds = validSeeds;
 
         var curvature = PrincipalCurvature.Compute(data);
@@ -74,7 +79,8 @@ public class StreamlinesComponent : GH_Component
         {
             StepSize = stepSize,
             MaxSteps = maxSteps,
-            UseMaxCurvature = maxDir
+            UseMaxCurvature = maxDir,
+            ShouldCancel = GH_Document.IsEscapeKeyDown
         };
 
         var lines = CurvatureStreamlines.Trace(data, seeds.ToArray(), curvature, opts);
