@@ -107,8 +107,20 @@ public static class GeodesicCurves
             if (dMid.LengthSquared < 1e-20) break;
             dMid = dMid.Normalized();
 
-            var hit = proj.ClosestPoint(pos + stepSize * dMid, midHit.NearestVertex);
+            Vec3d intended = pos + stepSize * dMid;
+            var hit = proj.ClosestPoint(intended, midHit.NearestVertex);
             Vec3d newPos = hit.Point;
+
+            // Fell off the mesh: the projection clamped the step to a boundary
+            // far from the intended target. End cleanly at the edge instead of
+            // letting the geodesic crawl along the boundary.
+            if ((newPos - intended).Length > 0.5 * stepSize)
+            {
+                Vec3d clampTravel = newPos - pos;
+                if (Vec3d.Dot(clampTravel, dMid) > 0 && clampTravel.LengthSquared > 0.01 * stepSize * stepSize)
+                    points.Add(newPos);
+                break;
+            }
 
             // Stalled against a boundary
             if ((newPos - pos).LengthSquared < 0.01 * stepSize * stepSize) break;
