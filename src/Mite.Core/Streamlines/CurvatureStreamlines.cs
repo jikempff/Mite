@@ -16,6 +16,14 @@ public static class CurvatureStreamlines
 
         /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
         public int SmoothingPasses { get; set; } = 10;
+
+        /// <summary>
+        /// Optional cancellation probe checked between curves; return true to
+        /// stop tracing and keep the curves produced so far (e.g. wire this to
+        /// the host's Esc-key check so long solves stay interruptible).
+        /// </summary>
+        public Func<bool>? ShouldCancel { get; set; }
+
     }
 
     /// <summary>
@@ -33,6 +41,7 @@ public static class CurvatureStreamlines
 
         foreach (int seed in seedVertices)
         {
+            if (options.ShouldCancel?.Invoke() == true) break;
             if (seed < 0 || seed >= proj.Mesh.VertexCount) continue;
 
             var line = FieldTracer.TraceBoth(proj, proj.Mesh.Vertices[seed], seed,
