@@ -122,3 +122,64 @@ public class CurveSmoothnessTests
         Assert.True(lines[0].Length > 10, "Trace should make progress from a degenerate seed direction");
     }
 }
+
+public class EdgeAndStubTests
+{
+    private static double Length(Mite.Core.Geometry.Vec3d[] line)
+    {
+        double len = 0;
+        for (int i = 1; i < line.Length; i++) len += (line[i] - line[i - 1]).Length;
+        return len;
+    }
+
+    [Fact]
+    public void Geodesic_OpenMesh_StopsAtBoundaryWithoutCrawling()
+    {
+        // A trace that leaves the mesh used to be clamped onto the boundary and
+        // then crawl along it, producing "threads" along open edges
+        var grid = TestMeshes.CreateQuadGrid(10, 10).ToTriangulated();
+        int center = 5 * 11 + 5;
+        var lines = Mite.Core.Gridshells.GeodesicCurves.Trace(
+            grid, new[] { center }, new[] { new Mite.Core.Geometry.Vec3d(1, 0.3, 0) },
+            new Mite.Core.Gridshells.GeodesicCurves.Options { StepSize = 0.1, MaxSteps = 2000, SmoothingPasses = 0 });
+
+        Assert.Single(lines);
+        var line = lines[0];
+
+        int boundaryPoints = line.Count(p =>
+            p.X > 9.999 || p.Y > 9.999 || p.X < 0.001 || p.Y < 0.001);
+        Assert.True(boundaryPoints <= 2,
+            $"Only the endpoints may touch the boundary, found {boundaryPoints} boundary points");
+
+        // Both ends should reach the boundary (within a step) rather than stop short
+        foreach (var end in new[] { line[0], line[line.Length - 1] })
+        {
+            double edgeDist = Math.Min(
+                Math.Min(end.X, 10 - end.X),
+                Math.Min(end.Y, 10 - end.Y));
+            Assert.True(edgeDist < 0.15, $"Trace end should reach the open edge, stopped {edgeDist:F3} away");
+        }
+    }
+
+    [Fact]
+    public void AutoSpace_Asymptotic_ProducesNoStubCurves()
+    {
+        var saddle = TestMeshes.CreateSaddle(40, 2.0);
+        var curvature = Mite.Core.Curvature.PrincipalCurvature.Compute(saddle);
+        var field = Mite.Core.Gridshells.AsymptoticCurves.ComputeDirections(curvature);
+        var opts = new Mite.Core.Gridshells.EvenlySpacedNet.Options
+        {
+            Spacing = 0.15,
+            StepSize = 0.02,
+            MaxSteps = 2000
+        };
+
+        var curves = Mite.Core.Gridshells.EvenlySpacedNet.TraceField(
+            saddle, field.Family1, field.Exists, -1, opts, field.Family2);
+
+        Assert.True(curves.Count > 10, $"Fill should produce a dense family, got {curves.Count}");
+        for (int i = 1; i < curves.Count; i++) // first curve exempt by design
+            Assert.True(Length(curves[i]) >= 2.0 * opts.Spacing,
+                $"Curve {i} is a stub: length {Length(curves[i]):F3} < {2.0 * opts.Spacing:F3}");
+    }
+}
