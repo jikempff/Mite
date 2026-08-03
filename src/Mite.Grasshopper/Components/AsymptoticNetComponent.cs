@@ -74,7 +74,8 @@ public class AsymptoticNetComponent : GH_Component
             {
                 Spacing = spacing,
                 StepSize = stepSize,
-                MaxSteps = maxSteps
+                MaxSteps = maxSteps,
+                ShouldCancel = GH_Document.IsEscapeKeyDown
             };
             int firstSeed = seeds.Count > 0 ? seeds[0] : -1;
             familyA = EvenlySpacedNet.TraceField(data, field.Family1, field.Exists, firstSeed, opts, field.Family2);
@@ -87,8 +88,17 @@ public class AsymptoticNetComponent : GH_Component
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Provide Seeds, or enable AutoSpace with a Spacing.");
                 return;
             }
+            if (seeds.Count > 100)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                    $"{seeds.Count} seeds = up to {2 * seeds.Count} traced curves - this can take a long time. " +
+                    "Press Esc to cancel. For a full, evenly spaced net use AutoSpace with a single seed instead.");
 
-            var opts = new AsymptoticCurves.Options { StepSize = stepSize, MaxSteps = maxSteps };
+            var opts = new AsymptoticCurves.Options
+            {
+                StepSize = stepSize,
+                MaxSteps = maxSteps,
+                ShouldCancel = GH_Document.IsEscapeKeyDown
+            };
             familyA = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, false, opts);
             familyB = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, true, opts);
         }

@@ -76,13 +76,24 @@ public class GeodesicNetComponent : GH_Component
             {
                 Spacing = spacing,
                 StepSize = stepSize,
-                MaxSteps = maxSteps
+                MaxSteps = maxSteps,
+                ShouldCancel = GH_Document.IsEscapeKeyDown
             };
             lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], netOpts);
         }
         else
         {
-            var opts = new GeodesicCurves.Options { StepSize = stepSize, MaxSteps = maxSteps };
+            if (seeds.Count > 100)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                    $"{seeds.Count} seeds = {seeds.Count} traced geodesics - this can take a long time. " +
+                    "Press Esc to cancel. For a full, evenly spaced net use AutoSpace with a single seed instead.");
+
+            var opts = new GeodesicCurves.Options
+            {
+                StepSize = stepSize,
+                MaxSteps = maxSteps,
+                ShouldCancel = GH_Document.IsEscapeKeyDown
+            };
             lines = GeodesicCurves.Trace(data, seeds.ToArray(), dirs, opts);
         }
 
