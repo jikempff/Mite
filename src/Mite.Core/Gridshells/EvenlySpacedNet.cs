@@ -25,10 +25,27 @@ public static class EvenlySpacedNet
         public int MaxCurves { get; set; } = 200;
 
         /// <summary>Traces stop when closer than TestFactor * Spacing to an accepted curve.</summary>
-        public double TestFactor { get; set; } = 0.5;
+        public double TestFactor { get; set; } = 0.4;
 
         /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
         public int SmoothingPasses { get; set; } = 10;
+
+        /// <summary>
+        /// Curves shorter than this are discarded (0 = automatic: 2 * Spacing).
+        /// Prevents the stub curves that dense seeding otherwise leaves near
+        /// existing curves and region borders.
+        /// </summary>
+        public double MinCurveLength { get; set; } = 0.0;
+    }
+
+    private static double EffectiveMinLength(Options opts) =>
+        opts.MinCurveLength > 0 ? opts.MinCurveLength : 2.0 * opts.Spacing;
+
+    private static double ArcLength(Vec3d[] line)
+    {
+        double len = 0;
+        for (int i = 1; i < line.Length; i++) len += (line[i] - line[i - 1]).Length;
+        return len;
     }
 
     /// <summary>
@@ -118,8 +135,11 @@ public static class EvenlySpacedNet
         Vec3d firstPos, int firstHint, Vec3d firstDir = default)
     {
         double thinGap = 0.5 * opts.TestFactor * opts.Spacing;
+        double minLen = EffectiveMinLength(opts);
         var queue = new Queue<Vec3d[]>();
 
+        // The first curve is kept regardless of length: if it is short, the
+        // traceable region is simply small, and returning it beats returning nothing
         var first = traceField != null
             ? traceField(firstPos, firstHint)
             : traceDirected!(firstPos, firstHint, firstDir);
@@ -167,7 +187,7 @@ public static class EvenlySpacedNet
                         line = traceDirected!(chit.Point, chit.NearestVertex, dir.Normalized());
                     }
 
-                    if (line.Length > 2)
+                    if (line.Length > 2 && ArcLength(line) >= minLen)
                     {
                         results.Add(line);
                         registry.AddLine(line, thinGap);

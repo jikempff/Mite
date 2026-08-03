@@ -40,9 +40,12 @@ internal static class FieldTracer
             if (mask != null && !mask[hit.NearestVertex]) break;
 
             // Midpoint scheme: sample at the current point, walk half a step,
-            // sample again, take the full step with the midpoint direction
+            // sample again, take the full step with the midpoint direction.
+            // The blended field magnitude doubles as a support measure: masked
+            // (non-existent) corners contribute zero, so the trace fades out
+            // smoothly at region borders instead of ending on a ragged stub.
             Vec3d d0 = SampleLineField(proj, hit, dirsA, dirsB, prevDir);
-            if (d0.LengthSquared < 1e-12) break;
+            if (d0.LengthSquared < 0.09) break;
             d0 = d0.Normalized();
 
             var midHit = proj.ClosestPoint(pos + 0.5 * stepSize * d0, hit.NearestVertex);
@@ -50,8 +53,20 @@ internal static class FieldTracer
             if (d1.LengthSquared < 1e-12) d1 = d0;
             d1 = d1.Normalized();
 
-            var newHit = proj.ClosestPoint(pos + stepSize * d1, midHit.NearestVertex);
+            Vec3d intended = pos + stepSize * d1;
+            var newHit = proj.ClosestPoint(intended, midHit.NearestVertex);
             Vec3d newPos = newHit.Point;
+
+            // Fell off the mesh: the projection clamped the step to a boundary
+            // far from the intended target. End cleanly at the edge instead of
+            // letting the trace crawl along the boundary as a "thread".
+            if ((newPos - intended).Length > 0.5 * stepSize)
+            {
+                Vec3d travel = newPos - pos;
+                if (Vec3d.Dot(travel, d1) > 0 && travel.LengthSquared > 0.01 * stepSize * stepSize)
+                    points.Add(newPos);
+                break;
+            }
 
             // Stalled against a boundary
             if ((newPos - pos).LengthSquared < 0.01 * stepSize * stepSize) break;
