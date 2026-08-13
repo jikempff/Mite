@@ -52,7 +52,11 @@ public static class GaussianCurvature
 
     private static double AngleBetween(Vec3d a, Vec3d b)
     {
-        double d = Vec3d.Dot(a.Normalized(), b.Normalized());
+        // Degenerate edges contribute no angle (a zero-length edge normalized
+        // to Zero would otherwise silently report pi/2)
+        double la2 = a.LengthSquared, lb2 = b.LengthSquared;
+        if (la2 < 1e-30 || lb2 < 1e-30) return 0.0;
+        double d = Vec3d.Dot(a, b) / Math.Sqrt(la2 * lb2);
         return Math.Acos(Math.Max(-1.0, Math.Min(1.0, d)));
     }
 

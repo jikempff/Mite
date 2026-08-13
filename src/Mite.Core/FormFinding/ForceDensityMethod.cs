@@ -19,6 +19,10 @@ public static class ForceDensityMethod
     /// Solves for equilibrium positions using the Force Density Method.
     /// [Cn^T * Q * Cn] * xn = pn - [Cn^T * Q * Cf] * xf
     /// where n = free nodes, f = fixed nodes, Q = diagonal force densities.
+    /// Free vertices not connected to any edge with a non-zero force density
+    /// are unconstrained; they are held in place (treated as fixed). Throws
+    /// when the system has no anchors or the solve is inconsistent, instead of
+    /// silently returning a collapsed solution.
     /// </summary>
     public static Result Compute(
         MeshData mesh,
@@ -30,6 +34,39 @@ public static class ForceDensityMethod
         int ne = edges.Length;
         int nv = mesh.VertexCount;
 
+        if (ne == 0)
+            throw new ArgumentException("ForceDensityMethod requires a mesh with at least one edge.", nameof(mesh));
+        if (fixedVertices == null || fixedVertices.Length != nv)
+            throw new ArgumentException("fixedVertices must provide one flag per vertex.", nameof(fixedVertices));
+
+        // Fold unconstrained free vertices into the fixed set
+        var effectiveFixed = (bool[])fixedVertices.Clone();
+        var hasAnchorEdge = new bool[nv];
+        for (int e = 0; e < ne; e++)
+        {
+            double q = e < forceDensities.Length ? forceDensities[e] : 1.0;
+            if (q == 0.0) continue;
+            hasAnchorEdge[edges[e].v0] = true;
+            hasAnchorEdge[edges[e].v1] = true;
+        }
+        for (int i = 0; i < nv; i++)
+            if (!effectiveFixed[i] && !hasAnchorEdge[i])
+                effectiveFixed[i] = true;
+
+        int fixedCount = 0;
+        for (int i = 0; i < nv; i++) if (effectiveFixed[i]) fixedCount++;
+
+        if (fixedCount == 0)
+            throw new ArgumentException(
+                "ForceDensityMethod requires at least one fixed vertex; " +
+                "without anchors the equilibrium system is singular.", nameof(fixedVertices));
+        if (fixedCount == nv)
+        {
+            var copy = new Vec3d[nv];
+            Array.Copy(mesh.Vertices, copy, nv);
+            return new Result(copy);
+        }
+
         var freeIndices = new List<int>();
         var fixedIndices = new List<int>();
         var freeMap = new int[nv];
@@ -37,7 +74,7 @@ public static class ForceDensityMethod
 
         for (int i = 0; i < nv; i++)
         {
-            if (fixedVertices[i])
+            if (effectiveFixed[i])
             {
                 fixedMap[i] = fixedIndices.Count;
                 freeMap[i] = -1;
@@ -106,6 +143,19 @@ public static class ForceDensityMethod
         var solvedX = CtQCn.Solve(rhsX);
         var solvedY = CtQCn.Solve(rhsY);
         var solvedZ = CtQCn.Solve(rhsZ);
+
+        // Verify the solve: MathNet's sparse factorization does not always
+        // signal a singular system and can return a collapsed (e.g. all-zero)
+        // solution without complaint
+        double res = Math.Max(
+            (CtQCn * solvedX - rhsX).InfinityNorm(),
+            Math.Max((CtQCn * solvedY - rhsY).InfinityNorm(), (CtQCn * solvedZ - rhsZ).InfinityNorm()));
+        double rhsScale = Math.Max(1.0, Math.Max(rhsX.InfinityNorm(),
+            Math.Max(rhsY.InfinityNorm(), rhsZ.InfinityNorm())));
+        if (double.IsNaN(res) || res > 1e-6 * rhsScale)
+            throw new InvalidOperationException(
+                $"The force-density system is singular or ill-conditioned (relative residual {res / rhsScale:E2}). " +
+                "Check that force densities are not all zero and that every free vertex is anchored through the net.");
 
         var result = new Vec3d[nv];
         for (int i = 0; i < nn; i++)

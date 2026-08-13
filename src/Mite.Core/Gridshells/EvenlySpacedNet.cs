@@ -31,6 +31,12 @@ public static class EvenlySpacedNet
         public int SmoothingPasses { get; set; } = 10;
 
         /// <summary>
+        /// Field traces stop where the blended field magnitude drops below this
+        /// fraction of unit length (0..1); only used by TraceField.
+        /// </summary>
+        public double MinFieldMagnitude { get; set; } = 0.3;
+
+        /// <summary>
         /// Curves shorter than this are discarded (0 = automatic: 2 * Spacing).
         /// Prevents the stub curves that dense seeding otherwise leaves near
         /// existing curves and region borders.
@@ -83,7 +89,7 @@ public static class EvenlySpacedNet
         Vec3d[] TraceFrom(Vec3d pos, int hint)
         {
             var line = FieldTracer.TraceBoth(proj, pos, hint, dirs, secondaryDirs, mask,
-                options.StepSize, options.MaxSteps, stop);
+                options.StepSize, options.MaxSteps, stop, options.MinFieldMagnitude);
             return line.Length > 1 ? CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses) : line;
         }
 

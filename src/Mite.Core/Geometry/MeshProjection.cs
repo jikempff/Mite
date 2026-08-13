@@ -14,8 +14,15 @@ public class MeshProjection
     private readonly int[][] _vertexNeighbors;
     private readonly Vec3d[] _faceNormals;
     private readonly Vec3d[] _vertexNormals;
+    private readonly double _averageEdgeLength;
 
     public MeshData Mesh => _mesh;
+
+    /// <summary>
+    /// Mean triangle edge length of the mesh. A natural length scale for
+    /// tolerances (e.g. loop-closure capture radii in curve tracing).
+    /// </summary>
+    public double AverageEdgeLength => _averageEdgeLength;
 
     public MeshProjection(MeshData mesh)
     {
@@ -24,6 +31,18 @@ public class MeshProjection
         _vertexNeighbors = _mesh.BuildVertexNeighbors();
         _faceNormals = _mesh.ComputeFaceNormals();
         _vertexNormals = _mesh.ComputeVertexNormals();
+
+        double sum = 0;
+        int count = 0;
+        foreach (var f in _mesh.Faces)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                sum += (_mesh.Vertices[f[(i + 1) % 3]] - _mesh.Vertices[f[i]]).Length;
+                count++;
+            }
+        }
+        _averageEdgeLength = count > 0 ? sum / count : 1.0;
     }
 
     public readonly struct Hit

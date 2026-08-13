@@ -21,7 +21,8 @@ internal static class FieldTracer
 {
     internal static List<Vec3d> Trace(
         MeshProjection proj, Vec3d startPos, int startHint, Vec3d[] dirsA, Vec3d[]? dirsB, bool[]? mask,
-        double stepSize, int maxSteps, bool reverse, Func<Vec3d, bool>? stopNear, out bool closedLoop)
+        double stepSize, int maxSteps, bool reverse, Func<Vec3d, bool>? stopNear, out bool closedLoop,
+        double minFieldMagnitude = 0.3)
     {
         closedLoop = false;
         var points = new List<Vec3d>();
@@ -35,6 +36,16 @@ internal static class FieldTracer
         if (prevDir.LengthSquared < 1e-20) return points;
         prevDir = prevDir.Normalized();
 
+        Vec3d startNormal = hit.SmoothNormal;
+        Vec3d initialDir = prevDir;
+        // Capture radius scaled to the mesh: integration drift over a full loop
+        // is a fraction of the edge length (measured ~0.4x on a coarse sphere),
+        // far more than one step. The direction match in TryCloseLoop guards
+        // against snapping shut on geodesics that merely pass near the start.
+        double captureRadius = Math.Max(0.75 * stepSize, 0.5 * proj.AverageEdgeLength);
+        double leaveRadius = Math.Max(8.0 * stepSize, 2.0 * captureRadius);
+        double maxStartDist = 0.0;
+
         for (int step = 0; step < maxSteps; step++)
         {
             if (mask != null && !mask[hit.NearestVertex]) break;
@@ -45,7 +56,7 @@ internal static class FieldTracer
             // (non-existent) corners contribute zero, so the trace fades out
             // smoothly at region borders instead of ending on a ragged stub.
             Vec3d d0 = SampleLineField(proj, hit, dirsA, dirsB, prevDir);
-            if (d0.LengthSquared < 0.09) break;
+            if (d0.Length < minFieldMagnitude) break;
             d0 = d0.Normalized();
 
             var midHit = proj.ClosestPoint(pos + 0.5 * stepSize * d0, hit.NearestVertex);
@@ -79,16 +90,82 @@ internal static class FieldTracer
             hit = newHit;
             points.Add(pos);
 
+            maxStartDist = Math.Max(maxStartDist, (pos - points[0]).Length);
+
             // Closed loop: returned to the start after traveling away
-            if (step > 4 && (pos - startPos).Length < 0.75 * stepSize)
+            if (step > 4 && TryCloseLoop(points, pos, startNormal, initialDir, prevDir,
+                    stepSize, captureRadius, leaveRadius, maxStartDist, out Vec3d closing))
             {
-                points.Add(startPos);
+                points.Add(closing);
                 closedLoop = true;
                 break;
             }
         }
 
         return points;
+    }
+
+    /// <summary>
+    /// Tests whether the latest position closes the trace into a loop. Three
+    /// tests, in increasing order of drift tolerance:
+    /// 1. landing within a step of the exact start point (unambiguous, always armed);
+    /// 2. once the trace has left the start neighborhood (leaveRadius), passing
+    ///    within the capture radius of the start while heading along the initial
+    ///    direction — catches loops that drift past the start point by more than
+    ///    a step, which midpoint integration does over a full loop on coarse meshes;
+    /// 3. crossing the first segment of the trace in the start's tangent plane
+    ///    while staying within the capture radius of it in 3D.
+    /// Without tests 2–3, closed geodesics/streamlines on closed surfaces wrap
+    /// around repeatedly until the step budget is exhausted.
+    /// </summary>
+    internal static bool TryCloseLoop(
+        IReadOnlyList<Vec3d> points, Vec3d cur, Vec3d startNormal, Vec3d initialDir, Vec3d travelDir,
+        double stepSize, double captureRadius, double leaveRadius, double maxStartDist,
+        out Vec3d closingPoint)
+    {
+        closingPoint = default;
+        Vec3d p0 = points[0];
+
+        // 1. Exact return to the start point
+        if ((cur - p0).Length < 0.75 * stepSize)
+        {
+            closingPoint = p0;
+            return true;
+        }
+
+        if (points.Count < 2 || maxStartDist < leaveRadius) return false;
+
+        // 2. Drifted past the start point, still heading the way the loop left
+        if ((cur - p0).Length < captureRadius && Vec3d.Dot(travelDir, initialDir) > 0.5)
+        {
+            closingPoint = p0;
+            return true;
+        }
+
+        // 3. Crossing the first segment in the start tangent plane
+        Vec3d p1 = points[1];
+        Vec3d axis = p1 - p0;
+        double segLen = axis.Length;
+        if (segLen < 1e-15 || startNormal.LengthSquared < 1e-20) return false;
+        axis = axis / segLen;
+        Vec3d up = Vec3d.Cross(startNormal, axis);
+
+        Vec3d prev = points[points.Count - 2];
+        double a0v = Vec3d.Dot(prev - p0, up);
+        double a1v = Vec3d.Dot(cur - p0, up);
+        if (a0v * a1v > 0 || Math.Abs(a0v) + Math.Abs(a1v) < 1e-15) return false;
+
+        double t = a0v / (a0v - a1v);
+        double s = Vec3d.Dot(prev - p0, axis) + t * Vec3d.Dot(cur - prev, axis);
+        if (s < -captureRadius || s > segLen + captureRadius) return false;
+
+        Vec3d cross3 = prev + t * (cur - prev);
+        double sClamped = Math.Max(0.0, Math.Min(segLen, s));
+        Vec3d c3 = p0 + sClamped * axis;
+        if ((cross3 - c3).Length > captureRadius) return false;
+
+        closingPoint = c3;
+        return true;
     }
 
     /// <summary>
@@ -141,14 +218,14 @@ internal static class FieldTracer
     /// </summary>
     internal static Vec3d[] TraceBoth(
         MeshProjection proj, Vec3d startPos, int startHint, Vec3d[] dirsA, Vec3d[]? dirsB, bool[]? mask,
-        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear)
+        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear, double minFieldMagnitude = 0.3)
     {
         var forward = Trace(proj, startPos, startHint, dirsA, dirsB, mask,
-            stepSize, maxSteps, false, stopNear, out bool closed);
+            stepSize, maxSteps, false, stopNear, out bool closed, minFieldMagnitude);
         if (closed) return forward.ToArray();
 
         var backward = Trace(proj, startPos, startHint, dirsA, dirsB, mask,
-            stepSize, maxSteps, true, stopNear, out _);
+            stepSize, maxSteps, true, stopNear, out _, minFieldMagnitude);
         return Join(backward, forward);
     }
 

@@ -18,6 +18,15 @@ public static class CurvatureStreamlines
         public int SmoothingPasses { get; set; } = 10;
 
         /// <summary>
+        /// Traces stop where the blended field magnitude drops below this
+        /// fraction of unit length (0..1). Corners with a vanishing direction
+        /// contribute zero to the blend, so this fades traces out smoothly at
+        /// region borders; lower values keep tracing deeper into degenerate
+        /// (e.g. near-umbilical) regions.
+        /// </summary>
+        public double MinFieldMagnitude { get; set; } = 0.3;
+
+        /// <summary>
         /// Optional cancellation probe checked between curves; return true to
         /// stop tracing and keep the curves produced so far (e.g. wire this to
         /// the host's Esc-key check so long solves stay interruptible).
@@ -45,7 +54,7 @@ public static class CurvatureStreamlines
             if (seed < 0 || seed >= proj.Mesh.VertexCount) continue;
 
             var line = FieldTracer.TraceBoth(proj, proj.Mesh.Vertices[seed], seed,
-                dirs, null, null, options.StepSize, options.MaxSteps, null);
+                dirs, null, null, options.StepSize, options.MaxSteps, null, options.MinFieldMagnitude);
 
             if (line.Length > 1)
                 result.Add(CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses));

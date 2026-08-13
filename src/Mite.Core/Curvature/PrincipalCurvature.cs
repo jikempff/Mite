@@ -271,6 +271,15 @@ public static class PrincipalCurvature
         k2 = a * sin2 - 2.0 * b * sincos + c * cos2;
     }
 
+    /// <summary>
+    /// Smooths the curvature field by averaging the shape operator as a
+    /// world-frame 3x3 tensor S = k1 d1d1^T + k2 d2d2^T over each 1-ring, then
+    /// re-extracting values and directions from the average. Scalar smoothing
+    /// of k1/k2 alone leaves the directions noisy, which corrupts streamline
+    /// and asymptotic tracing on coarse meshes; tensor averaging keeps values
+    /// and directions consistent (and handles the arbitrary per-vertex sign of
+    /// the direction fields, which plain vector averaging cannot).
+    /// </summary>
     private static void SmoothCurvature(
         MeshData mesh, int iterations,
         double[] k1, double[] k2,
@@ -278,28 +287,60 @@ public static class PrincipalCurvature
         Vec3d[] normals, Vec3d[] e1Basis, Vec3d[] e2Basis)
     {
         var neighbors = mesh.BuildVertexNeighbors();
+        int nv = mesh.VertexCount;
+
+        var tensors = new Matrix3d[nv];
+        for (int i = 0; i < nv; i++)
+            tensors[i] = k1[i] * Matrix3d.OuterProduct(d1[i], d1[i]) +
+                         k2[i] * Matrix3d.OuterProduct(d2[i], d2[i]);
 
         for (int iter = 0; iter < iterations; iter++)
         {
-            var newK1 = new double[mesh.VertexCount];
-            var newK2 = new double[mesh.VertexCount];
-
-            for (int i = 0; i < mesh.VertexCount; i++)
+            var smoothed = new Matrix3d[nv];
+            for (int i = 0; i < nv; i++)
             {
-                double sumK1 = k1[i], sumK2 = k2[i];
+                Matrix3d sum = tensors[i];
                 int count = 1;
                 foreach (int j in neighbors[i])
                 {
-                    sumK1 += k1[j];
-                    sumK2 += k2[j];
+                    sum = sum + tensors[j];
                     count++;
                 }
-                newK1[i] = sumK1 / count;
-                newK2[i] = sumK2 / count;
+                smoothed[i] = (1.0 / count) * sum;
             }
+            tensors = smoothed;
+        }
 
-            Array.Copy(newK1, k1, mesh.VertexCount);
-            Array.Copy(newK2, k2, mesh.VertexCount);
+        for (int i = 0; i < nv; i++)
+        {
+            Matrix3d.EigenSymmetric(tensors[i], out double[] values, out Vec3d[] vectors);
+
+            // Degenerate (flat or isolated) vertex: keep the frame-derived directions
+            if (Math.Max(Math.Abs(values[0]), Math.Abs(values[2])) < 1e-15) continue;
+
+            // The eigenvector best aligned with the vertex normal is the normal
+            // direction; the other two eigenpairs are the principal curvatures.
+            // (Picking the eigenvalue nearest zero fails on cylinders, where
+            // k2 = 0 is indistinguishable from the normal's zero.)
+            int n0 = 0;
+            double best = -1;
+            for (int e = 0; e < 3; e++)
+            {
+                double d = Math.Abs(Vec3d.Dot(vectors[e], normals[i]));
+                if (d > best) { best = d; n0 = e; }
+            }
+            int a = (n0 + 1) % 3, b = (n0 + 2) % 3;
+
+            if (values[a] >= values[b])
+            {
+                k1[i] = values[a]; d1[i] = vectors[a];
+                k2[i] = values[b]; d2[i] = vectors[b];
+            }
+            else
+            {
+                k1[i] = values[b]; d1[i] = vectors[b];
+                k2[i] = values[a]; d2[i] = vectors[a];
+            }
         }
     }
 }

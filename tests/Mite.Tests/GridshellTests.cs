@@ -108,6 +108,32 @@ public class GridshellTests
     }
 
     [Fact]
+    public void Geodesic_Sphere_ClosesAfterOneLoop()
+    {
+        // A great-circle geodesic must be detected as a closed loop after one
+        // revolution. Midpoint integration drifts by several step sizes over a
+        // full loop, so a point-capture radius of one step can never trigger —
+        // the trace used to wrap around the sphere until MaxSteps.
+        var sphere = TestMeshes.CreateUnitSphere(24);
+        int equatorVertex = 1 + 11 * 48;
+
+        var opts = new GeodesicCurves.Options { StepSize = 0.05, MaxSteps = 2000, SmoothingPasses = 0 };
+        var lines = GeodesicCurves.Trace(sphere, new[] { equatorVertex }, new[] { new Vec3d(0, 1, 0) }, opts);
+
+        Assert.True(lines.Count == 1, "Should trace one geodesic");
+        double circumference = 2.0 * Math.PI;
+        double arc = 0;
+        for (int i = 1; i < lines[0].Length; i++)
+            arc += (lines[0][i] - lines[0][i - 1]).Length;
+
+        Assert.True(arc < 1.5 * circumference,
+            $"Closed geodesic should stop near one circumference ({circumference:F2}), traveled {arc:F2}");
+        double gap = (lines[0][^1] - lines[0][0]).Length;
+        Assert.True(gap < 0.25,
+            $"Closed geodesic should end near its start, gap {gap:F3}");
+    }
+
+    [Fact]
     public void Geodesic_Sphere_FollowsGreatCircle()
     {
         var sphere = TestMeshes.CreateUnitSphere(24);

@@ -12,7 +12,8 @@ public class MinimalSurfaceComponent : GH_Component
 {
     public MinimalSurfaceComponent()
         : base("Minimal Surface", "MinSrf",
-            "Finds a minimal surface by cotangent Laplacian flow with fixed boundaries.",
+            "Finds a minimal surface with fixed boundaries by iterating exact cotangent " +
+            "Laplace solves (each iteration freezes the weights and solves the linear system).",
             "Mite", "FormFinding") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDE6");
@@ -25,8 +26,7 @@ public class MinimalSurfaceComponent : GH_Component
     {
         pManager.AddMeshParameter("Mesh", "M", "Input mesh", GH_ParamAccess.item);
         pManager.AddBooleanParameter("Fixed", "F", "Fixed vertex flags", GH_ParamAccess.list);
-        pManager.AddIntegerParameter("Iterations", "I", "Max iterations (default 100)", GH_ParamAccess.item, 100);
-        pManager.AddNumberParameter("StepSize", "S", "Step size (default 0.5)", GH_ParamAccess.item, 0.5);
+        pManager.AddIntegerParameter("Iterations", "I", "Max weight-update iterations (default 20)", GH_ParamAccess.item, 20);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -40,13 +40,11 @@ public class MinimalSurfaceComponent : GH_Component
     {
         Mesh? mesh = null;
         var fixedList = new List<bool>();
-        int maxIter = 100;
-        double stepSize = 0.5;
+        int maxIter = 20;
 
         if (!DA.GetData(0, ref mesh) || mesh == null) return;
         if (!DA.GetDataList(1, fixedList)) return;
         DA.GetData(2, ref maxIter);
-        DA.GetData(3, ref stepSize);
 
         var data = MeshConvert.ToMeshData(mesh);
 
@@ -67,8 +65,17 @@ public class MinimalSurfaceComponent : GH_Component
             return;
         }
 
-        var opts = new MinimalSurface.Options { MaxIterations = maxIter, StepSize = stepSize };
-        var result = MinimalSurface.Compute(data, fixedVerts, opts);
+        MinimalSurface.Result result;
+        try
+        {
+            var opts = new MinimalSurface.Options { MaxIterations = maxIter };
+            result = MinimalSurface.Compute(data, fixedVerts, opts);
+        }
+        catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message);
+            return;
+        }
 
         var outMesh = mesh.DuplicateMesh();
         for (int i = 0; i < result.Vertices.Length; i++)

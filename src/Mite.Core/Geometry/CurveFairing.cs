@@ -32,9 +32,10 @@ public static class CurveFairing
 
         for (int iter = 0; iter < iterations; iter++)
         {
-            // For closed loops the seam point (0 == n-1) moves too
+            // Interior points move; for closed loops the seam point (0 == n-1)
+            // moves too. Distinct points are 0..n-2 in both cases
             int first = closed ? 0 : 1;
-            int last = closed ? n - 2 : n - 2;
+            int last = n - 2;
 
             Vec3d prevOriginal = closed ? pts[n - 2] : pts[0];
             for (int i = first; i <= last; i++)

@@ -106,6 +106,15 @@ public static class GeodesicCurves
         if (dir.LengthSquared < 1e-20) return points;
         dir = dir.Normalized();
 
+        Vec3d startNormal = start.SmoothNormal;
+        Vec3d initialDir = dir;
+        // Capture radius scaled to the mesh: integration drift over a full loop
+        // is a fraction of the edge length, far more than one step (see
+        // FieldTracer.TryCloseLoop)
+        double captureRadius = Math.Max(0.75 * stepSize, 0.5 * proj.AverageEdgeLength);
+        double leaveRadius = Math.Max(8.0 * stepSize, 2.0 * captureRadius);
+        double maxStartDist = 0.0;
+
         int vert = start.NearestVertex;
         for (int step = 0; step < maxSteps; step++)
         {
@@ -142,10 +151,14 @@ public static class GeodesicCurves
             vert = hit.NearestVertex;
             points.Add(pos);
 
+            maxStartDist = Math.Max(maxStartDist, (pos - points[0]).Length);
+
             // Closed loop: returned to the start after traveling away
-            if (step > 4 && (pos - startPos).Length < 0.75 * stepSize)
+            if (step > 4 && FieldTracer.TryCloseLoop(points, pos, startNormal, initialDir,
+                    travel.Normalized(), stepSize, captureRadius, leaveRadius, maxStartDist,
+                    out Vec3d closing))
             {
-                points.Add(startPos);
+                points.Add(closing);
                 closedLoop = true;
                 break;
             }
