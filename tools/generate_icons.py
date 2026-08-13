@@ -143,6 +143,71 @@ def icon_mesh_cleanup():
     save(img, "MeshCleanup")
 
 
+
+def icon_lath_sweep():
+    """A profile swept along a curved path: an extruded solid lath."""
+    img, d = canvas()
+    n = 48
+    pts = []
+    for i in range(n):
+        t = i / (n - 1)
+        x = 3.2 + 17.6 * t
+        y = 14.8 - 6.2 * t + 2.6 * math.sin(t * math.pi)
+        pts.append((x, y))
+
+    def offset(half, dy=0.0):
+        out = []
+        for i, (x, y) in enumerate(pts):
+            if i == 0:
+                tx, ty = pts[1][0] - x, pts[1][1] - y
+            elif i == n - 1:
+                tx, ty = x - pts[-2][0], y - pts[-2][1]
+            else:
+                tx, ty = pts[i + 1][0] - pts[i - 1][0], pts[i + 1][1] - pts[i - 1][1]
+            L = math.hypot(tx, ty) or 1.0
+            nx, ny = -ty / L, tx / L
+            out.append(P(x + nx * half, y + ny * half + dy))
+        return out
+
+    half = 2.2
+    depth = 2.8
+    top_a, top_b = offset(half), offset(-half)
+    bot_b = offset(-half, depth)
+
+    d.line(top_a, fill=WHITE, width=int(W * 0.8), joint="curve")
+    d.line(top_b, fill=WHITE, width=int(W * 0.8), joint="curve")
+    d.line(bot_b, fill=WHITE, width=int(W * 0.8), joint="curve")
+    for i in (0, n - 1):
+        d.line([top_a[i], top_b[i]], fill=WHITE, width=int(W * 0.8))
+        d.line([top_b[i], bot_b[i]], fill=WHITE, width=int(W * 0.8))
+    save(img, "LathSweep")
+
+
+def icon_net_joints():
+    """Two crossing laths in a lap joint: the lower band is notched away."""
+    img, d = canvas()
+    x0, x1 = 9.2, 14.8        # vertical band rails
+    y0, y1 = 9.2, 14.8        # horizontal band rails
+    gap = 1.3                 # visible notch clearance beyond the crossing band
+
+    # Horizontal band: interrupted at the crossing, with the notch cut visible
+    for y in (y0, y1):
+        d.line([P(2, y), P(x0 - gap, y)], fill=WHITE, width=int(W * 0.85))
+        d.line([P(x1 + gap, y), P(22, y)], fill=WHITE, width=int(W * 0.85))
+    d.line([P(2, y0), P(2, y1)], fill=WHITE, width=int(W * 0.85))
+    d.line([P(22, y0), P(22, y1)], fill=WHITE, width=int(W * 0.85))
+    # the notch end faces
+    d.line([P(x0 - gap, y0), P(x0 - gap, y1)], fill=WHITE, width=int(W * 0.85))
+    d.line([P(x1 + gap, y0), P(x1 + gap, y1)], fill=WHITE, width=int(W * 0.85))
+
+    # Vertical band: continuous, passing over the notch
+    for x in (x0, x1):
+        d.line([P(x, 2), P(x, 22)], fill=WHITE, width=int(W * 0.85))
+    d.line([P(x0, 2), P(x1, 2)], fill=WHITE, width=int(W * 0.85))
+    d.line([P(x0, 22), P(x1, 22)], fill=WHITE, width=int(W * 0.85))
+    save(img, "NetJoints")
+
+
 if __name__ == "__main__":
     icon_conjugate_net()
     icon_umbilics()
@@ -152,4 +217,6 @@ if __name__ == "__main__":
     icon_lath_segment()
     icon_lath_preview()
     icon_mesh_cleanup()
+    icon_lath_sweep()
+    icon_net_joints()
     print("icons written to", os.path.abspath(OUT))
