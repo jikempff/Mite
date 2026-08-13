@@ -61,7 +61,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 11 components", IconsLoad());
+        Check("Icons load for all 13 components", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -169,6 +169,45 @@ internal static class Tests
                     && Expect(utils.Count == 1 && utils[0] > 0, $"utilization computed: {(utils.Count > 0 ? utils[0] : 0):F2}");
             });
 
+        TestComponent("Lath Sweep",
+            new Mite.Grasshopper.Components.LathSweepComponent(),
+            c =>
+            {
+                SetInputs(c, (0, sphere.DuplicateMesh()), (3, 0.1), (4, 0.02));
+                var circle = new Rhino.Geometry.Circle(Rhino.Geometry.Plane.WorldXY, 1.0);
+                SetCurveList(c, 1, circle.ToNurbsCurve());
+            },
+            c =>
+            {
+                var laths = Meshes(c, 0);
+                return Expect(laths.Count == 1 && laths[0].Faces.Count > 20,
+                    $"one swept lath with {laths.FirstOrDefault()?.Faces.Count ?? 0} faces");
+            });
+
+        TestComponent("Net Joints",
+            new Mite.Grasshopper.Components.NetJointsComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-2, -2, 0);
+                plane.Vertices.Add(2, -2, 0);
+                plane.Vertices.Add(2, 2, 0);
+                plane.Vertices.Add(-2, 2, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                SetInputs(c, (0, plane), (3, 0.2), (4, 0.05));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1, -1, 0), new Rhino.Geometry.Point3d(1, 1, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, -1, 0), new Rhino.Geometry.Point3d(0, 1, 0)));
+                SetCurveList(c, 2,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1, 0, 0), new Rhino.Geometry.Point3d(1, 0, 0)));
+            },
+            c =>
+            {
+                var pts = Points(c, 0);
+                return Expect(pts.Count == 2, $"2 crossings, got {pts.Count}")
+                    && Expect(Boxes(c, 3).Count == 2 && Boxes(c, 4).Count == 2, "notch solids for both families");
+            });
+
         Console.WriteLine();
         Console.WriteLine($"=== {_passed} passed, {_failed} failed ===");
         return _failed == 0 ? 0 : 1;
@@ -223,9 +262,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 11)
+        if (comps.Count != 13)
         {
-            Console.WriteLine($"      expected 11 components, found {comps.Count}");
+            Console.WriteLine($"      expected 13 components, found {comps.Count}");
             return false;
         }
 
@@ -280,6 +319,18 @@ internal static class Tests
     private static Rhino.Geometry.Mesh? MeshOut(Grasshopper.Kernel.GH_Component comp, int index) =>
         comp.Params.Output[index].VolatileData.AllData(true)
             .OfType<Grasshopper.Kernel.Types.GH_Mesh>().Select(m => m.Value).FirstOrDefault();
+
+    private static System.Collections.Generic.List<Rhino.Geometry.Mesh> Meshes(Grasshopper.Kernel.GH_Component comp, int index) =>
+        comp.Params.Output[index].VolatileData.AllData(true)
+            .OfType<Grasshopper.Kernel.Types.GH_Mesh>().Select(m => m.Value).ToList();
+
+    private static System.Collections.Generic.List<Rhino.Geometry.Point3d> Points(Grasshopper.Kernel.GH_Component comp, int index) =>
+        comp.Params.Output[index].VolatileData.AllData(true)
+            .OfType<Grasshopper.Kernel.Types.GH_Point>().Select(p => p.Value).ToList();
+
+    private static System.Collections.Generic.List<Rhino.Geometry.Box> Boxes(Grasshopper.Kernel.GH_Component comp, int index) =>
+        comp.Params.Output[index].VolatileData.AllData(true)
+            .OfType<Grasshopper.Kernel.Types.GH_Box>().Select(b => b.Value).ToList();
 
     // ---------- geometry ----------
 

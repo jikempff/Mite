@@ -14,14 +14,18 @@ Open-source C# toolkit for mesh curvature analysis and form-finding. Pure .NET w
 
 ### Form-Finding
 - **Planarization** — iterative quad mesh planarization
-- **Minimal Surface** — cotangent Laplacian flow with fixed boundaries
-- **Force Density Method** — equilibrium solving for cable nets and shells
+- **Minimal Surface** — exact cotangent Laplace solves with frozen weights (Pinkall–Polthier style); converges in a few iterations instead of thousands of flow steps
+- **Force Density Method** — equilibrium solving for cable nets and shells, with singular-system detection
 
 ### Gridshells
 - **Asymptotic Net** — both families of asymptotic curves (zero normal curvature) for asymptotic gridshells, with optional evenly-spaced auto-seeding
 - **Geodesic Net** — straightest geodesics traced on the mesh for geodesic (lath) gridshells, with optional evenly-spaced auto-seeding
 - **Chebyshev Net** — equal-edge-length nets by the compass method: the kinematics of elastic gridshells bent from flat lattices
 - **Lath Analysis** — buildability check for strip laths: Darboux-frame decomposition (geodesic curvature, normal curvature, geodesic torsion) converted to bending strains against a material limit
+
+### Fabrication
+- **Lath Sweep** — extrudes on-surface curves (geodesic, asymptotic, streamline) into solid laths with a rectangular profile riding in the surface frame; flat mode for geodesic gridshells, upright (egg-crate) mode for asymptotic gridshells, with surface offset
+- **Net Joints** — finds crossings between the lath families and builds lap-joint notch solids (half-lap for flat laths, slots for upright ones) with lap fraction and clearance, ready for boolean subtraction
 
 ### Dynamics
 - Spring, gravity, drag, smoothness, and area minimization forces
@@ -31,8 +35,8 @@ Open-source C# toolkit for mesh curvature analysis and form-finding. Pure .NET w
 
 | Project | Target | Description |
 |---------|--------|-------------|
-| `Mite.Core` | net10.0 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (11 components) |
+| `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (13 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -96,6 +100,11 @@ Components appear under the **Mite** tab:
 - **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines
 - **FormFinding** — Planarize Mesh, Minimal Surface, Force Density Method
 - **Gridshells** — Asymptotic Net, Geodesic Net, Chebyshev Net, Lath Analysis
+- **Fabrication** — Lath Sweep, Net Joints
+
+A typical gridshell workflow: trace a **Geodesic Net** or **Asymptotic Net**, check the
+strips with **Lath Analysis**, extrude them with **Lath Sweep**, and cut the crossings
+with **Net Joints** notch solids.
 
 ## License
 

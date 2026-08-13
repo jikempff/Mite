@@ -52,6 +52,21 @@ Wire any net's curves into **Lath Analysis** together with the same mesh:
 peak strain utilization (over 1 fails). Graft the per-point `u` tree into a
 gradient on the curves to color-code where laths are overstressed.
 
+## 4. Extrude laths and cut the joints (3 minutes)
+
+Wire the net curves into **Lath Sweep** (Mite > Fabrication) with the same mesh:
+
+- `W` / `T` — strip cross-section (same values you analyzed)
+- `U` (Upright) — `True` for asymptotic nets, `False` for geodesic nets
+- `O` (Offset) — lift the laths off the surface, e.g. half the cladding depth
+
+You get one closed strip mesh per curve. Then wire both curve families into
+**Net Joints** to get the crossing points, joint planes, crossing angles, and a
+pair of notch solids per crossing (`Na` / `Nb`). Feed the swept laths and their
+notches into **Solid Difference** to cut half-lap joints (egg-crate slots when
+Upright is on); `L` sets the lap fraction (0.5 = half-lap), `Cl` the fit
+clearance.
+
 ## Units
 
 All lengths (Spacing, Step, EdgeLength, Width, Thickness) are in model units.
