@@ -28,6 +28,8 @@
     <EmbeddedResource Include="Resources\AsymptoticNet.png" />
     <EmbeddedResource Include="Resources\GeodesicNet.png" />
     <EmbeddedResource Include="Resources\LathAnalysis.png" />
+    <EmbeddedResource Include="Resources\NetJoints.png" />
+    <EmbeddedResource Include="Resources\LathSweep.png" />
     <EmbeddedResource Include="Resources\ChebyshevNet.png" />
     <EmbeddedResource Include="Resources\ConjugateNet.png" />
     <EmbeddedResource Include="Resources\Umbilics.png" />
