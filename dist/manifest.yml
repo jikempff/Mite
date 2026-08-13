@@ -1,5 +1,5 @@
 name: mite
-version: 1.0.3-beta.1
+version: 1.0.3
 authors:
   - Mite Contributors
 description: >-
@@ -9,6 +9,7 @@ description: >-
   Asymptotic, geodesic, and Chebyshev nets for gridshell design
   with evenly-spaced auto-seeding.
   Lath buildability analysis with bending and twist strain checks.
+  Fabrication output: lath strip sweeps and net joint notches.
 url: https://github.com/jikempff/Mite
 keywords:
   - mesh
@@ -26,5 +27,6 @@ keywords:
   - geodesic
   - lath
   - buildability
+  - fabrication
   - chebyshev
   - elastic-gridshell
