@@ -173,15 +173,16 @@ internal static class Tests
             new Mite.Grasshopper.Components.LathSweepComponent(),
             c =>
             {
-                SetInputs(c, (0, sphere.DuplicateMesh()), (3, 0.1), (4, 0.02));
+                SetInputs(c, (0, sphere.DuplicateMesh()), (2, 0.1), (3, 0.02));
                 var circle = new Rhino.Geometry.Circle(Rhino.Geometry.Plane.WorldXY, 1.0);
                 SetCurveList(c, 1, circle.ToNurbsCurve());
             },
             c =>
             {
                 var laths = Meshes(c, 0);
+                Console.WriteLine($"      [diag] laths.Count = {laths.Count}, faces = [{string.Join(", ", laths.Select(m => m.Faces.Count))}]");
                 return Expect(laths.Count == 1 && laths[0].Faces.Count > 20,
-                    $"one swept lath with {laths.FirstOrDefault()?.Faces.Count ?? 0} faces");
+                    $"one swept lath, got {laths.Count}");
             });
 
         TestComponent("Net Joints",
@@ -204,6 +205,7 @@ internal static class Tests
             c =>
             {
                 var pts = Points(c, 0);
+                Console.WriteLine($"      [diag] crossings = {pts.Count}: {string.Join(" | ", pts.Select(p => $"({p.X:F2},{p.Y:F2},{p.Z:F2})"))}");
                 return Expect(pts.Count == 2, $"2 crossings, got {pts.Count}")
                     && Expect(Boxes(c, 3).Count == 2 && Boxes(c, 4).Count == 2, "notch solids for both families");
             });
