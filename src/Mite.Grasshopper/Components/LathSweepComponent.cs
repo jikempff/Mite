@@ -22,7 +22,7 @@ public class LathSweepComponent : GH_Component
 
     protected override Bitmap Icon =>
         new Bitmap(Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream("Mite.Grasshopper.Resources.LathAnalysis.png")!);
+            .GetManifestResourceStream("Mite.Grasshopper.Resources.LathSweep.png")!);
 
     protected override void RegisterInputParams(GH_InputParamManager pManager)
     {
