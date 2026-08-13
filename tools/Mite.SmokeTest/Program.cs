@@ -176,13 +176,10 @@ internal static class Tests
                 SetInputs(c, (0, sphere.DuplicateMesh()), (2, 0.1), (3, 0.02));
                 var circle = new Rhino.Geometry.Circle(Rhino.Geometry.Plane.WorldXY, 1.0);
                 SetCurveList(c, 1, circle.ToNurbsCurve());
-                Console.WriteLine($"      [diag] after setup: {InputDiag(c)}");
             },
             c =>
             {
                 var laths = Meshes(c, 0);
-                Console.WriteLine($"      [diag] after solve: RunCount={c.RunCount}, {InputDiag(c)}");
-                Console.WriteLine($"      [diag] laths.Count = {laths.Count}, faces = [{string.Join(", ", laths.Select(m => m.Faces.Count))}]");
                 return Expect(laths.Count == 1 && laths[0].Faces.Count > 20,
                     $"one swept lath, got {laths.Count}");
             });
@@ -208,8 +205,6 @@ internal static class Tests
             c =>
             {
                 var pts = Points(c, 0);
-                Console.WriteLine($"      [diag] after solve: RunCount={c.RunCount}, {InputDiag(c)}");
-                Console.WriteLine($"      [diag] crossings = {pts.Count}: {string.Join(" | ", pts.Select(p => $"({p.X:F2},{p.Y:F2},{p.Z:F2})"))}");
                 return Expect(pts.Count == 2, $"2 crossings, got {pts.Count}")
                     && Expect(Boxes(c, 3).Count == 2 && Boxes(c, 4).Count == 2, "notch solids for both families");
             });
@@ -288,39 +283,39 @@ internal static class Tests
         return true;
     }
 
-    private static string InputDiag(Grasshopper.Kernel.GH_Component c)
-    {
-        var parts = new System.Collections.Generic.List<string>();
-        for (int i = 0; i < c.Params.Input.Count; i++)
-        {
-            var p = c.Params.Input[i];
-            parts.Add($"in{i}[{p.Access}] p={((dynamic)p).PersistentData.DataCount} v={p.VolatileData.DataCount}");
-        }
-        return string.Join(" ", parts);
-    }
-
     // ---------- input helpers ----------
+
+    // Persistent data is always set by clearing first, then adding. Calling
+    // SetPersistentData through dynamic with a scalar value resolves to the
+    // single-item overload SetPersistentData(T), which APPENDS (per its own
+    // docstring) — on a param with a registration default that leaves two
+    // items, the item-access iterator then runs SolveInstance twice and every
+    // SetDataList output gets one branch per run (doubled results).
+    private static void SetPersistent(Grasshopper.Kernel.GH_Component comp, int index, params object[] values)
+    {
+        dynamic p = comp.Params.Input[index];
+        p.PersistentData.Clear();
+        foreach (object v in values)
+            p.AddPersistentData(v);
+    }
 
     private static void SetInputs(Grasshopper.Kernel.GH_Component comp, params (int Index, object Value)[] inputs)
     {
         foreach (var (index, value) in inputs)
-            ((dynamic)comp.Params.Input[index]).SetPersistentData(value);
+            SetPersistent(comp, index, value);
     }
 
     private static void SetNumberList(Grasshopper.Kernel.GH_Component comp, int index, double[] values) =>
-        ((dynamic)comp.Params.Input[index]).SetPersistentData(values.Cast<object>().ToArray());
+        SetPersistent(comp, index, values.Cast<object>().ToArray());
 
     private static void SetBoolList(Grasshopper.Kernel.GH_Component comp, int index, bool[] values) =>
-        ((dynamic)comp.Params.Input[index]).SetPersistentData(values.Cast<object>().ToArray());
+        SetPersistent(comp, index, values.Cast<object>().ToArray());
 
     private static void SetVectorList(Grasshopper.Kernel.GH_Component comp, int index, params Rhino.Geometry.Vector3d[] values) =>
-        ((dynamic)comp.Params.Input[index]).SetPersistentData(values.Cast<object>().ToArray());
+        SetPersistent(comp, index, values.Cast<object>().ToArray());
 
     private static void SetCurveList(Grasshopper.Kernel.GH_Component comp, int index, params Rhino.Geometry.Curve[] values) =>
-        // Wrap in typed goo: passing raw Curve objects as an object[] through the
-        // dynamic SetPersistentData call stores each curve twice
-        ((dynamic)comp.Params.Input[index]).SetPersistentData(
-            values.Select(v => new Grasshopper.Kernel.Types.GH_Curve(v)).Cast<object>().ToArray());
+        SetPersistent(comp, index, values.Cast<object>().ToArray());
 
     // ---------- output helpers ----------
 
