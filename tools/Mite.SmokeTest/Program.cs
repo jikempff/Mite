@@ -176,12 +176,12 @@ internal static class Tests
                 SetInputs(c, (0, sphere.DuplicateMesh()), (2, 0.1), (3, 0.02));
                 var circle = new Rhino.Geometry.Circle(Rhino.Geometry.Plane.WorldXY, 1.0);
                 SetCurveList(c, 1, circle.ToNurbsCurve());
-                Console.WriteLine($"      [diag] after setup: input1 persistent={c.Params.Input[1].PersistentDataCount} volatile={c.Params.Input[1].VolatileDataCount}");
+                Console.WriteLine($"      [diag] after setup: input1 persistent={((dynamic)c.Params.Input[1]).PersistentData.DataCount} volatile={c.Params.Input[1].VolatileDataCount}");
             },
             c =>
             {
                 var laths = Meshes(c, 0);
-                Console.WriteLine($"      [diag] after solve: input1 persistent={c.Params.Input[1].PersistentDataCount} volatile={c.Params.Input[1].VolatileDataCount}, " +
+                Console.WriteLine($"      [diag] after solve: input1 persistent={((dynamic)c.Params.Input[1]).PersistentData.DataCount} volatile={c.Params.Input[1].VolatileDataCount}, " +
                     $"laths.Count = {laths.Count}, faces = [{string.Join(", ", laths.Select(m => m.Faces.Count))}]");
                 return Expect(laths.Count == 1 && laths[0].Faces.Count > 20,
                     $"one swept lath, got {laths.Count}");
@@ -208,8 +208,8 @@ internal static class Tests
             c =>
             {
                 var pts = Points(c, 0);
-                Console.WriteLine($"      [diag] after solve: input1 persistent={c.Params.Input[1].PersistentDataCount} volatile={c.Params.Input[1].VolatileDataCount}, " +
-                    $"input2 persistent={c.Params.Input[2].PersistentDataCount} volatile={c.Params.Input[2].VolatileDataCount}");
+                Console.WriteLine($"      [diag] after solve: input1 persistent={((dynamic)c.Params.Input[1]).PersistentData.DataCount} volatile={c.Params.Input[1].VolatileDataCount}, " +
+                    $"input2 persistent={((dynamic)c.Params.Input[2]).PersistentData.DataCount} volatile={c.Params.Input[2].VolatileDataCount}");
                 Console.WriteLine($"      [diag] crossings = {pts.Count}: {string.Join(" | ", pts.Select(p => $"({p.X:F2},{p.Y:F2},{p.Z:F2})"))}");
                 return Expect(pts.Count == 2, $"2 crossings, got {pts.Count}")
                     && Expect(Boxes(c, 3).Count == 2 && Boxes(c, 4).Count == 2, "notch solids for both families");
