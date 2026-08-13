@@ -196,9 +196,10 @@ internal static class Tests
                 plane.Vertices.Add(-2, 2, 0);
                 plane.Faces.AddFace(0, 1, 2, 3);
                 SetInputs(c, (0, plane), (3, 0.2), (4, 0.05));
+                // Non-concurrent lines: each crossing lands at a distinct location
                 SetCurveList(c, 1,
                     new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1, -1, 0), new Rhino.Geometry.Point3d(1, 1, 0)),
-                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, -1, 0), new Rhino.Geometry.Point3d(0, 1, 0)));
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0.5, -1, 0), new Rhino.Geometry.Point3d(0.5, 1, 0)));
                 SetCurveList(c, 2,
                     new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1, 0, 0), new Rhino.Geometry.Point3d(1, 0, 0)));
             },
@@ -302,7 +303,10 @@ internal static class Tests
         ((dynamic)comp.Params.Input[index]).SetPersistentData(values.Cast<object>().ToArray());
 
     private static void SetCurveList(Grasshopper.Kernel.GH_Component comp, int index, params Rhino.Geometry.Curve[] values) =>
-        ((dynamic)comp.Params.Input[index]).SetPersistentData(values.Cast<object>().ToArray());
+        // Wrap in typed goo: passing raw Curve objects as an object[] through the
+        // dynamic SetPersistentData call stores each curve twice
+        ((dynamic)comp.Params.Input[index]).SetPersistentData(
+            values.Select(v => new Grasshopper.Kernel.Types.GH_Curve(v)).Cast<object>().ToArray());
 
     // ---------- output helpers ----------
 
