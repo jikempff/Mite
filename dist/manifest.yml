@@ -12,7 +12,8 @@ description: >-
   Turn nets into buildable gridshells: sweep laths with rectangular
   profiles (flat or upright), cut half-lap or egg-crate joints at
   every crossing, unroll flat cutting patterns, and segment to stock
-  lengths with splice joints. (Add 8 components: full fabrication pipeline, conjugate nets, frame analysis, mesh healing)
+  lengths with splice joints. Conjugate nets for planar-quad panelization,
+  umbilic detection, gridshell frame analysis, and mesh healing.
 url: https://github.com/jikempff/Mite
 keywords:
   - mesh
@@ -33,6 +34,5 @@ keywords:
   - fabrication
   - chebyshev
   - elastic-gridshell
-  - fabrication
   - lap-joint
   - strip
