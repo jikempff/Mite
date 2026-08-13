@@ -42,6 +42,7 @@ public class GridshellAnalysisComponent : GH_Component
         pManager.AddBooleanParameter("Upright", "U", "Lath orientation, as in Lath Sweep", GH_ParamAccess.item, false);
         pManager.AddNumberParameter("Scale", "Sc", "Deformation display scale (default 1)", GH_ParamAccess.item, 1.0);
         pManager.AddNumberParameter("Sampling", "Sa", "Chord deviation for curve sampling (default 0.01)", GH_ParamAccess.item, 0.01);
+        pManager.AddNumberParameter("MaxSegment", "Ms", "Beam element size: polylines are subdivided so no segment exceeds this (default 0.1; 0 = no subdivision)", GH_ParamAccess.item, 0.1);
         pManager[2].Optional = true;
     }
 
@@ -60,7 +61,7 @@ public class GridshellAnalysisComponent : GH_Component
         var joints = new List<Point3d>();
         var supports = new List<Point3d>();
         var load = new Vector3d(0, 0, -1000);
-        double e = 11e9, allowable = 20e6, width = 0.1, thickness = 0.01, scale = 1.0, sampling = 0.01;
+        double e = 11e9, allowable = 20e6, width = 0.1, thickness = 0.01, scale = 1.0, sampling = 0.01, maxSegment = 0.1;
         bool upright = false;
 
         if (!DA.GetData(0, ref mesh) || mesh == null) return;
@@ -75,6 +76,7 @@ public class GridshellAnalysisComponent : GH_Component
         DA.GetData(9, ref upright);
         DA.GetData(10, ref scale);
         DA.GetData(11, ref sampling);
+        DA.GetData(12, ref maxSegment);
 
         if (supports.Count == 0)
         {
@@ -83,7 +85,12 @@ public class GridshellAnalysisComponent : GH_Component
         }
 
         var data = MeshConvert.ToMeshData(mesh);
-        var laths = CurveSample.ToPolylines(curves, sampling);
+        var sampled = CurveSample.ToPolylines(curves, sampling);
+        // Beam accuracy needs element subdivision; a straight LineCurve would
+        // otherwise become a single element with lumped end loads
+        var laths = new List<Vec3d[]>();
+        foreach (var line in sampled)
+            laths.Add(Subdivide(line, maxSegment));
         if (laths.Count == 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "No usable lath curves.");
