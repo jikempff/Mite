@@ -249,8 +249,13 @@ internal static class Tests
             c =>
             {
                 double maxDisp = Numbers(c, 1).FirstOrDefault();
+                // Cantilever UDL theory: delta = w L^4 / (8 E I) with w=1000 N/m,
+                // L=3, E=11 GPa, I = 0.1*0.02^3/12 for the flat 0.1x0.02 lath
+                double I = 0.1 * System.Math.Pow(0.02, 3) / 12.0;
+                double expected = 1000.0 * System.Math.Pow(3.0, 4) / (8.0 * 11e9 * I);
+                double err = System.Math.Abs(maxDisp - expected) / expected;
                 return Expect(CurveCount(c, 0) == 3, "3 deformed laths")
-                    && Expect(maxDisp > 0 && maxDisp < 1.0, $"sane deflection: {maxDisp:E3}");
+                    && Expect(err < 0.05, $"deflection {maxDisp:F3} vs analytic {expected:F3} ({err:P1})");
             });
 
         TestComponent("Lath Unroll",

@@ -148,4 +148,17 @@ public class GridshellAnalysisComponent : GH_Component
                 $"Peak utilization {result.MaxUtilization:F2} exceeds 1 — the network is overstressed somewhere.");
     }
 
+    private static Vec3d[] Subdivide(Vec3d[] line, double maxSegment)
+    {
+        if (maxSegment <= 0) return line;
+        var pts = new List<Vec3d> { line[0] };
+        for (int i = 1; i < line.Length; i++)
+        {
+            Vec3d seg = line[i] - line[i - 1];
+            int div = Math.Max(1, (int)Math.Ceiling(seg.Length / maxSegment));
+            for (int k = 1; k <= div; k++)
+                pts.Add(line[i - 1] + (double)k / div * seg);
+        }
+        return pts.ToArray();
+    }
 }

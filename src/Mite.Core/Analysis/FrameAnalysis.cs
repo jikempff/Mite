@@ -29,7 +29,8 @@ public static class FrameAnalysis
 
         /// <summary>
         /// Distance within which lath nodes snap to joint / support points
-        /// (0 = automatic: 40% of the average polyline segment length).
+        /// (0 = automatic: 55% of the average polyline segment length, which
+        /// catches crossings that fall at the middle of a segment).
         /// </summary>
         public double SnapTolerance { get; set; } = 0.0;
     }
@@ -122,7 +123,7 @@ public static class FrameAnalysis
                 segCount++;
             }
         avgSeg = segCount > 0 ? avgSeg / segCount : 1.0;
-        double snap = options.SnapTolerance > 0 ? options.SnapTolerance : 0.4 * avgSeg;
+        double snap = options.SnapTolerance > 0 ? options.SnapTolerance : 0.55 * avgSeg;
 
         // Union-find merge: nodes within snap of the same joint point are one node
         var parent = new int[rawPoints.Count];
