@@ -46,6 +46,13 @@ if (Test-Path $mathnet) {
     Copy-Item $mathnet $distDir -Force
 }
 
+# Copy Microsoft.Bcl.HashCode (net48 dependency of Mite.Core for HashCode.Combine;
+# without it the plugin fails to load on machines lacking the DLL)
+$bclHash = Join-Path $buildOut 'Microsoft.Bcl.HashCode.dll'
+if (Test-Path $bclHash) {
+    Copy-Item $bclHash $distDir -Force
+}
+
 # Copy icon if converted to PNG (see README)
 $iconPng = Join-Path $root 'icon.png'
 if (Test-Path $iconPng) {

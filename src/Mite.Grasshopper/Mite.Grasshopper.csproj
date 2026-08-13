@@ -5,7 +5,7 @@
     <AssemblyName>Mite.Grasshopper</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <Version>1.0.3</Version>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,5 +29,13 @@
     <EmbeddedResource Include="Resources\GeodesicNet.png" />
     <EmbeddedResource Include="Resources\LathAnalysis.png" />
     <EmbeddedResource Include="Resources\ChebyshevNet.png" />
+    <EmbeddedResource Include="Resources\ConjugateNet.png" />
+    <EmbeddedResource Include="Resources\Umbilics.png" />
+    <EmbeddedResource Include="Resources\GridshellAnalysis.png" />
+    <EmbeddedResource Include="Resources\LathUnroll.png" />
+    <EmbeddedResource Include="Resources\LathSegment.png" />
+    <EmbeddedResource Include="Resources\LathLabels.png" />
+    <EmbeddedResource Include="Resources\LathPreview.png" />
+    <EmbeddedResource Include="Resources\MeshCleanup.png" />
   </ItemGroup>
 </Project>

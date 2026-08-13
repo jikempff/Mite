@@ -19,7 +19,7 @@ public class LathAnalysisComponent : GH_Component
             "Decomposes each curve into geodesic curvature (in-surface bend), normal curvature " +
             "(out-of-surface bend), and geodesic torsion (twist), then compares the resulting " +
             "bending strains of a rectangular strip against an allowable material strain.",
-            "Mite", "Gridshells") { }
+            "Mite", "Analysis") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDEA");
 

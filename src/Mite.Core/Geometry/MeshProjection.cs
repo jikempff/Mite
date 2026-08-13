@@ -15,6 +15,7 @@ public class MeshProjection
     private readonly Vec3d[] _faceNormals;
     private readonly Vec3d[] _vertexNormals;
     private readonly double _averageEdgeLength;
+    private readonly VertexKdTree _kdTree;
 
     public MeshData Mesh => _mesh;
 
@@ -31,6 +32,7 @@ public class MeshProjection
         _vertexNeighbors = _mesh.BuildVertexNeighbors();
         _faceNormals = _mesh.ComputeFaceNormals();
         _vertexNormals = _mesh.ComputeVertexNormals();
+        _kdTree = VertexKdTree.Build(_mesh.Vertices);
 
         double sum = 0;
         int count = 0;
@@ -78,18 +80,11 @@ public class MeshProjection
         }
     }
 
-    /// <summary>Linear scan for the globally nearest vertex. Use once to seed hints.</summary>
-    public int NearestVertexGlobal(Vec3d p)
-    {
-        int best = 0;
-        double bestDist = double.MaxValue;
-        for (int i = 0; i < _mesh.VertexCount; i++)
-        {
-            double d = (_mesh.Vertices[i] - p).LengthSquared;
-            if (d < bestDist) { bestDist = d; best = i; }
-        }
-        return best;
-    }
+    /// <summary>
+    /// Globally nearest vertex (exact kd-tree query). Use once to seed hints.
+    /// Returns -1 on an empty mesh.
+    /// </summary>
+    public int NearestVertexGlobal(Vec3d p) => _kdTree.Nearest(p);
 
     /// <summary>
     /// Finds the closest point on the mesh near the given vertex hint.

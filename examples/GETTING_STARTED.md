@@ -67,6 +67,21 @@ notches into **Solid Difference** to cut half-lap joints (egg-crate slots when
 Upright is on); `L` sets the lap fraction (0.5 = half-lap), `Cl` the fit
 clearance.
 
+## 5. From model to workshop (5 minutes)
+
+- **Lath Segment** — splits laths longer than your stock (`St`), keeping cuts
+  `Ma` away from joints, and emits splice notch solids (`Ne`/`Ns`) for
+  half-lap splices.
+- **Lath Unroll** — flat cutting patterns per lath, laid out in a row (`G`
+  gap). Export the `P` curves for CNC/laser.
+- **Lath Labels** — IDs (`A000`, `A001`, ...), midpoint tag anchors, and a CSV
+  bill of materials with lengths (and utilization if you wire Lath Analysis in).
+- **Lath Preview** — colors the swept laths by utilization: green OK, red over.
+
+Optionally, check the whole network structurally with **Gridshell Analysis**
+(Mite > Analysis): supports at the boundary, a downward `L` load, and it
+reports deflections and per-lath stress utilization.
+
 ## Units
 
 All lengths (Spacing, Step, EdgeLength, Width, Thickness) are in model units.

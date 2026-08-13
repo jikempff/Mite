@@ -61,7 +61,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 13 components", IconsLoad());
+        Check("Icons load for all 21 components", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -209,6 +209,109 @@ internal static class Tests
                     && Expect(Boxes(c, 3).Count == 2 && Boxes(c, 4).Count == 2, "notch solids for both families");
             });
 
+        TestComponent("Mesh Cleanup",
+            new Mite.Grasshopper.Components.MeshCleanupComponent(),
+            c => SetInputs(c, (0, sphere.DuplicateMesh()), (1, 0.0), (2, true)),
+            c => Expect(MeshOut(c, 0) != null && MeshOut(c, 0)!.Faces.Count > 0,
+                "cleaned mesh produced"));
+
+        TestComponent("Conjugate Net",
+            new Mite.Grasshopper.Components.ConjugateNetComponent(),
+            c => SetInputs(c, (0, saddle.DuplicateMesh()), (1, 0.25), (2, 0.05), (3, 300)),
+            c => Expect(CurveCount(c, 0) >= 1 && CurveCount(c, 1) >= 1,
+                $"both families traced: A={CurveCount(c, 0)}, B={CurveCount(c, 1)}"));
+
+        TestComponent("Umbilics",
+            new Mite.Grasshopper.Components.UmbilicsComponent(),
+            c => SetInputs(c, (0, sphere.DuplicateMesh()), (1, 0.1)),
+            c => Expect(Points(c, 0).Count > sphere.Vertices.Count / 2,
+                $"sphere is mostly umbilical: {Points(c, 0).Count} points"));
+
+        TestComponent("Gridshell Analysis",
+            new Mite.Grasshopper.Components.GridshellAnalysisComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-2, -2, 0);
+                plane.Vertices.Add(2, -2, 0);
+                plane.Vertices.Add(2, 2, 0);
+                plane.Vertices.Add(-2, 2, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                SetInputs(c, (0, plane), (7, 0.1), (8, 0.02));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1.5, -1, 0), new Rhino.Geometry.Point3d(1.5, -1, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1.5, 0, 0), new Rhino.Geometry.Point3d(1.5, 0, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1.5, 1, 0), new Rhino.Geometry.Point3d(1.5, 1, 0)));
+                SetPointList(c, 3,
+                    new Rhino.Geometry.Point3d(-1.5, -1, 0), new Rhino.Geometry.Point3d(-1.5, 0, 0),
+                    new Rhino.Geometry.Point3d(-1.5, 1, 0));
+            },
+            c =>
+            {
+                double maxDisp = Numbers(c, 1).FirstOrDefault();
+                return Expect(CurveCount(c, 0) == 3, "3 deformed laths")
+                    && Expect(maxDisp > 0 && maxDisp < 1.0, $"sane deflection: {maxDisp:E3}");
+            });
+
+        TestComponent("Lath Unroll",
+            new Mite.Grasshopper.Components.LathUnrollComponent(),
+            c =>
+            {
+                SetInputs(c, (0, sphere.DuplicateMesh()), (2, 0.1));
+                var circle = new Rhino.Geometry.Circle(Rhino.Geometry.Plane.WorldXY, 1.0);
+                SetCurveList(c, 1, circle.ToNurbsCurve());
+            },
+            c =>
+            {
+                var lengths = Numbers(c, 2);
+                return Expect(CurveCount(c, 0) == 1 && lengths.Count == 1
+                    && System.Math.Abs(lengths[0] - 2 * System.Math.PI) < 0.1,
+                    $"equator pattern, length {(lengths.Count > 0 ? lengths[0] : 0):F3}");
+            });
+
+        TestComponent("Lath Segment",
+            new Mite.Grasshopper.Components.LathSegmentComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-6, -2, 0);
+                plane.Vertices.Add(6, -2, 0);
+                plane.Vertices.Add(6, 2, 0);
+                plane.Vertices.Add(-6, 2, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                SetInputs(c, (0, plane), (2, 2.0), (3, 0.05));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-5, 0, 0), new Rhino.Geometry.Point3d(5, 0, 0)));
+            },
+            c => Expect(CurveCount(c, 0) >= 4 && Points(c, 1).Count >= 3,
+                $"10-unit lath in 2-unit stock: {CurveCount(c, 0)} segments, {Points(c, 1).Count} cuts"));
+
+        TestComponent("Lath Labels",
+            new Mite.Grasshopper.Components.LathLabelsComponent(),
+            c =>
+            {
+                SetInputs(c, (1, "A"));
+                SetCurveList(c, 0,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(1, 0, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 1, 0), new Rhino.Geometry.Point3d(1, 1, 0)));
+            },
+            c => Expect(Points(c, 0).Count == 2 && Texts(c, 1).Count == 2 && Texts(c, 1)[0] == "A000",
+                "two labeled laths + CSV report"));
+
+        TestComponent("Lath Preview",
+            new Mite.Grasshopper.Components.LathPreviewComponent(),
+            c =>
+            {
+                var m1 = new Rhino.Geometry.Mesh();
+                m1.Vertices.Add(0, 0, 0); m1.Vertices.Add(1, 0, 0); m1.Vertices.Add(0, 1, 0);
+                m1.Faces.AddFace(0, 1, 2);
+                var m2 = m1.DuplicateMesh();
+                m2.Translate(new Rhino.Geometry.Vector3d(0, 2, 0));
+                SetMeshList(c, 0, m1, m2);
+                SetNumberList(c, 1, new[] { 0.5, 1.5 });
+            },
+            c => Expect(Meshes(c, 0).Count == 2, "two colored laths"));
+
         Console.WriteLine();
         Console.WriteLine($"=== {_passed} passed, {_failed} failed ===");
         return _failed == 0 ? 0 : 1;
@@ -263,9 +366,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 13)
+        if (comps.Count != 21)
         {
-            Console.WriteLine($"      expected 13 components, found {comps.Count}");
+            Console.WriteLine($"      expected 21 components, found {comps.Count}");
             return false;
         }
 
@@ -317,6 +420,12 @@ internal static class Tests
     private static void SetCurveList(Grasshopper.Kernel.GH_Component comp, int index, params Rhino.Geometry.Curve[] values) =>
         SetPersistent(comp, index, values.Cast<object>().ToArray());
 
+    private static void SetPointList(Grasshopper.Kernel.GH_Component comp, int index, params Rhino.Geometry.Point3d[] values) =>
+        SetPersistent(comp, index, values.Cast<object>().ToArray());
+
+    private static void SetMeshList(Grasshopper.Kernel.GH_Component comp, int index, params Rhino.Geometry.Mesh[] values) =>
+        SetPersistent(comp, index, values.Cast<object>().ToArray());
+
     // ---------- output helpers ----------
 
     private static System.Collections.Generic.List<double> Numbers(Grasshopper.Kernel.GH_Component comp, int index) =>
@@ -346,6 +455,10 @@ internal static class Tests
     private static System.Collections.Generic.List<Rhino.Geometry.Box> Boxes(Grasshopper.Kernel.GH_Component comp, int index) =>
         comp.Params.Output[index].VolatileData.AllData(true)
             .OfType<Grasshopper.Kernel.Types.GH_Box>().Select(b => b.Value).ToList();
+
+    private static System.Collections.Generic.List<string> Texts(Grasshopper.Kernel.GH_Component comp, int index) =>
+        comp.Params.Output[index].VolatileData.AllData(true)
+            .OfType<Grasshopper.Kernel.Types.GH_String>().Select(s => s.Value).ToList();
 
     // ---------- geometry ----------
 

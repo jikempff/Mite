@@ -106,4 +106,61 @@ public static class JointGeometry
         // Mixed flat/upright crossings are not a standard joint
         return false;
     }
+
+    /// <summary>
+    /// Builds the half-lap splice pair for rejoining two lath segments end to
+    /// end (from LathSegmentation). The end of the upstream segment keeps its
+    /// near-surface half over the splice length; the start of the downstream
+    /// segment keeps its far half, so they overlap into full depth.
+    /// </summary>
+    public static bool TryBuildSpliceNotches(
+        Vec3d cutPoint, Vec3d tangent, Vec3d surfaceNormal,
+        LathProfile profile, double spliceLength, double clearance,
+        out NotchSolid endNotch, out NotchSolid startNotch)
+    {
+        endNotch = default;
+        startNotch = default;
+
+        if (surfaceNormal.LengthSquared < 1e-20 || spliceLength <= 0) return false;
+        Vec3d n = surfaceNormal.Normalized();
+        Vec3d t = tangent - Vec3d.Dot(tangent, n) * n;
+        if (t.LengthSquared < 1e-20) return false;
+        t = t.Normalized();
+        Vec3d g = Vec3d.Cross(n, t);
+
+        if (!profile.Upright)
+        {
+            // Flat: splice overlaps over spliceLength, each side loses half the thickness
+            double depth = 0.5 * profile.Thickness + clearance;
+            // End of upstream segment: remove the top half over [cut - L, cut]
+            Vec3d cEnd = cutPoint - 0.5 * spliceLength * t
+                + (profile.Offset + profile.Thickness - 0.5 * depth) * n;
+            // Start of downstream segment: remove the bottom half over [cut, cut + L]
+            Vec3d cStart = cutPoint + 0.5 * spliceLength * t
+                + (profile.Offset + 0.5 * depth) * n;
+
+            double halfAcross = 0.5 * profile.Width + clearance;
+            endNotch = new NotchSolid(cEnd, t, g, n,
+                0.5 * spliceLength + clearance, halfAcross, 0.5 * depth);
+            startNotch = new NotchSolid(cStart, t, g, n,
+                0.5 * spliceLength + clearance, halfAcross, 0.5 * depth);
+            return true;
+        }
+        else
+        {
+            // Upright: same idea along the standing width
+            double depth = 0.5 * profile.Width + clearance;
+            Vec3d cEnd = cutPoint - 0.5 * spliceLength * t
+                + (profile.Offset + profile.Width - 0.5 * depth) * n;
+            Vec3d cStart = cutPoint + 0.5 * spliceLength * t
+                + (profile.Offset + 0.5 * depth) * n;
+
+            double halfThick = 0.5 * profile.Thickness + clearance;
+            endNotch = new NotchSolid(cEnd, t, g, n,
+                0.5 * spliceLength + clearance, halfThick, 0.5 * depth);
+            startNotch = new NotchSolid(cStart, t, g, n,
+                0.5 * spliceLength + clearance, halfThick, 0.5 * depth);
+            return true;
+        }
+    }
 }
