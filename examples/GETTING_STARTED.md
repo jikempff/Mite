@@ -8,14 +8,19 @@ special data types required.
 
 1. Add a **Mesh Sphere** (Mesh > Primitive) or reference any mesh.
 2. Wire it into **Gaussian Curvature** (Mite > Curvature).
-3. Color the mesh: wire `K` into a **Gradient** (remap the domain with
-   **Bounds** + **Remap Numbers**) and feed the colors plus the mesh into
-   **Mesh Colours**.
+3. Wire the mesh and `K` into **Mesh Colour Map** (Mite > Util): blue is
+   negative, white zero, red positive. (Or build your own chain with
+   **Bounds** + **Remap Numbers** + **Gradient** + **Mesh Colours**.)
+4. Optional: wire the mesh and `K` into **Mesh Isocurves** with level `0` to
+   outline the saddle-shaped regions.
 
 Domes show positive values, saddles negative, flat regions zero. **Mean
 Curvature** and **Principal Curvature** work the same way; Principal also
 outputs the two curvature *directions* per vertex, which you can preview with
 **Vector Display**.
+
+Meshes with seams or duplicate vertices (STL imports, meshed Breps) are welded
+automatically; per-vertex outputs always line up with the input mesh.
 
 ## 2. Trace a gridshell net (5 minutes)
 
@@ -25,15 +30,18 @@ Use a doubly-curved mesh. For asymptotic nets it must have anticlastic
 **Asymptotic Net** (Mite > Gridshells):
 
 - `M` — your mesh
-- `A` (AutoSpace) — `True`
-- `Sp` (Spacing) — roughly mesh size / 15
-- `St` (Step) — roughly Spacing / 10
+- `A` (AutoSpace) — `True` (the default)
+- `Sp` (Spacing) — roughly mesh size / 15, or leave `0` for an automatic value
+- `St` (Step) — leave `0`: it is derived from the spacing and mesh
 
-You get two crossing curve families that only exist where K < 0. These are the
-layouts buildable from straight flat strips held upright.
+You get two crossing curve families that only exist where K < 0 (the `K`
+output flags those vertices). These are the layouts buildable from straight
+flat strips held upright. Seeds can be vertex indices (`S`) or points (`P`);
+with AutoSpace only the first one matters.
 
 **Geodesic Net** works everywhere (no curvature restriction): give it one seed
-vertex index, one direction vector, AutoSpace `True`, and a Spacing.
+(index or point), one direction vector, AutoSpace `True`, and a Spacing.
+**Geodesic Path** gives the single shortest lath between two points.
 
 **Chebyshev Net**: seed vertex + direction + `L` (lath joint spacing, try mesh
 size / 12). Outputs both lath families and a quad net mesh whose edges all have
@@ -70,20 +78,36 @@ clearance.
 ## 5. From model to workshop (5 minutes)
 
 - **Lath Segment** — splits laths longer than your stock (`St`), keeping cuts
-  `Ma` away from joints, and emits splice notch solids (`Ne`/`Ns`) for
-  half-lap splices.
+  `Ma` away from joints. Consecutive pieces overlap by `SL` and the splice
+  notch solids (`Ne` for the upstream piece, `Ns` for the downstream one) cut
+  a half-lap splice into that overlap. Outputs are one branch per lath.
 - **Lath Unroll** — flat cutting patterns per lath, laid out in a row (`G`
   gap). Export the `P` curves for CNC/laser.
-- **Lath Labels** — IDs (`A000`, `A001`, ...), midpoint tag anchors, and a CSV
-  bill of materials with lengths (and utilization if you wire Lath Analysis in).
+- **Lath Labels** — IDs (`L000`, `L001`, ...; set the prefix and start number
+  per family), midpoint tag anchors, and a CSV bill of materials with lengths
+  (and utilization if you wire Lath Analysis in).
 - **Lath Preview** — colors the swept laths by utilization: green OK, red over.
+- **Net Topology** — nodes and members of the net as a graph, for a structural
+  package or a node schedule.
 
 Optionally, check the whole network structurally with **Gridshell Analysis**
-(Mite > Analysis): supports at the boundary, a downward `L` load, and it
-reports deflections and per-lath stress utilization.
+(Mite > Analysis): supports at the boundary, a downward `L` load in N/m, and it
+reports deflections, per-element and per-lath stress utilization (`Ul` goes
+straight into **Lath Preview**). Geometry is converted to metres internally,
+so `E`, `Al` (Pa) and `L` (N/m) are always SI whatever your model units.
 
 ## Units
 
-All lengths (Spacing, Step, EdgeLength, Width, Thickness) are in model units.
-The defaults assume meter-scale models — scale them up ~1000x if you model in
-millimeters.
+All lengths (Spacing, Step, EdgeLength, Width, Thickness, Offset, Margin,
+StockLength, SpliceLength, Sampling, MaxSegment, Gap, Clearance) are in model
+units. Tracing and sampling parameters default to `0` = automatic, derived
+from the mesh size, so they work at any scale; the fixed defaults of the
+fabrication inputs (Width 0.1, Thickness 0.01, StockLength 3) assume
+metre-scale models — scale them up ~1000x if you model in millimetres.
+
+## Form finding
+
+- **Minimal Surface** and **Force Density Method** fix the mesh boundary when
+  `F` is left empty. Force densities `Q` follow the `E` (Edges) output order.
+- **Dynamic Relaxation** hangs a net under `G` (gravity) or point loads, or
+  relaxes it as a soap film (`Te`); `R` < 1 pre-tensions the edges.

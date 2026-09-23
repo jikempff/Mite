@@ -1,28 +1,33 @@
 # Mite
 
-Open-source C# toolkit for mesh curvature analysis and form-finding. Pure .NET with zero native dependencies — runs on Windows, macOS, and Linux.
+Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net design and lath fabrication. Pure .NET with zero dependencies — runs on Windows, macOS, and Linux.
 
 ## Features
 
 ### Curvature Analysis
-- **Principal Curvature** — k1, k2 values and directions per vertex (Rusinkiewicz 2004), with shape-tensor smoothing for consistent direction fields
+- **Principal Curvature** — k1, k2 values and directions per vertex (Rusinkiewicz 2004), with tangent-frame tensor smoothing and right-handed (D1, D2, N) frames for consistent direction fields
 - **Gaussian Curvature** — angle deficit method with mixed Voronoi areas
-- **Mean Curvature** — cotangent Laplacian
+- **Mean Curvature** — cotangent Laplacian over the same mixed Voronoi areas (H and K are consistently normalized); degenerate triangles are ignored
 - **Umbilics** — flags vertices where k1 ≈ k2 (direction fields are undefined there; key for clean net layouts)
+- **Mesh Isocurves** — level sets of any per-vertex field (marching triangles); K = 0 outlines the anticlastic regions asymptotic laths can occupy
 
 ### Streamlines
-- **Curvature Streamlines** — RK4 integration along principal curvature directions
+- **Curvature Streamlines** — RK2 integration along principal curvature directions, from seeds or evenly spaced (AutoSpace)
 
 ### Form-Finding
 - **Planarization** — iterative quad mesh planarization
 - **Minimal Surface** — exact cotangent Laplace solves with frozen weights (Pinkall–Polthier style); converges in a few iterations instead of thousands of flow steps
-- **Force Density Method** — equilibrium solving for cable nets and shells, with singular-system detection
+- **Force Density Method** — equilibrium solving for cable nets (q > 0) and compression shells (q < 0), with singular-system detection and a deterministic edge order
+- **Dynamic Relaxation** — particle-spring form finding with kinetic damping: gravity / point loads, soap-film tension, pre-tension and smoothing
+- All linear systems run on a built-in sparse envelope LDLᵀ solver (reverse Cuthill–McKee ordering): tens of thousands of unknowns solve in seconds
 
 ### Gridshells
 - **Asymptotic Net** — both families of asymptotic curves (zero normal curvature) for asymptotic gridshells, with optional evenly-spaced auto-seeding
 - **Geodesic Net** — straightest geodesics traced on the mesh for geodesic (lath) gridshells, with optional evenly-spaced auto-seeding
 - **Chebyshev Net** — equal-edge-length nets by the compass method: the kinematics of elastic gridshells bent from flat lattices
 - **Conjugate Net** — both principal families evenly spaced: an approximate conjugate net, the layout for planar-quad (PQ) panelization
+- **Geodesic Path** — shortest geodesic between two points (graph search + on-surface curve shortening)
+- Tracing is scale-aware: step, step count and spacing default to values derived from the mesh, so millimetre and metre models behave the same
 
 ### Analysis
 - **Lath Analysis** — buildability check for strip laths: Darboux-frame decomposition (geodesic curvature, normal curvature, geodesic torsion) converted to bending strains against a material limit
@@ -35,22 +40,21 @@ Open-source C# toolkit for mesh curvature analysis and form-finding. Pure .NET w
 - **Lath Segment** — splits laths to stock length, cuts kept away from joints, with half-lap splice notch solids
 - **Lath Labels** — lath IDs, label anchor points, and a CSV bill of materials
 - **Lath Preview** — color-codes laths by utilization (green → red)
+- **Net Topology** — nodes and members of a two-family net as a structural graph (for Karamba-style analysis or a node schedule)
 
 ### Utilities
-- **Mesh Cleanup** — weld vertices, drop degenerate/duplicate faces, unify winding. Heal imported meshes before analysis
+- **Mesh Cleanup** — weld vertices (also far from the origin), reduce collapsed faces, drop degenerate/duplicate faces, unify winding
+- **Pull To Mesh** — project hand-drawn curves and points onto a mesh, with optional on-surface fairing
+- **Mesh Colour Map** — colour a mesh by per-vertex values in one step (diverging palette centred on zero for signed curvature)
 
-### Dynamics
-
-### Dynamics
-- Spring, gravity, drag, smoothness, and area minimization forces
-- Explicit Euler integration
+All Grasshopper components weld coincident vertices on intake (STL imports, Brep meshes with seams) and map per-vertex results back to the original mesh, so **Mesh Colours** and **Deconstruct Mesh** line up.
 
 ## Projects
 
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (21 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (27 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -67,7 +71,7 @@ Search for **mite** and click Install.
 
 ### Manual
 
-Drop `Mite.Grasshopper.gha` and `Mite.Core.dll` into your Grasshopper Libraries folder.
+Drop `Mite.Grasshopper.gha`, `Mite.Core.dll` and `Microsoft.Bcl.HashCode.dll` into your Grasshopper Libraries folder.
 
 ## Quick Start
 
@@ -89,7 +93,7 @@ double[] K = GaussianCurvature.Compute(mesh);
 // Compute mean curvature
 var mean = MeanCurvature.Compute(mesh);
 // mean.Values — scalar H per vertex
-// mean.Normals — mean curvature normal per vertex
+// mean.CurvatureNormals — mean curvature normal per vertex
 ```
 
 ## Build
@@ -112,11 +116,11 @@ This builds the Grasshopper project in Release mode, stages the files into `dist
 Components appear under the **Mite** tab:
 
 - **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines, Umbilics
-- **FormFinding** — Planarize Mesh, Minimal Surface, Force Density Method
-- **Gridshells** — Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net
-- **Analysis** — Lath Analysis, Gridshell Analysis
-- **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview
-- **Util** — Mesh Cleanup
+- **Form Finding** — Planarize Mesh, Minimal Surface, Force Density Method, Dynamic Relaxation
+- **Gridshells** — Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
+- **Analysis** — Lath Analysis, Gridshell Analysis, Mesh Isocurves
+- **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview, Net Topology
+- **Util** — Mesh Cleanup, Pull To Mesh, Mesh Colour Map
 
 A typical gridshell workflow: heal the mesh with **Mesh Cleanup**, trace a **Geodesic Net**
 or **Asymptotic Net**, check strips with **Lath Analysis** and the whole network with

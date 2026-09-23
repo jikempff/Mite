@@ -1,20 +1,21 @@
 name: mite
-version: 1.1.0
+version: 1.2.0
 authors:
   - Mite Contributors
 description: >-
-  Open-source mesh curvature analysis and form-finding toolkit.
-  Principal, Gaussian, and mean curvature. Curvature streamlines.
-  Planarization, minimal surfaces, and force density method.
-  Asymptotic, geodesic, and Chebyshev nets for gridshell design
-  with evenly-spaced auto-seeding.
-  Lath buildability analysis with bending and twist strain checks.
-  Turn nets into buildable gridshells: sweep laths with rectangular
-  profiles (flat or upright), cut half-lap or egg-crate joints at
-  every crossing, unroll flat cutting patterns, and segment to stock
-  lengths with splice joints. Conjugate nets for planar-quad panelization,
-  umbilic detection, gridshell frame analysis, and mesh healing.
+  Open-source mesh curvature analysis, form-finding and gridshell toolkit.
+  Principal, Gaussian, and mean curvature; curvature streamlines, umbilics
+  and isocurves. Planarization, minimal surfaces, force density method and
+  dynamic relaxation on a fast sparse solver. Asymptotic, geodesic, Chebyshev
+  and conjugate nets with evenly-spaced auto-seeding, plus shortest geodesic
+  paths. Lath buildability analysis with bending and twist strain checks and
+  frame analysis of the whole network. Turn nets into buildable gridshells:
+  sweep laths with rectangular profiles (flat or upright), cut half-lap or
+  egg-crate joints at every crossing, unroll flat cutting patterns, segment to
+  stock lengths with splice joints, label laths and export the net topology.
+  Mesh healing, pull-to-mesh and one-step colour maps.
 url: https://github.com/jikempff/Mite
+icon: icon.png
 keywords:
   - mesh
   - curvature
@@ -36,3 +37,5 @@ keywords:
   - elastic-gridshell
   - lap-joint
   - strip
+  - dynamic-relaxation
+  - isocurves

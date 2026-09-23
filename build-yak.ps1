@@ -40,10 +40,10 @@ Copy-Item $ghaDll (Join-Path $distDir 'Mite.Grasshopper.gha') -Force
 # Copy Core library
 Copy-Item (Join-Path $buildOut 'Mite.Core.dll') $distDir -Force
 
-# Copy MathNet.Numerics if present alongside the build
-$mathnet = Join-Path $buildOut 'MathNet.Numerics.dll'
-if (Test-Path $mathnet) {
-    Copy-Item $mathnet $distDir -Force
+# Remove the MathNet.Numerics.dll of older packages (1.2.0 has its own sparse solver)
+$staleMathnet = Join-Path $distDir 'MathNet.Numerics.dll'
+if (Test-Path $staleMathnet) {
+    Remove-Item $staleMathnet -Force
 }
 
 # Copy Microsoft.Bcl.HashCode (net48 dependency of Mite.Core for HashCode.Combine;
