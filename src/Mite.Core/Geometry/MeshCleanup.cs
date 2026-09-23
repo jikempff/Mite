@@ -18,12 +18,16 @@ public static class MeshCleanup
         public readonly int RemovedDegenerateFaces;
         public readonly int RemovedDuplicateFaces;
 
-        public Result(MeshData mesh, int welded, int degenerate, int duplicate)
+        /// <summary>Index of the cleaned vertex each input vertex was mapped to.</summary>
+        public readonly int[] VertexMap;
+
+        public Result(MeshData mesh, int welded, int degenerate, int duplicate, int[] vertexMap)
         {
             Mesh = mesh;
             WeldedVertices = welded;
             RemovedDegenerateFaces = degenerate;
             RemovedDuplicateFaces = duplicate;
+            VertexMap = vertexMap;
         }
     }
 
@@ -54,13 +58,17 @@ public static class MeshCleanup
         // --- Weld vertices: grid hash, first vertex in a cluster is the representative
         var map = new int[nv];
         var kept = new List<int>();
-        var grid = new Dictionary<(int, int, int), List<int>>();
-        double cell = Math.Max(tol, 1e-12);
+        var grid = new Dictionary<(long, long, long), List<int>>();
+        // Cells are a few tolerances wide and keyed relative to the bounding
+        // box minimum with 64-bit keys, so far-from-origin (georeferenced)
+        // models neither overflow the key nor collapse into a single bucket
+        double cell = Math.Max(4.0 * tol, 1e-12);
+        Vec3d origin = mesh.BoundingBox().Min;
 
         for (int i = 0; i < nv; i++)
         {
             Vec3d p = mesh.Vertices[i];
-            var (kx, ky, kz) = Key(p, cell);
+            var (kx, ky, kz) = Key(p - origin, cell);
             int rep = -1;
             double tol2 = tol * tol;
             for (int dx = -1; dx <= 1 && rep < 0; dx++)
@@ -91,25 +99,34 @@ public static class MeshCleanup
         for (int i = 0; i < kept.Count; i++) newVerts[i] = mesh.Vertices[kept[i]];
         int welded = nv - kept.Count;
 
-        // --- Drop degenerate faces (repeated vertices or near-zero area)
+        // --- Reduce collapsed faces, drop degenerate ones (near-zero area)
         int degenerate = 0;
         double minArea = 1e-12 * avgEdge * avgEdge;
         var faces = new List<int[]>();
         foreach (var f in mesh.Faces)
         {
-            var nf = new int[f.Length];
-            for (int i = 0; i < f.Length; i++) nf[i] = map[f[i]];
+            // Welding can merge cyclically adjacent corners (a quad at a
+            // sphere pole becomes a triangle); collapse those runs instead of
+            // discarding the whole face, which would open a hole
+            var nf = new List<int>(f.Length);
+            for (int i = 0; i < f.Length; i++)
+            {
+                int v = map[f[i]];
+                if (nf.Count > 0 && nf[nf.Count - 1] == v) continue;
+                nf.Add(v);
+            }
+            while (nf.Count > 1 && nf[0] == nf[nf.Count - 1]) nf.RemoveAt(nf.Count - 1);
 
-            bool bad = false;
-            for (int i = 0; i < nf.Length && !bad; i++)
-                for (int j = i + 1; j < nf.Length && !bad; j++)
-                    if (nf[i] == nf[j]) bad = true;
+            bool bad = nf.Count < 3;
+            for (int i = 0; i < nf.Count && !bad; i++)
+                for (int j = i + 1; j < nf.Count && !bad; j++)
+                    if (nf[i] == nf[j]) bad = true; // non-adjacent repeat: bow-tie
 
-            if (!bad && nf.Length >= 3 && PolygonArea(newVerts, nf) < minArea) bad = true;
+            var arr = nf.ToArray();
+            if (!bad && PolygonArea(newVerts, arr) < minArea) bad = true;
 
-            if (bad && f.Length >= 3) { degenerate++; continue; }
-            if (nf.Length < 3) { degenerate++; continue; }
-            faces.Add(nf);
+            if (bad) { degenerate++; continue; }
+            faces.Add(arr);
         }
 
         // --- Drop duplicate faces (same vertex set)
@@ -127,11 +144,11 @@ public static class MeshCleanup
 
         if (unifyWinding) UnifyWinding(unique);
 
-        return new Result(new MeshData(newVerts, unique.ToArray()), welded, degenerate, duplicate);
+        return new Result(new MeshData(newVerts, unique.ToArray()), welded, degenerate, duplicate, map);
     }
 
-    private static (int, int, int) Key(Vec3d p, double cell) =>
-        ((int)Math.Floor(p.X / cell), (int)Math.Floor(p.Y / cell), (int)Math.Floor(p.Z / cell));
+    private static (long, long, long) Key(Vec3d p, double cell) =>
+        ((long)Math.Floor(p.X / cell), (long)Math.Floor(p.Y / cell), (long)Math.Floor(p.Z / cell));
 
     private static double PolygonArea(Vec3d[] verts, int[] face)
     {

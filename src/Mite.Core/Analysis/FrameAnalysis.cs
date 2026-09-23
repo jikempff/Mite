@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using MathNet.Numerics.LinearAlgebra;
+using Mite.Core.Numerics;
 using Mite.Core.Fabrication;
 using Mite.Core.Geometry;
 
@@ -63,10 +63,15 @@ public static class FrameAnalysis
 
         public readonly double MaxUtilization;
 
+        /// <summary>Number of nodes that were fixed by a support point.</summary>
+        public readonly int SupportNodeCount;
+
         public Result(Vec3d[] nodes, List<(int, int)>[] nodeMap, Vec3d[] displacements,
             double maxDisplacement, (int, int)[] elementSource,
-            double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization)
+            double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
+            int supportNodeCount = 0)
         {
+            SupportNodeCount = supportNodeCount;
             Nodes = nodes;
             NodeMap = nodeMap;
             Displacements = displacements;
@@ -125,26 +130,34 @@ public static class FrameAnalysis
         avgSeg = segCount > 0 ? avgSeg / segCount : 1.0;
         double snap = options.SnapTolerance > 0 ? options.SnapTolerance : 0.55 * avgSeg;
 
-        // Union-find merge: nodes within snap of the same joint point are one node
+        // Union-find merge: nodes within snap of the same joint point are one
+        // node, placed at the joint (the exact crossing) rather than at
+        // whichever lath sample happened to come first, so coupled laths meet
+        // without artificial kinks. Coincident raw points (the seam of a closed
+        // lath, laths sharing an endpoint) merge too.
         var parent = new int[rawPoints.Count];
         for (int i = 0; i < parent.Length; i++) parent[i] = i;
         int Find(int x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
         void Union(int a, int b) { parent[Find(a)] = Find(b); }
 
+        var grid = new PointGrid(rawPoints, snap);
+        double coincident = 1e-6 * avgSeg;
+        for (int i = 0; i < rawPoints.Count; i++)
+            foreach (int j in grid.Within(rawPoints[i], coincident))
+                if (j != i) Union(i, j);
+
+        var jointOfRaw = new Dictionary<int, Vec3d>();
         if (joints != null)
         {
             foreach (var jp in joints)
             {
                 int first = -1;
-                double snap2 = snap * snap;
-                for (int i = 0; i < rawPoints.Count; i++)
+                foreach (int i in grid.Within(jp, snap))
                 {
-                    if ((rawPoints[i] - jp).LengthSquared <= snap2)
-                    {
-                        if (first < 0) first = i;
-                        else Union(first, i);
-                    }
+                    if (first < 0) first = i;
+                    else Union(first, i);
                 }
+                if (first >= 0) jointOfRaw[first] = jp;
             }
         }
 
@@ -153,6 +166,8 @@ public static class FrameAnalysis
         var nodes = new List<Vec3d>();
         var nodeMap = new List<List<(int, int)>>();
         var rawToNode = new int[rawPoints.Count];
+        var jointOfRoot = new Dictionary<int, Vec3d>();
+        foreach (var kv in jointOfRaw) jointOfRoot[Find(kv.Key)] = kv.Value;
         for (int i = 0; i < rawPoints.Count; i++)
         {
             int root = Find(i);
@@ -160,7 +175,7 @@ public static class FrameAnalysis
             {
                 ni = nodes.Count;
                 nodeIndex[root] = ni;
-                nodes.Add(rawPoints[i]);
+                nodes.Add(jointOfRoot.TryGetValue(root, out var jp) ? jp : rawPoints[i]);
                 nodeMap.Add(new List<(int, int)>());
             }
             rawToNode[i] = ni;
@@ -191,15 +206,23 @@ public static class FrameAnalysis
         if (ne == 0)
             throw new ArgumentException("The laths contain no usable segments.", nameof(laths));
 
-        // Supports
+        // Supports: each support point fixes the nearest node within snap
         var fixedNodes = new bool[nodes.Count];
+        int supportCount = 0;
         if (supports != null)
         {
-            double snap2 = snap * snap;
+            var nodeGrid = new PointGrid(nodes, snap);
             foreach (var sp in supports)
-                for (int i = 0; i < nodes.Count; i++)
-                    if ((nodes[i] - sp).LengthSquared <= snap2)
-                        fixedNodes[i] = true;
+            {
+                int best = -1;
+                double bestD = snap * snap;
+                foreach (int i in nodeGrid.Within(sp, snap))
+                {
+                    double d = (nodes[i] - sp).LengthSquared;
+                    if (d <= bestD) { bestD = d; best = i; }
+                }
+                if (best >= 0 && !fixedNodes[best]) { fixedNodes[best] = true; supportCount++; }
+            }
         }
 
         // ---- Section properties ------------------------------------------
@@ -310,32 +333,36 @@ public static class FrameAnalysis
             throw new ArgumentException("Every node is fixed; nothing to solve.", nameof(supports));
 
         int nfree = freeDofs.Count;
-        var Kff = Matrix<double>.Build.Sparse(nfree, nfree);
+        var Kff = new SparseSymmetricSolver.Builder(nfree);
         foreach (var kv in K)
         {
             int r = (int)(kv.Key / ndof);
             int c = (int)(kv.Key % ndof);
             int fr = dofMap[r], fc = dofMap[c];
-            if (fr >= 0 && fc >= 0) Kff[fr, fc] = Kff[fr, fc] + kv.Value;
+            if (fr >= 0 && fc >= 0 && fr <= fc) Kff.Add(fr, fc, kv.Value);
         }
-        var Ff = Vector<double>.Build.Dense(nfree);
+        var Ff = new double[nfree];
         for (int i = 0; i < nfree; i++) Ff[i] = F[freeDofs[i]];
 
-        Vector<double> u;
-        try
-        {
-            u = Kff.Solve(Ff);
-        }
-        catch (Exception ex)
-        {
+        var solver = SparseSymmetricSolver.Factor(Kff, 1e-14);
+        if (solver == null)
             throw new InvalidOperationException(
-                "The frame system could not be solved. Check that the network is " +
-                "supported against rigid-body motion (supports at enough joints).", ex);
-        }
+                "The frame stiffness matrix is singular — the structure is a mechanism " +
+                "(unsupported or under-connected). Add supports at enough joints or check the joint coupling.");
 
-        double res = (Kff * u - Ff).InfinityNorm();
-        double fScale = Math.Max(1.0, Ff.InfinityNorm());
-        if (double.IsNaN(res) || res > 1e-6 * fScale)
+        double[] u = solver.Solve(Ff);
+
+        // Scale-aware consistency check: residual relative to |K||u| + |F|
+        double res = 0, uMax = 0, fMax = 0;
+        var Ku = Kff.Multiply(u);
+        for (int i = 0; i < nfree; i++)
+        {
+            res = Math.Max(res, Math.Abs(Ku[i] - Ff[i]));
+            uMax = Math.Max(uMax, Math.Abs(u[i]));
+            fMax = Math.Max(fMax, Math.Abs(Ff[i]));
+        }
+        double scale = Kff.InfinityNorm() * uMax + fMax;
+        if (double.IsNaN(res) || (scale > 0 && res > 1e-6 * scale))
             throw new InvalidOperationException(
                 "The frame solve is inconsistent — the structure is likely a mechanism " +
                 "(unsupported or under-connected). Add supports or check the joint coupling.");
@@ -400,7 +427,45 @@ public static class FrameAnalysis
         }
 
         return new Result(nodes.ToArray(), nodeMap.ToArray(), displacements, maxDisp,
-            elemSrc.ToArray(), axial, bendY, bendZ, utilization, maxUtil);
+            elemSrc.ToArray(), axial, bendY, bendZ, utilization, maxUtil, supportCount);
+    }
+
+    /// <summary>Uniform grid for radius queries over a fixed point set.</summary>
+    private sealed class PointGrid
+    {
+        private readonly IReadOnlyList<Vec3d> _points;
+        private readonly double _cell;
+        private readonly Dictionary<(long, long, long), List<int>> _cells = new Dictionary<(long, long, long), List<int>>();
+
+        public PointGrid(IReadOnlyList<Vec3d> points, double cell)
+        {
+            _points = points;
+            _cell = Math.Max(cell, 1e-12);
+            for (int i = 0; i < points.Count; i++)
+            {
+                var key = Key(points[i]);
+                if (!_cells.TryGetValue(key, out var list)) { list = new List<int>(); _cells[key] = list; }
+                list.Add(i);
+            }
+        }
+
+        public IEnumerable<int> Within(Vec3d p, double radius)
+        {
+            long range = (long)Math.Ceiling(radius / _cell);
+            double r2 = radius * radius;
+            var (kx, ky, kz) = Key(p);
+            for (long dx = -range; dx <= range; dx++)
+                for (long dy = -range; dy <= range; dy++)
+                    for (long dz = -range; dz <= range; dz++)
+                    {
+                        if (!_cells.TryGetValue((kx + dx, ky + dy, kz + dz), out var list)) continue;
+                        foreach (int i in list)
+                            if ((_points[i] - p).LengthSquared <= r2) yield return i;
+                    }
+        }
+
+        private (long, long, long) Key(Vec3d p) =>
+            ((long)Math.Floor(p.X / _cell), (long)Math.Floor(p.Y / _cell), (long)Math.Floor(p.Z / _cell));
     }
 
     private static double Component(Vec3d v, int i) => i == 0 ? v.X : i == 1 ? v.Y : v.Z;

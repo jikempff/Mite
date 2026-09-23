@@ -22,7 +22,7 @@ internal static class FieldTracer
     internal static List<Vec3d> Trace(
         MeshProjection proj, Vec3d startPos, int startHint, Vec3d[] dirsA, Vec3d[]? dirsB, bool[]? mask,
         double stepSize, int maxSteps, bool reverse, Func<Vec3d, bool>? stopNear, out bool closedLoop,
-        double minFieldMagnitude = 0.3)
+        double minFieldMagnitude = 0.3, Vec3d? startDir = null)
     {
         closedLoop = false;
         var points = new List<Vec3d>();
@@ -32,9 +32,26 @@ internal static class FieldTracer
         points.Add(pos);
 
         if (hit.Face < 0) return points;
-        Vec3d prevDir = (reverse ? -1.0 : 1.0) * dirsA[hit.NearestVertex];
+
+        // Starting direction. With an explicit initial direction (e.g. the
+        // tangent of the curve a candidate seed was spawned from) the best
+        // aligned candidate of both families is used, so a seed never starts
+        // in the wrong family. Otherwise the primary field alone is sampled
+        // around the nearest vertex's direction, which fixes the family.
+        Vec3d prevDir;
+        if (startDir.HasValue && startDir.Value.LengthSquared > 1e-20)
+        {
+            prevDir = SampleLineField(proj, hit, dirsA, dirsB, startDir.Value.Normalized());
+        }
+        else
+        {
+            Vec3d reference = dirsA[hit.NearestVertex];
+            if (reference.LengthSquared < 1e-20) return points;
+            prevDir = SampleLineField(proj, hit, dirsA, null, reference.Normalized());
+            if (prevDir.LengthSquared < 1e-20) prevDir = reference;
+        }
         if (prevDir.LengthSquared < 1e-20) return points;
-        prevDir = prevDir.Normalized();
+        prevDir = (reverse ? -1.0 : 1.0) * prevDir.Normalized();
 
         Vec3d startNormal = hit.SmoothNormal;
         Vec3d initialDir = prevDir;
@@ -164,7 +181,10 @@ internal static class FieldTracer
         Vec3d c3 = p0 + sClamped * axis;
         if ((cross3 - c3).Length > captureRadius) return false;
 
-        closingPoint = c3;
+        // Close on the exact start point so downstream exact-equality closure
+        // checks (fairing, sweeping, unrolling) see a true loop; the crossing
+        // lies within one step of p0 so the backtrack is negligible.
+        closingPoint = p0;
         return true;
     }
 
@@ -218,14 +238,15 @@ internal static class FieldTracer
     /// </summary>
     internal static Vec3d[] TraceBoth(
         MeshProjection proj, Vec3d startPos, int startHint, Vec3d[] dirsA, Vec3d[]? dirsB, bool[]? mask,
-        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear, double minFieldMagnitude = 0.3)
+        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear, double minFieldMagnitude = 0.3,
+        Vec3d? initialDir = null)
     {
         var forward = Trace(proj, startPos, startHint, dirsA, dirsB, mask,
-            stepSize, maxSteps, false, stopNear, out bool closed, minFieldMagnitude);
+            stepSize, maxSteps, false, stopNear, out bool closed, minFieldMagnitude, initialDir);
         if (closed) return forward.ToArray();
 
         var backward = Trace(proj, startPos, startHint, dirsA, dirsB, mask,
-            stepSize, maxSteps, true, stopNear, out _, minFieldMagnitude);
+            stepSize, maxSteps, true, stopNear, out _, minFieldMagnitude, initialDir);
         return Join(backward, forward);
     }
 

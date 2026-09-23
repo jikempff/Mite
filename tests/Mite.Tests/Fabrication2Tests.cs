@@ -189,13 +189,18 @@ public class Fabrication2Tests
             out NotchSolid end, out NotchSolid start);
 
         Assert.True(ok);
-        // End notch: upstream of the cut, top half of the strip
-        Assert.Equal(5.0 - 0.15, end.Center.X, 6);
-        Assert.Equal(0.075, end.Center.Z, 6);
-        // Start notch: downstream, bottom half
-        Assert.Equal(5.0 + 0.15, start.Center.X, 6);
-        Assert.Equal(0.025, start.Center.Z, 6);
+        // Both notches are centred on the cut over the splice length, so the
+        // overlapping pieces (segmented with overlap = splice length) lap
+        // into full depth: the upstream piece loses its top half, the
+        // downstream piece its bottom half.
+        Assert.Equal(5.0, end.Center.X, 6);
+        Assert.Equal(5.0, start.Center.X, 6);
         Assert.Equal(0.15, end.HalfX, 6);
+        // End notch spans [0.05, 0.1 + bleed], start notch [-bleed, 0.05]
+        Assert.Equal(0.05, end.Center.Z - end.HalfZ, 6);
+        Assert.True(end.Center.Z + end.HalfZ > 0.1);
+        Assert.Equal(0.05, start.Center.Z + start.HalfZ, 6);
+        Assert.True(start.Center.Z - start.HalfZ < 0.0);
     }
 
     // ---------- ConjugateNet + Umbilics ----------

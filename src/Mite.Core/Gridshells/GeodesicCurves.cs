@@ -17,8 +17,11 @@ public static class GeodesicCurves
 {
     public class Options
     {
-        public double StepSize { get; set; } = 0.01;
-        public int MaxSteps { get; set; } = 1000;
+        /// <summary>Integration step (0 = automatic, from the mesh edge length).</summary>
+        public double StepSize { get; set; } = 0.0;
+
+        /// <summary>Steps per half-curve (0 = automatic, from the mesh size).</summary>
+        public int MaxSteps { get; set; } = 0;
 
         /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
         public int SmoothingPasses { get; set; } = 10;
@@ -46,6 +49,9 @@ public static class GeodesicCurves
 
         if (directions.Length == 0) return result;
 
+        double step = TraceDefaults.ResolveStep(options.StepSize, 0, proj);
+        int maxSteps = TraceDefaults.ResolveMaxSteps(options.MaxSteps, step, proj);
+
         for (int i = 0; i < seedVertices.Length; i++)
         {
             if (options.ShouldCancel?.Invoke() == true) break;
@@ -59,7 +65,7 @@ public static class GeodesicCurves
             if (dir.LengthSquared < 1e-20) continue;
 
             var line = TraceBothFrom(proj, proj.Mesh.Vertices[seed], seed, dir,
-                options.StepSize, options.MaxSteps, null);
+                step, maxSteps, null);
 
             if (line.Length > 1)
                 result.Add(CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses));

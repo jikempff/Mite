@@ -15,8 +15,11 @@ public static class AsymptoticCurves
 {
     public class Options
     {
-        public double StepSize { get; set; } = 0.01;
-        public int MaxSteps { get; set; } = 1000;
+        /// <summary>Integration step (0 = automatic, from the mesh edge length).</summary>
+        public double StepSize { get; set; } = 0.0;
+
+        /// <summary>Steps per half-curve (0 = automatic, from the mesh size).</summary>
+        public int MaxSteps { get; set; } = 0;
 
         /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
         public int SmoothingPasses { get; set; } = 10;
@@ -105,6 +108,9 @@ public static class AsymptoticCurves
         var primary = secondFamily ? field.Family2 : field.Family1;
         var secondary = secondFamily ? field.Family1 : field.Family2;
 
+        double step = TraceDefaults.ResolveStep(options.StepSize, 0, proj);
+        int maxSteps = TraceDefaults.ResolveMaxSteps(options.MaxSteps, step, proj);
+
         var result = new List<Vec3d[]>();
         foreach (int seed in seedVertices)
         {
@@ -112,7 +118,7 @@ public static class AsymptoticCurves
             if (seed < 0 || seed >= proj.Mesh.VertexCount || !field.Exists[seed]) continue;
 
             var line = FieldTracer.TraceBoth(proj, proj.Mesh.Vertices[seed], seed,
-                primary, secondary, field.Exists, options.StepSize, options.MaxSteps, null,
+                primary, secondary, field.Exists, step, maxSteps, null,
                 options.MinFieldMagnitude);
 
             if (line.Length > 1)

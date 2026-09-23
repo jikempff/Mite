@@ -44,30 +44,39 @@ internal sealed class VertexKdTree
         return mid;
     }
 
-    // Lomuto quickselect: order[k] ends as the k-th smallest along the axis,
-    // with smaller entries to its left
+    // Three-way (Dutch-flag) quickselect: order[k] ends as the k-th smallest
+    // along the axis, with smaller entries to its left. The equal-band keeps
+    // the selection linear on meshes with many repeated coordinates (planar
+    // grids, extrusions), where a two-way partition degrades to quadratic.
     private static void Select(Vec3d[] pts, int[] order, int lo, int hi, int k, int axis)
     {
+        var rng = new Random(12345);
         while (hi - lo > 1)
         {
-            int pivotIndex = (lo + hi - 1) / 2;
+            int pivotIndex = lo + rng.Next(hi - lo);
             double pivot = Axis(pts[order[pivotIndex]], axis);
-            (order[pivotIndex], order[hi - 1]) = (order[hi - 1], order[pivotIndex]);
 
-            int store = lo;
-            for (int i = lo; i < hi - 1; i++)
+            int lt = lo, i = lo, gt = hi - 1;
+            while (i <= gt)
             {
-                if (Axis(pts[order[i]], axis) < pivot)
+                double v = Axis(pts[order[i]], axis);
+                if (v < pivot)
                 {
-                    (order[i], order[store]) = (order[store], order[i]);
-                    store++;
+                    (order[i], order[lt]) = (order[lt], order[i]);
+                    lt++; i++;
                 }
+                else if (v > pivot)
+                {
+                    (order[i], order[gt]) = (order[gt], order[i]);
+                    gt--;
+                }
+                else i++;
             }
-            (order[hi - 1], order[store]) = (order[store], order[hi - 1]);
 
-            if (store == k) return;
-            if (store < k) lo = store + 1;
-            else hi = store;
+            // order[lt..gt] all equal the pivot
+            if (k < lt) hi = lt;
+            else if (k > gt) lo = gt + 1;
+            else return;
         }
     }
 

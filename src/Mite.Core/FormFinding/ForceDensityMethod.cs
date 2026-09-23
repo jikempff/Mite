@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
-using MathNet.Numerics.LinearAlgebra;
-using MathNet.Numerics.LinearAlgebra.Double;
+using Mite.Core.Numerics;
 using Mite.Core.Geometry;
 
 namespace Mite.Core.FormFinding;
@@ -91,70 +90,67 @@ public static class ForceDensityMethod
         int nn = freeIndices.Count;
         int nf = fixedIndices.Count;
 
-        var Cn = Matrix<double>.Build.Sparse(ne, nn);
-        var Cf = Matrix<double>.Build.Sparse(ne, nf);
-        var Q = Matrix<double>.Build.SparseDiagonal(ne, ne, 0);
+        // Assemble D = Cn^T Q Cn (free-free) and the fixed-node contribution
+        // Df xf = Cn^T Q Cf xf directly from the edge list
+        var D = new SparseSymmetricSolver.Builder(nn);
+        var bx = new double[nn];
+        var by = new double[nn];
+        var bz = new double[nn];
 
         for (int e = 0; e < ne; e++)
         {
             int v0 = edges[e].v0, v1 = edges[e].v1;
             double q = e < forceDensities.Length ? forceDensities[e] : 1.0;
-            Q[e, e] = q;
+            if (q == 0.0) continue;
+            int f0 = freeMap[v0], f1 = freeMap[v1];
 
-            if (freeMap[v0] >= 0) Cn[e, freeMap[v0]] = 1;
-            else Cf[e, fixedMap[v0]] = 1;
+            if (f0 >= 0) D.Add(f0, f0, q);
+            if (f1 >= 0) D.Add(f1, f1, q);
 
-            if (freeMap[v1] >= 0) Cn[e, freeMap[v1]] = -1;
-            else Cf[e, fixedMap[v1]] = -1;
+            if (f0 >= 0 && f1 >= 0)
+            {
+                D.Add(f0, f1, -q);
+            }
+            else if (f0 >= 0)
+            {
+                Vec3d p = mesh.Vertices[v1];
+                bx[f0] += q * p.X; by[f0] += q * p.Y; bz[f0] += q * p.Z;
+            }
+            else if (f1 >= 0)
+            {
+                Vec3d p = mesh.Vertices[v0];
+                bx[f1] += q * p.X; by[f1] += q * p.Y; bz[f1] += q * p.Z;
+            }
         }
 
-        var CtQCn = Cn.Transpose() * Q * Cn;
-        var CtQCf = Cn.Transpose() * Q * Cf;
-
-        var xf = Vector<double>.Build.Dense(nf);
-        var yf = Vector<double>.Build.Dense(nf);
-        var zf = Vector<double>.Build.Dense(nf);
-        for (int i = 0; i < nf; i++)
-        {
-            int vi = fixedIndices[i];
-            xf[i] = mesh.Vertices[vi].X;
-            yf[i] = mesh.Vertices[vi].Y;
-            zf[i] = mesh.Vertices[vi].Z;
-        }
-
-        var px = Vector<double>.Build.Dense(nn);
-        var py = Vector<double>.Build.Dense(nn);
-        var pz = Vector<double>.Build.Dense(nn);
         for (int i = 0; i < nn; i++)
         {
             int vi = freeIndices[i];
             if (loads != null && vi < loads.Length)
             {
-                px[i] = loads[vi].X;
-                py[i] = loads[vi].Y;
-                pz[i] = loads[vi].Z;
+                bx[i] += loads[vi].X;
+                by[i] += loads[vi].Y;
+                bz[i] += loads[vi].Z;
             }
         }
 
-        var rhsX = px - CtQCf * xf;
-        var rhsY = py - CtQCf * yf;
-        var rhsZ = pz - CtQCf * zf;
-
-        var solvedX = CtQCn.Solve(rhsX);
-        var solvedY = CtQCn.Solve(rhsY);
-        var solvedZ = CtQCn.Solve(rhsZ);
-
-        // Verify the solve: MathNet's sparse factorization does not always
-        // signal a singular system and can return a collapsed (e.g. all-zero)
-        // solution without complaint
-        double res = Math.Max(
-            (CtQCn * solvedX - rhsX).InfinityNorm(),
-            Math.Max((CtQCn * solvedY - rhsY).InfinityNorm(), (CtQCn * solvedZ - rhsZ).InfinityNorm()));
-        double rhsScale = Math.Max(1.0, Math.Max(rhsX.InfinityNorm(),
-            Math.Max(rhsY.InfinityNorm(), rhsZ.InfinityNorm())));
-        if (double.IsNaN(res) || res > 1e-6 * rhsScale)
+        var solver = SparseSymmetricSolver.Factor(D, 1e-12, allowIndefinite: true);
+        if (solver == null)
             throw new InvalidOperationException(
-                $"The force-density system is singular or ill-conditioned (relative residual {res / rhsScale:E2}). " +
+                "The force-density system is singular. " +
+                "Check that force densities are positive and that every free vertex is anchored through the net.");
+
+        double[] solvedX = solver.Solve(bx);
+        double[] solvedY = solver.Solve(by);
+        double[] solvedZ = solver.Solve(bz);
+
+        // Verify the solve against the assembled matrix
+        double res = Math.Max(Residual(D, solvedX, bx), Math.Max(Residual(D, solvedY, by), Residual(D, solvedZ, bz)));
+        double scale = Math.Max(1e-300, D.InfinityNorm() * Math.Max(Math.Max(MaxAbs(solvedX), MaxAbs(solvedY)), MaxAbs(solvedZ))
+            + Math.Max(Math.Max(MaxAbs(bx), MaxAbs(by)), MaxAbs(bz)));
+        if (double.IsNaN(res) || res > 1e-8 * scale)
+            throw new InvalidOperationException(
+                $"The force-density system is ill-conditioned (relative residual {res / scale:E2}). " +
                 "Check that force densities are not all zero and that every free vertex is anchored through the net.");
 
         var result = new Vec3d[nv];
@@ -164,5 +160,20 @@ public static class ForceDensityMethod
             result[fixedIndices[i]] = mesh.Vertices[fixedIndices[i]];
 
         return new Result(result);
+    }
+
+    private static double Residual(SparseSymmetricSolver.Builder a, double[] x, double[] b)
+    {
+        var ax = a.Multiply(x);
+        double max = 0;
+        for (int i = 0; i < b.Length; i++) max = Math.Max(max, Math.Abs(ax[i] - b[i]));
+        return max;
+    }
+
+    private static double MaxAbs(double[] v)
+    {
+        double max = 0;
+        foreach (double x in v) max = Math.Max(max, Math.Abs(x));
+        return max;
     }
 }

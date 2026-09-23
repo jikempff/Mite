@@ -10,8 +10,11 @@ public static class CurvatureStreamlines
 {
     public class Options
     {
-        public double StepSize { get; set; } = 0.01;
-        public int MaxSteps { get; set; } = 1000;
+        /// <summary>Integration step (0 = automatic, from the mesh edge length).</summary>
+        public double StepSize { get; set; } = 0.0;
+
+        /// <summary>Steps per half-curve (0 = automatic, from the mesh size).</summary>
+        public int MaxSteps { get; set; } = 0;
         public bool UseMaxCurvature { get; set; } = true;
 
         /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
@@ -47,6 +50,8 @@ public static class CurvatureStreamlines
         var proj = new MeshProjection(mesh);
         var dirs = options.UseMaxCurvature ? curvature.D1 : curvature.D2;
         var result = new List<Vec3d[]>();
+        double step = TraceDefaults.ResolveStep(options.StepSize, 0, proj);
+        int maxSteps = TraceDefaults.ResolveMaxSteps(options.MaxSteps, step, proj);
 
         foreach (int seed in seedVertices)
         {
@@ -54,7 +59,7 @@ public static class CurvatureStreamlines
             if (seed < 0 || seed >= proj.Mesh.VertexCount) continue;
 
             var line = FieldTracer.TraceBoth(proj, proj.Mesh.Vertices[seed], seed,
-                dirs, null, null, options.StepSize, options.MaxSteps, null, options.MinFieldMagnitude);
+                dirs, null, null, step, maxSteps, null, options.MinFieldMagnitude);
 
             if (line.Length > 1)
                 result.Add(CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses));

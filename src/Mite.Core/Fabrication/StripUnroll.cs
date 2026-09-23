@@ -116,6 +116,20 @@ public static class StripUnroll
         }
         if (closed) arcLength += (pts[0] - pts[n - 1]).Length;
 
+        // A closed lath is developed as an open strip with the seam station
+        // repeated at both ends (a flat pattern cannot wrap; it is cut open at
+        // the seam). The frames above were computed with periodic tangents so
+        // both copies of the seam carry the same across direction.
+        if (closed)
+        {
+            pts.Add(pts[0]);
+            var acrossExt = new Vec3d[n + 1];
+            Array.Copy(across, acrossExt, n);
+            acrossExt[n] = across[0];
+            across = acrossExt;
+            n++;
+        }
+
         // 3D edge polylines of the strip mid-surface
         double halfW = 0.5 * profile.Width;
         var eA = new Vec3d[n];
@@ -127,7 +141,7 @@ public static class StripUnroll
         }
 
         // Triangulate the strip: (A_i, B_i, B_{i+1}) and (A_i, B_{i+1}, A_{i+1})
-        int segCount = closed ? n : n - 1;
+        int segCount = n - 1;
         var triVerts = new List<Vec3d>(2 * n);  // 3D reference, order: A0..An, B0..Bn
         triVerts.AddRange(eA);
         triVerts.AddRange(eB);

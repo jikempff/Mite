@@ -80,7 +80,7 @@ public static class LathAnalysis
         // Smooth surface normals along the lath (face normals jump at facet
         // crossings, which would corrupt the torsion finite difference)
         var normals = new Vec3d[n];
-        int hint = FindNearestVertexGlobal(proj.Mesh, polyline[0]);
+        int hint = proj.NearestVertexGlobal(polyline[0]);
         for (int i = 0; i < n; i++)
         {
             var hit = proj.ClosestPoint(polyline[i], hint);
@@ -101,15 +101,17 @@ public static class LathAnalysis
             Vec3d g = Vec3d.Cross(nAvg, t).Normalized();
             segTorsion[j] = -Vec3d.Dot((normals[j + 1] - normals[j]) / len, g);
         }
-        tg[0] = segTorsion[0];
-        tg[n - 1] = segTorsion[n - 2];
+        bool closed = n > 3 && (polyline[0] - polyline[n - 1]).LengthSquared < 1e-18;
+        tg[0] = closed ? 0.5 * (segTorsion[n - 2] + segTorsion[0]) : segTorsion[0];
+        tg[n - 1] = closed ? tg[0] : segTorsion[n - 2];
         for (int i = 1; i < n - 1; i++)
             tg[i] = 0.5 * (segTorsion[i - 1] + segTorsion[i]);
 
-        // Curvature decomposition at interior vertices
-        for (int i = 1; i < n - 1; i++)
+        // Curvature decomposition at interior vertices (and across the seam of
+        // a closed lath, whose first/last point is a regular interior point)
+        for (int i = closed ? 0 : 1; i < n - 1; i++)
         {
-            Vec3d ePrev = polyline[i] - polyline[i - 1];
+            Vec3d ePrev = polyline[i] - polyline[i == 0 ? n - 2 : i - 1];
             Vec3d eNext = polyline[i + 1] - polyline[i];
             double lPrev = ePrev.Length, lNext = eNext.Length;
             if (lPrev < 1e-15 || lNext < 1e-15) continue;
@@ -130,12 +132,16 @@ public static class LathAnalysis
             kn[i] = kappa * Vec3d.Dot(bend, normals[i]);
             kg[i] = kappa * Vec3d.Dot(bend, g);
         }
+        if (closed) { kn[n - 1] = kn[0]; kg[n - 1] = kg[0]; }
 
         // Strain per mode. Flat strip: kn bends about the width axis (fiber
         // distance t/2), kg about the surface normal (fiber distance w/2).
-        // Upright strip: the two swap. Twist of a thin rectangle: shear ~ tau * t.
+        // Upright strip: the two swap. Twist of a thin rectangle gives a
+        // surface shear strain γ ≈ τ·t, compared against the (normal) strain
+        // limit through the von Mises equivalence ε_eq = γ / √3.
         double easyHalf = 0.5 * options.Thickness;
         double hardHalf = 0.5 * options.Width;
+        double twistFactor = options.Thickness / Math.Sqrt(3.0);
 
         double maxUtil = 0.0;
         for (int i = 0; i < n; i++)
@@ -145,7 +151,7 @@ public static class LathAnalysis
 
             double strain = Math.Max(
                 Math.Abs(easyK) * easyHalf,
-                Math.Max(Math.Abs(hardK) * hardHalf, Math.Abs(tg[i]) * options.Thickness));
+                Math.Max(Math.Abs(hardK) * hardHalf, Math.Abs(tg[i]) * twistFactor));
 
             util[i] = strain / options.MaxStrain;
             if (util[i] > maxUtil) maxUtil = util[i];
@@ -162,17 +168,5 @@ public static class LathAnalysis
         foreach (var line in polylines)
             results.Add(Analyze(proj, line, options));
         return results;
-    }
-
-    private static int FindNearestVertexGlobal(MeshData mesh, Vec3d p)
-    {
-        int best = 0;
-        double bestDist = double.MaxValue;
-        for (int i = 0; i < mesh.VertexCount; i++)
-        {
-            double d = (mesh.Vertices[i] - p).LengthSquared;
-            if (d < bestDist) { bestDist = d; best = i; }
-        }
-        return best;
     }
 }

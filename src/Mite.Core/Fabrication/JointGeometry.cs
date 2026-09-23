@@ -64,54 +64,50 @@ public static class JointGeometry
         Vec3d ga = Vec3d.Cross(n, ta);
         Vec3d gb = Vec3d.Cross(n, tb);
 
-        if (!profileA.Upright && !profileB.Upright)
-        {
-            // Flat strips: width across the surface, thickness through it.
-            // Notch A is cut from the top of A, notch B from the bottom of B.
-            double lenA = profileB.Width / sinAngle + 2.0 * clearance;
-            double lenB = profileA.Width / sinAngle + 2.0 * clearance;
-            double depthA = lap * profileA.Thickness + clearance;
-            double depthB = lap * profileB.Thickness + clearance;
+        if (profileA.Upright != profileB.Upright)
+            return false; // Mixed flat/upright crossings are not a standard joint
 
-            Vec3d cA = point + (profileA.Offset + profileA.Thickness - 0.5 * depthA) * n;
-            Vec3d cB = point + (profileB.Offset + 0.5 * depthB) * n;
+        // Each notch removes exactly the volume the other lath occupies, so it
+        // is aligned with the OTHER lath's frame: across it the other lath's
+        // footprint (plus clearance), along it long enough to span this lath's
+        // full width at the crossing angle (the overlap is a parallelogram
+        // whose length along the other lath is w/sinθ + w'|cotθ|; a box
+        // aligned with this lath's own tangent would leave corner slivers at
+        // oblique crossings). Extra length only cuts air.
+        // The notch bleeds slightly past the outer face it opens on, so the
+        // boolean never has to resolve a coplanar face.
+        double footA = profileA.Upright ? profileA.Thickness : profileA.Width;   // in-surface footprint
+        double footB = profileB.Upright ? profileB.Thickness : profileB.Width;
+        double stackA = profileA.NormalDepth;                                      // extent along the normal
+        double stackB = profileB.NormalDepth;
+        double cosAngle = Math.Abs(Vec3d.Dot(ta, tb));
 
-            notchA = new NotchSolid(cA, ta, ga, n,
-                0.5 * lenA, 0.5 * profileA.Width + clearance, 0.5 * depthA);
-            notchB = new NotchSolid(cB, tb, gb, n,
-                0.5 * lenB, 0.5 * profileB.Width + clearance, 0.5 * depthB);
-            return true;
-        }
+        double spanA = footA / sinAngle + footB * cosAngle / sinAngle;  // along tb, covering A's footprint
+        double spanB = footB / sinAngle + footA * cosAngle / sinAngle;  // along ta, covering B's footprint
 
-        if (profileA.Upright && profileB.Upright)
-        {
-            // Upright strips (egg-crate): width stands along the normal. Notch A
-            // is a slot from the top (far) edge of A, notch B from the bottom
-            // (near) edge of B; both pass through the full strip thickness.
-            double lenA = profileB.Thickness / sinAngle + 2.0 * clearance;
-            double lenB = profileA.Thickness / sinAngle + 2.0 * clearance;
-            double depthA = lap * profileA.Width + clearance;
-            double depthB = lap * profileB.Width + clearance;
+        double depthA = lap * stackA + clearance;
+        double depthB = lap * stackB + clearance;
+        double bleedA = 0.05 * stackA + clearance;
+        double bleedB = 0.05 * stackB + clearance;
 
-            Vec3d cA = point + (profileA.Offset + profileA.Width - 0.5 * depthA) * n;
-            Vec3d cB = point + (profileB.Offset + 0.5 * depthB) * n;
+        // Notch A: cut from the top (far) face of A over the footprint of B
+        Vec3d cA = point + (profileA.Offset + stackA + bleedA - 0.5 * (depthA + bleedA)) * n;
+        notchA = new NotchSolid(cA, tb, gb, n,
+            0.5 * spanA + clearance, 0.5 * footB + clearance, 0.5 * (depthA + bleedA));
 
-            notchA = new NotchSolid(cA, ta, ga, n,
-                0.5 * lenA, 0.5 * profileA.Thickness + clearance, 0.5 * depthA);
-            notchB = new NotchSolid(cB, tb, gb, n,
-                0.5 * lenB, 0.5 * profileB.Thickness + clearance, 0.5 * depthB);
-            return true;
-        }
-
-        // Mixed flat/upright crossings are not a standard joint
-        return false;
+        // Notch B: cut from the bottom (near) face of B over the footprint of A
+        Vec3d cB = point + (profileB.Offset - bleedB + 0.5 * (depthB + bleedB)) * n;
+        notchB = new NotchSolid(cB, ta, ga, n,
+            0.5 * spanB + clearance, 0.5 * footA + clearance, 0.5 * (depthB + bleedB));
+        return true;
     }
 
     /// <summary>
-    /// Builds the half-lap splice pair for rejoining two lath segments end to
-    /// end (from LathSegmentation). The end of the upstream segment keeps its
-    /// near-surface half over the splice length; the start of the downstream
-    /// segment keeps its far half, so they overlap into full depth.
+    /// Builds the half-lap splice pair for rejoining two lath segments (from
+    /// LathSegmentation with overlap = spliceLength). Over the splice length
+    /// centred on the cut, the upstream segment keeps its near-surface half
+    /// and the downstream segment keeps its far half, so they lap into full
+    /// depth.
     /// </summary>
     public static bool TryBuildSpliceNotches(
         Vec3d cutPoint, Vec3d tangent, Vec3d surfaceNormal,
@@ -128,39 +124,22 @@ public static class JointGeometry
         t = t.Normalized();
         Vec3d g = Vec3d.Cross(n, t);
 
-        if (!profile.Upright)
-        {
-            // Flat: splice overlaps over spliceLength, each side loses half the thickness
-            double depth = 0.5 * profile.Thickness + clearance;
-            // End of upstream segment: remove the top half over [cut - L, cut]
-            Vec3d cEnd = cutPoint - 0.5 * spliceLength * t
-                + (profile.Offset + profile.Thickness - 0.5 * depth) * n;
-            // Start of downstream segment: remove the bottom half over [cut, cut + L]
-            Vec3d cStart = cutPoint + 0.5 * spliceLength * t
-                + (profile.Offset + 0.5 * depth) * n;
+        // Both notches are centred on the cut over the splice length: the
+        // upstream piece (which ends at cut + L/2 after segmentation overlap)
+        // loses its far half there, the downstream piece (starting at
+        // cut - L/2) loses its near half, so they lap into full depth.
+        double stack = profile.NormalDepth;
+        double halfAcross = 0.5 * (profile.Upright ? profile.Thickness : profile.Width) + clearance;
+        double depth = 0.5 * stack + clearance;
+        double bleed = 0.05 * stack + clearance;
 
-            double halfAcross = 0.5 * profile.Width + clearance;
-            endNotch = new NotchSolid(cEnd, t, g, n,
-                0.5 * spliceLength + clearance, halfAcross, 0.5 * depth);
-            startNotch = new NotchSolid(cStart, t, g, n,
-                0.5 * spliceLength + clearance, halfAcross, 0.5 * depth);
-            return true;
-        }
-        else
-        {
-            // Upright: same idea along the standing width
-            double depth = 0.5 * profile.Width + clearance;
-            Vec3d cEnd = cutPoint - 0.5 * spliceLength * t
-                + (profile.Offset + profile.Width - 0.5 * depth) * n;
-            Vec3d cStart = cutPoint + 0.5 * spliceLength * t
-                + (profile.Offset + 0.5 * depth) * n;
+        Vec3d cEnd = cutPoint + (profile.Offset + stack + bleed - 0.5 * (depth + bleed)) * n;
+        Vec3d cStart = cutPoint + (profile.Offset - bleed + 0.5 * (depth + bleed)) * n;
 
-            double halfThick = 0.5 * profile.Thickness + clearance;
-            endNotch = new NotchSolid(cEnd, t, g, n,
-                0.5 * spliceLength + clearance, halfThick, 0.5 * depth);
-            startNotch = new NotchSolid(cStart, t, g, n,
-                0.5 * spliceLength + clearance, halfThick, 0.5 * depth);
-            return true;
-        }
+        endNotch = new NotchSolid(cEnd, t, g, n,
+            0.5 * spliceLength + clearance, halfAcross, 0.5 * (depth + bleed));
+        startNotch = new NotchSolid(cStart, t, g, n,
+            0.5 * spliceLength + clearance, halfAcross, 0.5 * (depth + bleed));
+        return true;
     }
 }

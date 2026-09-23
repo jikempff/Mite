@@ -21,10 +21,18 @@ public static class Umbilics
     public static int[] Find(PrincipalCurvature.Result curvature, double tolerance = 0.05)
     {
         var result = new List<int>();
+
+        // Flatness is judged relative to the mesh's curvature range so the
+        // test does not depend on model units
+        double maxK = 0;
+        for (int i = 0; i < curvature.K1.Length; i++)
+            maxK = Math.Max(maxK, Math.Max(Math.Abs(curvature.K1[i]), Math.Abs(curvature.K2[i])));
+        double flat = 1e-3 * maxK;
+
         for (int i = 0; i < curvature.K1.Length; i++)
         {
             double scale = Math.Max(Math.Abs(curvature.K1[i]), Math.Abs(curvature.K2[i]));
-            if (scale < 1e-12) continue; // flat, not umbilical in any meaningful sense
+            if (scale <= flat) continue; // flat, not umbilical in any meaningful sense
             if (Math.Abs(curvature.K1[i] - curvature.K2[i]) <= tolerance * scale)
                 result.Add(i);
         }

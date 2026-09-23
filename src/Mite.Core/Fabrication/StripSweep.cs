@@ -126,8 +126,11 @@ public static class StripSweep
         var centers = new Vec3d[n];
         for (int i = 0; i < n; i++)
         {
+            // (a, b, tangent) must stay right-handed so the quad strip winds
+            // outward in both modes: across x normal = tangent for flat laths,
+            // normal x (-across) = tangent for upright ones
             Vec3d a = profile.Upright ? normals[i] : across[i];
-            Vec3d b = profile.Upright ? across[i] : normals[i];
+            Vec3d b = profile.Upright ? -across[i] : normals[i];
             Vec3d c = pts[i] + lift * normals[i];
             centers[i] = c;
             verts[4 * i + 0] = c - halfW * a - halfT * b;

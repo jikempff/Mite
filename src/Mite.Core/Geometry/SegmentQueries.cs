@@ -20,7 +20,10 @@ internal static class SegmentQueries
         double e = Vec3d.Dot(d2, d2);
         double f = Vec3d.Dot(d2, r);
 
-        const double eps = 1e-15;
+        // Relative tolerances: absolute ones misclassify short (millimetre)
+        // segments as degenerate or parallel
+        double eps = 1e-24 * Math.Max(a, e);
+        if (eps == 0) eps = 1e-300;
         if (a <= eps && e <= eps)
         {
             s = t = 0.0;
@@ -45,7 +48,7 @@ internal static class SegmentQueries
             {
                 double b = Vec3d.Dot(d1, d2);
                 double denom = a * e - b * b;
-                s = denom > eps ? Math.Max(0.0, Math.Min(1.0, (b * f - c * e) / denom)) : 0.0;
+                s = denom > 1e-14 * a * e ? Math.Max(0.0, Math.Min(1.0, (b * f - c * e) / denom)) : 0.0;
                 t = (b * s + f) / e;
                 if (t < 0.0)
                 {

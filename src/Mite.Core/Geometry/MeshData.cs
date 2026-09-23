@@ -22,6 +22,8 @@ public class MeshData
 
     public MeshData(double[] flatVertices, int[][] faces)
     {
+        if (flatVertices.Length % 3 != 0)
+            throw new ArgumentException("Flat vertex array length must be a multiple of 3.", nameof(flatVertices));
         int nv = flatVertices.Length / 3;
         Vertices = new Vec3d[nv];
         for (int i = 0; i < nv; i++)
@@ -39,15 +41,68 @@ public class MeshData
         }
     }
 
+    /// <summary>
+    /// Fan-triangulates polygon faces. Quads are split along the shorter
+    /// diagonal (better-shaped triangles on non-planar quads); degenerate
+    /// slivers (repeated or collinear vertices) are dropped so downstream
+    /// cotangent formulas never see zero-area triangles.
+    /// </summary>
     public int[][] Triangulate()
     {
-        var tris = new List<int[]>();
+        var tris = new List<int[]>(FaceCount * 2);
         foreach (var face in Faces)
         {
+            if (face.Length < 3) continue;
+
+            if (face.Length == 4)
+            {
+                double d02 = (Vertices[face[2]] - Vertices[face[0]]).LengthSquared;
+                double d13 = (Vertices[face[3]] - Vertices[face[1]]).LengthSquared;
+                if (d13 < d02)
+                {
+                    AddIfValid(tris, face[1], face[2], face[3]);
+                    AddIfValid(tris, face[1], face[3], face[0]);
+                    continue;
+                }
+            }
+
             for (int i = 1; i < face.Length - 1; i++)
-                tris.Add(new[] { face[0], face[i], face[i + 1] });
+                AddIfValid(tris, face[0], face[i], face[i + 1]);
         }
         return tris.ToArray();
+    }
+
+    private void AddIfValid(List<int[]> tris, int a, int b, int c)
+    {
+        if (a == b || b == c || a == c) return;
+        Vec3d e1 = Vertices[b] - Vertices[a];
+        Vec3d e2 = Vertices[c] - Vertices[a];
+        double area2 = Vec3d.Cross(e1, e2).LengthSquared;
+        double scale = e1.LengthSquared * e2.LengthSquared;
+        if (scale < 1e-300 || area2 < 1e-20 * scale) return;
+        tris.Add(new[] { a, b, c });
+    }
+
+    /// <summary>Axis-aligned bounding box (min, max); zero box for empty meshes.</summary>
+    public (Vec3d Min, Vec3d Max) BoundingBox()
+    {
+        if (VertexCount == 0) return (Vec3d.Zero, Vec3d.Zero);
+        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+        foreach (var v in Vertices)
+        {
+            if (v.X < minX) minX = v.X; if (v.X > maxX) maxX = v.X;
+            if (v.Y < minY) minY = v.Y; if (v.Y > maxY) maxY = v.Y;
+            if (v.Z < minZ) minZ = v.Z; if (v.Z > maxZ) maxZ = v.Z;
+        }
+        return (new Vec3d(minX, minY, minZ), new Vec3d(maxX, maxY, maxZ));
+    }
+
+    /// <summary>Length of the bounding-box diagonal.</summary>
+    public double BoundingBoxDiagonal()
+    {
+        var (min, max) = BoundingBox();
+        return (max - min).Length;
     }
 
     public MeshData ToTriangulated()
@@ -68,20 +123,27 @@ public class MeshData
         return result;
     }
 
+    /// <summary>
+    /// Unique undirected edges (v0 &lt; v1) in a deterministic order: first
+    /// appearance while walking the faces in order, each face's edges starting
+    /// at its first vertex. Per-edge data (force densities etc.) is indexed by
+    /// this order.
+    /// </summary>
     public (int v0, int v1)[] BuildEdges()
     {
         var edgeSet = new HashSet<(int, int)>();
+        var edges = new List<(int, int)>();
         foreach (var face in Faces)
         {
             for (int i = 0; i < face.Length; i++)
             {
                 int a = face[i], b = face[(i + 1) % face.Length];
-                edgeSet.Add(a < b ? (a, b) : (b, a));
+                if (a == b) continue;
+                var key = a < b ? (a, b) : (b, a);
+                if (edgeSet.Add(key)) edges.Add(key);
             }
         }
-        var edges = new (int, int)[edgeSet.Count];
-        edgeSet.CopyTo(edges);
-        return edges;
+        return edges.ToArray();
     }
 
     public int[][] BuildVertexNeighbors()
@@ -93,6 +155,7 @@ public class MeshData
             for (int i = 0; i < face.Length; i++)
             {
                 int a = face[i], b = face[(i + 1) % face.Length];
+                if (a == b) continue;
                 neighbors[a].Add(b);
                 neighbors[b].Add(a);
             }
@@ -114,6 +177,7 @@ public class MeshData
             for (int i = 0; i < face.Length; i++)
             {
                 int a = face[i], b = face[(i + 1) % face.Length];
+                if (a == b) continue;
                 var key = a < b ? (a, b) : (b, a);
                 edgeFaceCount.TryGetValue(key, out int c);
                 edgeFaceCount[key] = c + 1;
@@ -132,15 +196,29 @@ public class MeshData
         return boundary;
     }
 
+    /// <summary>
+    /// Unit face normals (Newell's method, so non-planar quads and n-gons get
+    /// the area-weighted average normal instead of the normal of their first
+    /// three vertices). Degenerate faces yield a zero vector.
+    /// </summary>
     public Vec3d[] ComputeFaceNormals()
     {
         var normals = new Vec3d[FaceCount];
         for (int fi = 0; fi < FaceCount; fi++)
         {
             var f = Faces[fi];
-            Vec3d e1 = Vertices[f[1]] - Vertices[f[0]];
-            Vec3d e2 = Vertices[f[2]] - Vertices[f[0]];
-            normals[fi] = Vec3d.Cross(e1, e2).Normalized();
+            if (f.Length < 3) continue;
+            double nx = 0, ny = 0, nz = 0;
+            for (int i = 0; i < f.Length; i++)
+            {
+                Vec3d a = Vertices[f[i]];
+                Vec3d b = Vertices[f[(i + 1) % f.Length]];
+                nx += (a.Y - b.Y) * (a.Z + b.Z);
+                ny += (a.Z - b.Z) * (a.X + b.X);
+                nz += (a.X - b.X) * (a.Y + b.Y);
+            }
+            var n = new Vec3d(nx, ny, nz);
+            normals[fi] = n.LengthSquared > 1e-300 ? n.Normalized() : Vec3d.Zero;
         }
         return normals;
     }
@@ -157,9 +235,11 @@ public class MeshData
                 int prev = f[(i + f.Length - 1) % f.Length];
                 int curr = f[i];
                 int next = f[(i + 1) % f.Length];
-                Vec3d e1 = (Vertices[prev] - Vertices[curr]).Normalized();
-                Vec3d e2 = (Vertices[next] - Vertices[curr]).Normalized();
-                double angle = Math.Acos(Math.Max(-1.0, Math.Min(1.0, Vec3d.Dot(e1, e2))));
+                Vec3d e1 = Vertices[prev] - Vertices[curr];
+                Vec3d e2 = Vertices[next] - Vertices[curr];
+                double l1 = e1.Length, l2 = e2.Length;
+                if (l1 < 1e-300 || l2 < 1e-300) continue;
+                double angle = Math.Acos(Math.Max(-1.0, Math.Min(1.0, Vec3d.Dot(e1, e2) / (l1 * l2))));
                 normals[curr] = normals[curr] + angle * faceNormals[fi];
             }
         }
@@ -220,7 +300,9 @@ public class MeshData
                 for (int i = 1; i < parts.Length; i++)
                 {
                     string idx = parts[i].Split('/')[0];
-                    indices[i - 1] = int.Parse(idx) - 1;
+                    int parsed = int.Parse(idx, CultureInfo.InvariantCulture);
+                    // Negative OBJ indices are relative to the vertices read so far
+                    indices[i - 1] = parsed < 0 ? verts.Count + parsed : parsed - 1;
                 }
                 faces.Add(indices);
             }

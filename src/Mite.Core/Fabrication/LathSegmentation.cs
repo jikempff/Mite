@@ -34,29 +34,42 @@ public static class LathSegmentation
     /// <summary>
     /// Segments one lath. stockLength is the available material length; a cut
     /// candidate that lands within margin of a joint is pulled back to
-    /// margin before the joint. Joints are given as arc-length positions along
-    /// the polyline (see <see cref="JointArcLengths"/>).
+    /// margin before the joint (repeatedly, until it clears every joint).
+    /// Joints are given as arc-length positions along the polyline (see
+    /// <see cref="JointArcLengths"/>). With a positive overlap every segment
+    /// is extended by overlap/2 past each cut so consecutive pieces lap over
+    /// each other (the splice length); cuts are then spaced so each piece,
+    /// including its overlaps, still fits the stock.
     /// </summary>
     public static Result Segment(
         Vec3d[] polyline, double stockLength, double margin,
-        IReadOnlyList<double>? jointArcLengths = null)
+        IReadOnlyList<double>? jointArcLengths = null, double overlap = 0.0)
     {
         if (stockLength <= 0)
             throw new ArgumentException("Stock length must be positive.", nameof(stockLength));
         margin = Math.Max(0.0, margin);
-
-        // Cumulative arc length
-        int n = polyline.Length;
-        var arc = new double[n];
-        for (int i = 1; i < n; i++)
-            arc[i] = arc[i - 1] + (polyline[i] - polyline[i - 1]).Length;
-        double total = arc[n - 1];
+        overlap = Math.Max(0.0, overlap);
+        if (overlap >= stockLength)
+            throw new ArgumentException("Splice overlap must be shorter than the stock length.", nameof(overlap));
 
         var segments = new List<Vec3d[]>();
         var cutPoints = new List<Vec3d>();
         var cutArcs = new List<double>();
 
-        if (n < 2 || total <= stockLength)
+        int n = polyline.Length;
+        if (n < 2)
+        {
+            if (n == 1) segments.Add(polyline);
+            return new Result(segments, cutPoints.ToArray(), cutArcs.ToArray());
+        }
+
+        // Cumulative arc length
+        var arc = new double[n];
+        for (int i = 1; i < n; i++)
+            arc[i] = arc[i - 1] + (polyline[i] - polyline[i - 1]).Length;
+        double total = arc[n - 1];
+
+        if (total <= stockLength)
         {
             segments.Add(polyline);
             return new Result(segments, cutPoints.ToArray(), cutArcs.ToArray());
@@ -70,66 +83,72 @@ public static class LathSegmentation
             joints.Sort();
         }
 
+        // Cut positions
+        double spacing = stockLength - overlap;
         double start = 0.0;
-        int startIndex = 0; // polyline index at or after 'start'
-        while (total - start > stockLength)
+        while (total - start - 0.5 * overlap > spacing)
         {
-            double end = start + stockLength;
+            double end = start + spacing;
+            double minEnd = start + 0.25 * spacing;
 
-            // Pull the cut back when it lands on or just past a joint
-            foreach (double j in joints)
+            // Pull the cut back until it clears every joint by the margin;
+            // keep a minimum useful segment, otherwise accept the clash
+            for (int guard = 0; guard < joints.Count + 1; guard++)
             {
-                if (j >= end - margin && j <= end + margin)
+                double clash = double.NaN;
+                foreach (double j in joints)
                 {
-                    double candidate = j - margin;
-                    // Keep a minimum useful segment; otherwise accept the clash
-                    if (candidate - start > 0.25 * stockLength)
-                        end = candidate;
-                    break;
+                    if (j >= end + margin) break;
+                    if (j > end - margin) { clash = j; break; }
                 }
-                if (j > end + margin) break;
+                if (double.IsNaN(clash)) break;
+                double candidate = clash - margin;
+                if (candidate < minEnd) break;
+                end = candidate;
             }
 
-            Vec3d cutPoint = PointAtArc(polyline, arc, end, out int endIndex);
-            cutPoints.Add(cutPoint);
             cutArcs.Add(end);
-
-            // Build the segment [start, end]
-            var seg = new List<Vec3d>();
-            if ((polyline[startIndex] - PointAtArc(polyline, arc, start, out _)).LengthSquared > 1e-24)
-                seg.Add(PointAtArc(polyline, arc, start, out _));
-            for (int i = startIndex; i <= endIndex && i < n; i++)
-                if (arc[i] > start && arc[i] < end)
-                    seg.Add(polyline[i]);
-            seg.Add(cutPoint);
-            segments.Add(seg.ToArray());
-
+            cutPoints.Add(PointAtArc(polyline, arc, end, out _));
             start = end;
-            startIndex = endIndex;
         }
 
-        // Final segment [start, total]
-        var last = new List<Vec3d>();
-        for (int i = 0; i < n; i++)
-            if (arc[i] > start) last.Add(polyline[i]);
-        last.Insert(0, PointAtArc(polyline, arc, start, out _));
-        if (last.Count >= 2) segments.Add(last.ToArray());
+        // Pieces between consecutive cuts, extended by the overlap
+        for (int c = 0; c <= cutArcs.Count; c++)
+        {
+            double a = c == 0 ? 0.0 : cutArcs[c - 1] - 0.5 * overlap;
+            double b = c == cutArcs.Count ? total : cutArcs[c] + 0.5 * overlap;
+            a = Math.Max(0.0, a);
+            b = Math.Min(total, b);
+            if (b - a > 1e-12) segments.Add(SubPolyline(polyline, arc, a, b));
+        }
 
         return new Result(segments, cutPoints.ToArray(), cutArcs.ToArray());
+    }
+
+    /// <summary>Polyline piece between arc-length positions a and b (inclusive ends).</summary>
+    public static Vec3d[] SubPolyline(Vec3d[] polyline, double[] arc, double a, double b)
+    {
+        var seg = new List<Vec3d> { PointAtArc(polyline, arc, a, out _) };
+        for (int i = 0; i < polyline.Length; i++)
+            if (arc[i] > a + 1e-12 && arc[i] < b - 1e-12)
+                seg.Add(polyline[i]);
+        seg.Add(PointAtArc(polyline, arc, b, out _));
+        return seg.ToArray();
     }
 
     /// <summary>
     /// Arc-length positions of joint points along a polyline (projection by
     /// closest point per segment). Feed the Points output of Net Joints here.
     /// </summary>
-    public static double[] JointArcLengths(Vec3d[] polyline, IReadOnlyList<Vec3d> jointPoints)
+    public static double[] JointArcLengths(Vec3d[] polyline, IReadOnlyList<Vec3d> jointPoints, double maxDistance = 0.0)
     {
         int n = polyline.Length;
         var arc = new double[n];
         for (int i = 1; i < n; i++)
             arc[i] = arc[i - 1] + (polyline[i] - polyline[i - 1]).Length;
 
-        var result = new double[jointPoints.Count];
+        var result = new List<double>(jointPoints.Count);
+        double maxD2 = maxDistance > 0 ? maxDistance * maxDistance : double.MaxValue;
         for (int k = 0; k < jointPoints.Count; k++)
         {
             Vec3d p = jointPoints[k];
@@ -148,9 +167,12 @@ public static class LathSegmentation
                     bestArc = arc[i] + t * len;
                 }
             }
-            result[k] = bestArc;
+            // Only joints that actually lie on this lath count; the joints of
+            // the whole net are usually passed in, and a far-away crossing must
+            // not pull cuts around on an unrelated lath
+            if (bestDist <= maxD2) result.Add(bestArc);
         }
-        return result;
+        return result.ToArray();
     }
 
     private static Vec3d PointAtArc(Vec3d[] polyline, double[] arc, double s, out int index)

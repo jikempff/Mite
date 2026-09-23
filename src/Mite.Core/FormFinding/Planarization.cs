@@ -77,6 +77,9 @@ public static class Planarization
             }
         }
 
+        // Report the deviation of the geometry actually returned (the loop
+        // measures before it moves vertices, so its last values are stale)
+        deviations = ComputeDeviation(new MeshData(verts, mesh.Faces));
         return new Result(verts, deviations, iter);
     }
 

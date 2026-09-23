@@ -93,7 +93,13 @@ public class MeshProjection
     /// </summary>
     public Hit ClosestPoint(Vec3d p, int hint)
     {
-        int v = hint >= 0 && hint < _mesh.VertexCount ? hint : 0;
+        if (_mesh.VertexCount == 0)
+            return new Hit(p, Vec3d.Zero, Vec3d.Zero, -1, -1, new Vec3d(1, 0, 0));
+
+        // Without a usable hint, start from the globally nearest vertex: the
+        // greedy descent below only finds a local minimum, so starting at an
+        // arbitrary vertex could return a point on the far side of the mesh
+        int v = hint >= 0 && hint < _mesh.VertexCount ? hint : _kdTree.Nearest(p);
 
         // Greedy descent to the locally closest vertex
         double bestDist = (_mesh.Vertices[v] - p).LengthSquared;

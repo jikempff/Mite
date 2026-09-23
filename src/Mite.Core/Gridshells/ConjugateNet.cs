@@ -36,9 +36,14 @@ public static class ConjugateNet
     /// </summary>
     public static Result Trace(MeshData mesh, int firstSeed = -1, EvenlySpacedNet.Options? options = null)
     {
+        options ??= new EvenlySpacedNet.Options();
         var curvature = PrincipalCurvature.Compute(mesh);
         var familyA = EvenlySpacedNet.TraceField(mesh, curvature.D1, null, firstSeed, options);
+        bool capA = options.ReachedMaxCurves, cancelA = options.Cancelled;
         var familyB = EvenlySpacedNet.TraceField(mesh, curvature.D2, null, firstSeed, options);
+        // Report the run status over both families
+        options.ReachedMaxCurves |= capA;
+        options.Cancelled |= cancelA;
         return new Result(familyA, familyB);
     }
 }

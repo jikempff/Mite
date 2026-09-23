@@ -15,11 +15,14 @@ public static class EvenlySpacedNet
 {
     public class Options
     {
-        /// <summary>Target distance between adjacent curves.</summary>
-        public double Spacing { get; set; } = 0.1;
+        /// <summary>Target distance between adjacent curves (0 = automatic, bounding box / 30).</summary>
+        public double Spacing { get; set; } = 0.0;
 
-        public double StepSize { get; set; } = 0.01;
-        public int MaxSteps { get; set; } = 1000;
+        /// <summary>Integration step (0 = automatic: Spacing / 10, capped at half a mesh edge).</summary>
+        public double StepSize { get; set; } = 0.0;
+
+        /// <summary>Steps per half-curve (0 = automatic, from the mesh size).</summary>
+        public int MaxSteps { get; set; } = 0;
 
         /// <summary>Safety cap on the number of curves.</summary>
         public int MaxCurves { get; set; } = 200;
@@ -50,10 +53,17 @@ public static class EvenlySpacedNet
         /// </summary>
         public Func<bool>? ShouldCancel { get; set; }
 
-    }
+        /// <summary>Set after a run: true when the MaxCurves cap stopped growth with candidates left.</summary>
+        public bool ReachedMaxCurves { get; internal set; }
 
-    private static double EffectiveMinLength(Options opts) =>
-        opts.MinCurveLength > 0 ? opts.MinCurveLength : 2.0 * opts.Spacing;
+        /// <summary>Set after a run: true when ShouldCancel interrupted growth.</summary>
+        public bool Cancelled { get; internal set; }
+
+        /// <summary>Set after a run: the spacing / step / step count actually used (after automatic defaults).</summary>
+        public double ResolvedSpacing { get; internal set; }
+        public double ResolvedStepSize { get; internal set; }
+        public int ResolvedMaxSteps { get; internal set; }
+    }
 
     private static double ArcLength(Vec3d[] line)
     {
@@ -74,6 +84,8 @@ public static class EvenlySpacedNet
         Vec3d[]? secondaryDirs = null)
     {
         options ??= new Options();
+        options.ReachedMaxCurves = false;
+        options.Cancelled = false;
         var proj = new MeshProjection(mesh);
         var results = new List<Vec3d[]>();
 
@@ -82,21 +94,22 @@ public static class EvenlySpacedNet
             : DefaultSeed(proj.Mesh, mask);
         if (seed < 0 || (mask != null && !mask[seed])) return results;
 
-        var registry = new PointRegistry(options.Spacing);
-        double dtest = options.TestFactor * options.Spacing;
+        Resolve(options, proj, out double spacing, out double step, out int maxSteps);
+        var registry = new PointRegistry(spacing);
+        double dtest = options.TestFactor * spacing;
         Func<Vec3d, bool> stop = p => registry.HasPointWithin(p, dtest);
 
-        Vec3d[] TraceFrom(Vec3d pos, int hint)
+        Vec3d[] TraceFrom(Vec3d pos, int hint, Vec3d? initialDir)
         {
             var line = FieldTracer.TraceBoth(proj, pos, hint, dirs, secondaryDirs, mask,
-                options.StepSize, options.MaxSteps, stop, options.MinFieldMagnitude);
+                step, maxSteps, stop, options.MinFieldMagnitude, initialDir);
             return line.Length > 1 ? CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses) : line;
         }
 
         bool CandidateBlocked(MeshProjection.Hit chit) =>
             mask != null && !mask[chit.NearestVertex];
 
-        Grow(proj, results, registry, options,
+        Grow(proj, results, registry, options, spacing,
             TraceFrom, CandidateBlocked, null,
             proj.Mesh.Vertices[seed], seed);
 
@@ -112,6 +125,8 @@ public static class EvenlySpacedNet
         MeshData mesh, int firstSeed, Vec3d firstDir, Options? options = null)
     {
         options ??= new Options();
+        options.ReachedMaxCurves = false;
+        options.Cancelled = false;
         var proj = new MeshProjection(mesh);
         var results = new List<Vec3d[]>();
 
@@ -121,41 +136,55 @@ public static class EvenlySpacedNet
         firstDir = GeodesicCurves.SeedTangent(proj, firstSeed, firstDir);
         if (firstDir.LengthSquared < 1e-20) return results;
 
-        var registry = new PointRegistry(options.Spacing);
-        double dtest = options.TestFactor * options.Spacing;
+        Resolve(options, proj, out double spacing, out double step, out int maxSteps);
+        var registry = new PointRegistry(spacing);
+        double dtest = options.TestFactor * spacing;
         Func<Vec3d, bool> stop = p => registry.HasPointWithin(p, dtest);
 
         Vec3d[] TraceFrom(Vec3d pos, int hint, Vec3d dir)
         {
             var line = GeodesicCurves.TraceBothFrom(proj, pos, hint, dir,
-                options.StepSize, options.MaxSteps, stop);
+                step, maxSteps, stop);
             return line.Length > 1 ? CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses) : line;
         }
 
-        Grow(proj, results, registry, options,
+        Grow(proj, results, registry, options, spacing,
             null, null, TraceFrom,
             proj.Mesh.Vertices[firstSeed], firstSeed, firstDir.Normalized());
 
         return results;
     }
 
+    private static void Resolve(Options opts, MeshProjection proj,
+        out double spacing, out double step, out int maxSteps)
+    {
+        spacing = TraceDefaults.ResolveSpacing(opts.Spacing, proj);
+        step = TraceDefaults.ResolveStep(opts.StepSize, spacing, proj);
+        maxSteps = TraceDefaults.ResolveMaxSteps(opts.MaxSteps, step, proj);
+        opts.ResolvedSpacing = spacing;
+        opts.ResolvedStepSize = step;
+        opts.ResolvedMaxSteps = maxSteps;
+    }
+
     // Shared Jobard-Lefer loop. Field mode passes traceField; geodesic mode
     // passes traceDirected (candidates inherit the neighbor's tangent).
     private static void Grow(
-        MeshProjection proj, List<Vec3d[]> results, PointRegistry registry, Options opts,
-        Func<Vec3d, int, Vec3d[]>? traceField,
+        MeshProjection proj, List<Vec3d[]> results, PointRegistry registry, Options opts, double spacing,
+        Func<Vec3d, int, Vec3d?, Vec3d[]>? traceField,
         Func<MeshProjection.Hit, bool>? candidateBlocked,
         Func<Vec3d, int, Vec3d, Vec3d[]>? traceDirected,
         Vec3d firstPos, int firstHint, Vec3d firstDir = default)
     {
-        double thinGap = 0.5 * opts.TestFactor * opts.Spacing;
-        double minLen = EffectiveMinLength(opts);
+        double thinGap = 0.5 * opts.TestFactor * spacing;
+        double minLen = opts.MinCurveLength > 0 ? opts.MinCurveLength : 2.0 * spacing;
         var queue = new Queue<Vec3d[]>();
+        opts.ReachedMaxCurves = false;
+        opts.Cancelled = false;
 
         // The first curve is kept regardless of length: if it is short, the
         // traceable region is simply small, and returning it beats returning nothing
         var first = traceField != null
-            ? traceField(firstPos, firstHint)
+            ? traceField(firstPos, firstHint, null)
             : traceDirected!(firstPos, firstHint, firstDir);
         if (first.Length < 2) return;
 
@@ -165,11 +194,11 @@ public static class EvenlySpacedNet
 
         while (queue.Count > 0 && results.Count < opts.MaxCurves)
         {
-            if (opts.ShouldCancel?.Invoke() == true) break;
+            if (opts.ShouldCancel?.Invoke() == true) { opts.Cancelled = true; break; }
             var source = queue.Dequeue();
             int hint = proj.NearestVertexGlobal(source[0]);
 
-            foreach (var sample in SampleAlong(source, opts.Spacing))
+            foreach (var sample in SampleAlong(source, spacing))
             {
                 if (results.Count >= opts.MaxCurves) break;
 
@@ -182,25 +211,23 @@ public static class EvenlySpacedNet
 
                 for (int s = -1; s <= 1; s += 2)
                 {
-                    Vec3d cand = sample.Point + s * opts.Spacing * side;
+                    Vec3d cand = sample.Point + s * spacing * side;
                     var chit = proj.ClosestPoint(cand, hint);
 
                     // Fell off the mesh, or landed too close to an existing curve
-                    if ((chit.Point - cand).Length > 0.5 * opts.Spacing) continue;
-                    if (registry.HasPointWithin(chit.Point, 0.9 * opts.Spacing)) continue;
+                    if ((chit.Point - cand).Length > 0.5 * spacing) continue;
+                    if (registry.HasPointWithin(chit.Point, 0.9 * spacing)) continue;
                     if (candidateBlocked != null && candidateBlocked(chit)) continue;
 
-                    Vec3d[] line;
-                    if (traceField != null)
-                    {
-                        line = traceField(chit.Point, chit.NearestVertex);
-                    }
-                    else
-                    {
-                        Vec3d dir = sample.Tangent - Vec3d.Dot(sample.Tangent, chit.SmoothNormal) * chit.SmoothNormal;
-                        if (dir.LengthSquared < 1e-20) continue;
-                        line = traceDirected!(chit.Point, chit.NearestVertex, dir.Normalized());
-                    }
+                    Vec3d dir = sample.Tangent - Vec3d.Dot(sample.Tangent, chit.SmoothNormal) * chit.SmoothNormal;
+                    if (dir.LengthSquared < 1e-20) continue;
+                    dir = dir.Normalized();
+
+                    // Candidates inherit the source curve's tangent so a new
+                    // curve always starts in the same family as its neighbor
+                    Vec3d[] line = traceField != null
+                        ? traceField(chit.Point, chit.NearestVertex, dir)
+                        : traceDirected!(chit.Point, chit.NearestVertex, dir);
 
                     if (line.Length > 2 && ArcLength(line) >= minLen)
                     {
@@ -212,6 +239,8 @@ public static class EvenlySpacedNet
                 }
             }
         }
+
+        opts.ReachedMaxCurves = results.Count >= opts.MaxCurves && queue.Count > 0;
     }
 
     private static IEnumerable<(Vec3d Point, Vec3d Tangent)> SampleAlong(Vec3d[] line, double spacing)

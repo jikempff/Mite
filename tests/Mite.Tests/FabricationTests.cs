@@ -137,12 +137,16 @@ public class FabricationTests
             out NotchSolid na, out NotchSolid nb);
 
         Assert.True(ok);
-        // Notch A: length along A covers B's width (sin90 = 1), depth = half thickness from the top
+        // Notch A is aligned with B (it removes B's footprint): across B's
+        // width, long enough to span A's width; it opens the top half of A
+        // and bleeds slightly past A's top face so the boolean is not coplanar
         Assert.Equal(0.2, na.HalfX, 6);
         Assert.Equal(0.2, na.HalfY, 6);
-        Assert.Equal(0.025, na.HalfZ, 6);
-        Assert.Equal(0.075, na.Center.Z, 6);   // top half of [0, 0.1]
-        Assert.Equal(0.025, nb.Center.Z, 6);   // bottom half of [0, 0.1]
+        Assert.Equal(1.0, Math.Abs(Vec3d.Dot(na.AxisX, new Vec3d(0, 1, 0))), 6);
+        Assert.Equal(0.05, na.Center.Z - na.HalfZ, 6);   // cut starts at mid-depth
+        Assert.True(na.Center.Z + na.HalfZ > 0.1);        // and clears the top face
+        Assert.Equal(0.05, nb.Center.Z + nb.HalfZ, 6);   // bottom half of [0, 0.1]
+        Assert.True(nb.Center.Z - nb.HalfZ < 0.0);
     }
 
     [Fact]
@@ -157,7 +161,26 @@ public class FabricationTests
             out NotchSolid na, out _);
 
         Assert.True(ok);
-        Assert.Equal(0.4 / Math.Sin(Math.PI / 3) / 2, na.HalfX, 6);
+        // The overlap of two 0.4-wide strips at 60° is a parallelogram whose
+        // extent along either lath is w/sinθ + w·cotθ; the notch must span it
+        double expected = 0.4 / Math.Sin(Math.PI / 3) + 0.4 * Math.Cos(Math.PI / 3) / Math.Sin(Math.PI / 3);
+        Assert.Equal(expected / 2, na.HalfX, 6);
+
+        // Every corner of A's footprint inside B's strip must fall inside notch A
+        Vec3d tb = new Vec3d(c, s, 0), gb = new Vec3d(-s, c, 0);
+        foreach (double ya in new[] { -0.2, 0.2 })
+        {
+            // Points on A's edge (y = ya) that lie on B's edges: |gb·p| = 0.2
+            foreach (double side in new[] { -0.2, 0.2 })
+            {
+                // gb·(x, ya) = -s x + c ya = side  ->  x = (c ya - side) / s
+                var p = new Vec3d((c * ya - side) / s, ya, 0);
+                double along = Math.Abs(Vec3d.Dot(p - na.Center, na.AxisX));
+                double across = Math.Abs(Vec3d.Dot(p - na.Center, na.AxisY));
+                Assert.True(along <= na.HalfX + 1e-9, $"corner {p} outside notch along ({along} > {na.HalfX})");
+                Assert.True(across <= na.HalfY + 1e-9, $"corner {p} outside notch across");
+            }
+        }
     }
 
     [Fact]

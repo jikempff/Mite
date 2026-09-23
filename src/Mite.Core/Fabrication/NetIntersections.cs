@@ -101,7 +101,25 @@ public static class NetIntersections
                     0.5 * (c1 + c2), gap));
             }
         }
-        return crossings;
+
+        // A crossing that falls within tol of a polyline vertex is found by
+        // both segments sharing that vertex (one at s≈1, one at s≈0 after
+        // clamping). Merge crossings of the same curve pair closer than 2·tol,
+        // keeping the tighter one, so each node yields exactly one joint.
+        var byPair = new Dictionary<(int, int), List<int>>();
+        var keep = new List<Crossing>(crossings.Count);
+        double merge2 = 4.0 * tol * tol;
+        foreach (var c in crossings)
+        {
+            var key = (c.CurveA, c.CurveB);
+            if (!byPair.TryGetValue(key, out var list)) { list = new List<int>(); byPair[key] = list; }
+            int dup = -1;
+            foreach (int k in list)
+                if ((keep[k].Point - c.Point).LengthSquared <= merge2) { dup = k; break; }
+            if (dup < 0) { list.Add(keep.Count); keep.Add(c); }
+            else if (c.Gap < keep[dup].Gap) keep[dup] = c;
+        }
+        return keep;
     }
 
     /// <summary>Tangent of a polyline at a crossing (its segment direction).</summary>

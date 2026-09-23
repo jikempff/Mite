@@ -12,9 +12,19 @@ public static class PrincipalCurvature
         public readonly Vec3d[] D1;
         public readonly Vec3d[] D2;
 
-        public Result(double[] k1, double[] k2, Vec3d[] d1, Vec3d[] d2)
+        /// <summary>Vertex normals used for the tangent frames; (D1, D2, N) is right-handed.</summary>
+        public readonly Vec3d[] Normals;
+
+        public Result(double[] k1, double[] k2, Vec3d[] d1, Vec3d[] d2, Vec3d[]? normals = null)
         {
             K1 = k1; K2 = k2; D1 = d1; D2 = d2;
+            if (normals == null)
+            {
+                normals = new Vec3d[k1.Length];
+                for (int i = 0; i < normals.Length; i++)
+                    normals[i] = Vec3d.Cross(d1[i], d2[i]).Normalized();
+            }
+            Normals = normals;
         }
     }
 
@@ -151,7 +161,20 @@ public static class PrincipalCurvature
         if (radius > 1)
             SmoothCurvature(triMesh, radius - 1, k1, k2, d1, d2, vertexNormals, e1Basis, e2Basis);
 
-        return new Result(k1, k2, d1, d2);
+        // Enforce a right-handed (D1, D2, N) frame at every vertex. The sign of
+        // each principal direction is arbitrary, but consumers that combine D1
+        // and D2 into derived fields (asymptotic directions c*D1 +/- s*D2) need
+        // a consistent handedness or the two derived families swap from vertex
+        // to vertex, which fragments traced curves.
+        for (int i = 0; i < nv; i++)
+        {
+            Vec3d n = vertexNormals[i];
+            Vec3d cross = Vec3d.Cross(n, d1[i]);
+            if (cross.LengthSquared > 1e-20)
+                d2[i] = cross.Normalized();
+        }
+
+        return new Result(k1, k2, d1, d2, vertexNormals);
     }
 
     /// <summary>
@@ -313,33 +336,36 @@ public static class PrincipalCurvature
 
         for (int i = 0; i < nv; i++)
         {
-            Matrix3d.EigenSymmetric(tensors[i], out double[] values, out Vec3d[] vectors);
+            // Project the averaged world tensor into this vertex's tangent frame.
+            // Neighbouring tensors live in slightly different tangent planes, so
+            // the 3x3 average has a small normal component; restricting to the
+            // frame keeps the extracted directions exactly tangent and avoids
+            // the ambiguity of a 3D eigensolve when k2 ~ 0 (near-developable
+            // regions), where the "which eigenvector is the normal" choice is
+            // ill-posed.
+            Vec3d e1 = e1Basis[i], e2 = e2Basis[i];
+            Vec3d se1 = tensors[i] * e1;
+            Vec3d se2 = tensors[i] * e2;
+            double a = Vec3d.Dot(e1, se1);
+            double b = Vec3d.Dot(e1, se2);
+            double c = Vec3d.Dot(e2, se2);
 
             // Degenerate (flat or isolated) vertex: keep the frame-derived directions
-            if (Math.Max(Math.Abs(values[0]), Math.Abs(values[2])) < 1e-15) continue;
+            if (Math.Max(Math.Abs(a), Math.Max(Math.Abs(b), Math.Abs(c))) < 1e-15) continue;
 
-            // The eigenvector best aligned with the vertex normal is the normal
-            // direction; the other two eigenpairs are the principal curvatures.
-            // (Picking the eigenvalue nearest zero fails on cylinders, where
-            // k2 = 0 is indistinguishable from the normal's zero.)
-            int n0 = 0;
-            double best = -1;
-            for (int e = 0; e < 3; e++)
-            {
-                double d = Math.Abs(Vec3d.Dot(vectors[e], normals[i]));
-                if (d > best) { best = d; n0 = e; }
-            }
-            int a = (n0 + 1) % 3, b = (n0 + 2) % 3;
+            DiagonalizeShapeOperator(a, b, c, out double kappa1, out double kappa2, out double theta);
+            Vec3d dir1 = (Math.Cos(theta) * e1 + Math.Sin(theta) * e2).Normalized();
+            Vec3d dir2 = (-Math.Sin(theta) * e1 + Math.Cos(theta) * e2).Normalized();
 
-            if (values[a] >= values[b])
+            if (kappa1 >= kappa2)
             {
-                k1[i] = values[a]; d1[i] = vectors[a];
-                k2[i] = values[b]; d2[i] = vectors[b];
+                k1[i] = kappa1; d1[i] = dir1;
+                k2[i] = kappa2; d2[i] = dir2;
             }
             else
             {
-                k1[i] = values[b]; d1[i] = vectors[b];
-                k2[i] = values[a]; d2[i] = vectors[a];
+                k1[i] = kappa2; d1[i] = dir2;
+                k2[i] = kappa1; d2[i] = dir1;
             }
         }
     }
