@@ -1,25 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Reflection;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
 
 namespace Mite.Grasshopper.Components;
 
-public class LathPreviewComponent : GH_Component
+public class LathPreviewComponent : MiteComponent
 {
     public LathPreviewComponent()
         : base("Lath Preview", "Preview",
             "Colors swept laths by utilization (e.g. from Lath Analysis or Gridshell Analysis): " +
             "green within limits, yellow near the limit, red beyond it.",
-            "Mite", "Fabrication") { }
+            "Fabrication", "LathPreview") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDF7");
-
-    protected override Bitmap Icon =>
-        new Bitmap(Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream("Mite.Grasshopper.Resources.LathPreview.png")!);
 
     protected override void RegisterInputParams(GH_InputParamManager pManager)
     {
@@ -42,13 +37,16 @@ public class LathPreviewComponent : GH_Component
 
         if (utils.Count != laths.Count)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
-                $"Utilization count ({utils.Count}) does not match lath count ({laths.Count}); extra entries clamp to the ends.");
+                $"Utilization count ({utils.Count}) does not match the lath count ({laths.Count}); " +
+                "laths beyond the list reuse its last value. Use the per-lath outputs (Lath Analysis U, Gridshell Analysis Ul).");
 
-        var colored = new List<Mesh>();
+        var colored = new List<Mesh?>();
         for (int i = 0; i < laths.Count; i++)
         {
-            double u = utils[Math.Min(i, utils.Count - 1)];
-            var color = UtilizationColor(u);
+            if (laths[i] == null) { colored.Add(null); continue; }
+            double u = utils.Count > 0 ? utils[Math.Min(i, utils.Count - 1)] : 0.0;
+            // NaN (a lath that could not be analyzed) shows neutral grey, not a green pass
+            var color = double.IsNaN(u) ? Color.FromArgb(150, 150, 150) : UtilizationColor(u);
             var m = laths[i].DuplicateMesh();
             m.VertexColors.Clear();
             for (int v = 0; v < m.Vertices.Count; v++)

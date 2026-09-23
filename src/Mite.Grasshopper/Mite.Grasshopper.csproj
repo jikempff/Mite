@@ -5,7 +5,7 @@
     <AssemblyName>Mite.Grasshopper</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -39,5 +39,11 @@
     <EmbeddedResource Include="Resources\LathLabels.png" />
     <EmbeddedResource Include="Resources\LathPreview.png" />
     <EmbeddedResource Include="Resources\MeshCleanup.png" />
+    <EmbeddedResource Include="Resources\DynamicRelaxation.png" />
+    <EmbeddedResource Include="Resources\MeshIsocurves.png" />
+    <EmbeddedResource Include="Resources\PullToMesh.png" />
+    <EmbeddedResource Include="Resources\MeshColourMap.png" />
+    <EmbeddedResource Include="Resources\GeodesicPath.png" />
+    <EmbeddedResource Include="Resources\NetTopology.png" />
   </ItemGroup>
 </Project>

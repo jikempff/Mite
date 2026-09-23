@@ -56,12 +56,17 @@ internal static class Tests
 
     public static int RunAll()
     {
+        // The frame analysis converts model units to metres; keep the analytic
+        // checks below in metres whatever document Rhino.Inside opened
+        if (Rhino.RhinoDoc.ActiveDoc != null)
+            Rhino.RhinoDoc.ActiveDoc.ModelUnitSystem = Rhino.UnitSystem.Meters;
+
         var sphere = Rhino.Geometry.Mesh.CreateFromSphere(
             new Rhino.Geometry.Sphere(Rhino.Geometry.Plane.WorldXY, 1.0), 48, 24);
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 21 components", IconsLoad());
+        Check("Icons load for all 27 components", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -126,7 +131,7 @@ internal static class Tests
 
         TestComponent("Asymptotic Net (seeded)",
             new Mite.Grasshopper.Components.AsymptoticNetComponent(),
-            c => SetInputs(c, (0, saddle.DuplicateMesh()), (1, CenterVertex(saddle)), (2, 0.05), (3, 200)),
+            c => SetInputs(c, (0, saddle.DuplicateMesh()), (1, CenterVertex(saddle)), (2, 0.05), (3, 200), (4, false)),
             c => Expect(CurveCount(c, 0) >= 1 && CurveCount(c, 1) >= 1,
                 $"both families traced: A={CurveCount(c, 0)}, B={CurveCount(c, 1)}"));
 
@@ -269,9 +274,15 @@ internal static class Tests
             c =>
             {
                 var lengths = Numbers(c, 2);
+                var pattern = c.Params.Output[0].VolatileData.AllData(true)
+                    .OfType<Grasshopper.Kernel.Types.GH_Curve>().Select(x => x.Value).FirstOrDefault();
+                var bbox = pattern?.GetBoundingBox(false) ?? Rhino.Geometry.BoundingBox.Empty;
+                // A closed lath opens at its seam into a band ~2π long and 0.1 wide
                 return Expect(CurveCount(c, 0) == 1 && lengths.Count == 1
                     && System.Math.Abs(lengths[0] - 2 * System.Math.PI) < 0.1,
-                    $"equator pattern, length {(lengths.Count > 0 ? lengths[0] : 0):F3}");
+                    $"equator pattern, length {(lengths.Count > 0 ? lengths[0] : 0):F3}")
+                    && Expect(pattern != null && pattern.IsClosed && bbox.Diagonal.Length > 5.0 && bbox.Diagonal.Length < 7.0,
+                        $"pattern is a closed band (diagonal {bbox.Diagonal.Length:F2})");
             });
 
         TestComponent("Lath Segment",
@@ -316,6 +327,89 @@ internal static class Tests
                 SetNumberList(c, 1, new[] { 0.5, 1.5 });
             },
             c => Expect(Meshes(c, 0).Count == 2, "two colored laths"));
+
+        TestComponent("Dynamic Relaxation",
+            new Mite.Grasshopper.Components.DynamicRelaxationComponent(),
+            c => SetInputs(c, (0, grid.DuplicateMesh()), (2, 10.0), (4, new Rhino.Geometry.Vector3d(0, 0, -1)), (8, 3000)),
+            c =>
+            {
+                var m = MeshOut(c, 0);
+                var bb = m?.GetBoundingBox(false) ?? Rhino.Geometry.BoundingBox.Empty;
+                return Expect(m != null && bb.Min.Z < -0.5, $"net sags under gravity (min z {bb.Min.Z:F2})")
+                    && Expect(Bools(c, 5).FirstOrDefault(), "converged");
+            });
+
+        TestComponent("Mesh Isocurves",
+            new Mite.Grasshopper.Components.MeshIsocurvesComponent(),
+            c =>
+            {
+                var m = saddle.DuplicateMesh();
+                SetInputs(c, (0, m));
+                // z as the field: the z = 0 level set of x^2 - y^2 is the two diagonals
+                SetNumberList(c, 1, Enumerable.Range(0, m.Vertices.Count).Select(i => (double)m.Vertices[i].Z).ToArray());
+                SetNumberList(c, 2, new[] { 0.0 });
+            },
+            c => Expect(CurveCount(c, 0) >= 2, $"diagonal isocurves, got {CurveCount(c, 0)}"));
+
+        TestComponent("Pull To Mesh",
+            new Mite.Grasshopper.Components.PullToMeshComponent(),
+            c =>
+            {
+                SetInputs(c, (0, sphere.DuplicateMesh()));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-2, 0, 0.5), new Rhino.Geometry.Point3d(2, 0, 0.5)));
+                SetPointList(c, 2, new Rhino.Geometry.Point3d(3, 0, 0));
+            },
+            c =>
+            {
+                var pts = Points(c, 1);
+                return Expect(CurveCount(c, 0) == 1, "pulled curve")
+                    && Expect(pts.Count == 1 && System.Math.Abs(pts[0].DistanceTo(Rhino.Geometry.Point3d.Origin) - 1.0) < 0.05,
+                        "point pulled onto the unit sphere");
+            });
+
+        TestComponent("Mesh Colour Map",
+            new Mite.Grasshopper.Components.MeshColourMapComponent(),
+            c =>
+            {
+                var m = saddle.DuplicateMesh();
+                SetInputs(c, (0, m));
+                SetNumberList(c, 1, Enumerable.Range(0, m.Vertices.Count).Select(i => (double)m.Vertices[i].Z).ToArray());
+            },
+            c =>
+            {
+                var m = MeshOut(c, 0);
+                return Expect(m != null && m.VertexColors.Count == saddle.Vertices.Count, "one colour per vertex");
+            });
+
+        TestComponent("Geodesic Path",
+            new Mite.Grasshopper.Components.GeodesicPathComponent(),
+            c =>
+            {
+                SetInputs(c, (0, sphere.DuplicateMesh()));
+                SetPointList(c, 1, new Rhino.Geometry.Point3d(1, 0, 0));
+                SetPointList(c, 2, new Rhino.Geometry.Point3d(0, 1, 0));
+            },
+            c =>
+            {
+                var len = Numbers(c, 1).FirstOrDefault();
+                return Expect(CurveCount(c, 0) == 1 && System.Math.Abs(len - System.Math.PI / 2) < 0.05,
+                    $"quarter great circle, length {len:F3}");
+            });
+
+        TestComponent("Net Topology",
+            new Mite.Grasshopper.Components.NetTopologyComponent(),
+            c =>
+            {
+                SetCurveList(c, 0,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 1, 0), new Rhino.Geometry.Point3d(4, 1, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 2, 0), new Rhino.Geometry.Point3d(4, 2, 0)));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1, 0, 0), new Rhino.Geometry.Point3d(1, 4, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(2, 0, 0), new Rhino.Geometry.Point3d(2, 4, 0)));
+            },
+            c => Expect(Points(c, 0).Count == 4 && CurveCount(c, 2) == 12,
+                $"4 nodes / 12 members, got {Points(c, 0).Count} / {CurveCount(c, 2)}"));
 
         Console.WriteLine();
         Console.WriteLine($"=== {_passed} passed, {_failed} failed ===");
@@ -371,9 +465,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 21)
+        if (comps.Count != 27)
         {
-            Console.WriteLine($"      expected 21 components, found {comps.Count}");
+            Console.WriteLine($"      expected 27 components, found {comps.Count}");
             return false;
         }
 

@@ -1,24 +1,19 @@
 using System;
-using System.Drawing;
-using System.Reflection;
 using Grasshopper.Kernel;
-using Rhino.Geometry;
 using Mite.Core.Curvature;
 
 namespace Mite.Grasshopper.Components;
 
-public class GaussianCurvatureComponent : GH_Component
+public class GaussianCurvatureComponent : MiteComponent
 {
     public GaussianCurvatureComponent()
         : base("Gaussian Curvature", "GaussCurv",
-            "Computes per-vertex Gaussian curvature via angle deficit.",
-            "Mite", "Curvature") { }
+            "Computes per-vertex Gaussian curvature via angle deficit over mixed Voronoi areas. " +
+            "Positive on domes, negative on saddles, zero on developable and boundary vertices. " +
+            "One value per input mesh vertex.",
+            "Curvature", "GaussianCurvature") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDE2");
-
-    protected override Bitmap Icon =>
-        new Bitmap(Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream("Mite.Grasshopper.Resources.GaussianCurvature.png")!);
 
     protected override void RegisterInputParams(GH_InputParamManager pManager)
     {
@@ -32,12 +27,8 @@ public class GaussianCurvatureComponent : GH_Component
 
     protected override void SolveInstance(IGH_DataAccess DA)
     {
-        Mesh? mesh = null;
-        if (!DA.GetData(0, ref mesh) || mesh == null) return;
-
-        var data = MeshConvert.ToMeshData(mesh);
-        var K = GaussianCurvature.Compute(data);
-
-        DA.SetDataList(0, K);
+        var input = LoadMesh(DA, 0);
+        if (input == null) return;
+        DA.SetDataList(0, input.Expand(GaussianCurvature.Compute(input.Data)));
     }
 }

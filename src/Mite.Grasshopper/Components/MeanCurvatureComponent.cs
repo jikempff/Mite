@@ -1,25 +1,20 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Reflection;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
 using Mite.Core.Curvature;
 
 namespace Mite.Grasshopper.Components;
 
-public class MeanCurvatureComponent : GH_Component
+public class MeanCurvatureComponent : MiteComponent
 {
     public MeanCurvatureComponent()
         : base("Mean Curvature", "MeanCurv",
-            "Computes per-vertex mean curvature via cotangent Laplacian.",
-            "Mite", "Curvature") { }
+            "Computes per-vertex mean curvature via the cotangent Laplacian (mixed Voronoi areas, " +
+            "consistent with Gaussian Curvature). Boundary vertices are zero. One value per input mesh vertex.",
+            "Curvature", "MeanCurvature") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDE3");
-
-    protected override Bitmap Icon =>
-        new Bitmap(Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream("Mite.Grasshopper.Resources.MeanCurvature.png")!);
 
     protected override void RegisterInputParams(GH_InputParamManager pManager)
     {
@@ -28,23 +23,21 @@ public class MeanCurvatureComponent : GH_Component
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
     {
-        pManager.AddNumberParameter("H", "H", "Mean curvature per vertex", GH_ParamAccess.list);
-        pManager.AddVectorParameter("HN", "HN", "Mean curvature normal per vertex", GH_ParamAccess.list);
+        pManager.AddNumberParameter("H", "H", "Signed mean curvature per vertex", GH_ParamAccess.list);
+        pManager.AddVectorParameter("HN", "HN", "Mean curvature normal vector per vertex (length |H|)", GH_ParamAccess.list);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
     {
-        Mesh? mesh = null;
-        if (!DA.GetData(0, ref mesh) || mesh == null) return;
+        var input = LoadMesh(DA, 0);
+        if (input == null) return;
 
-        var data = MeshConvert.ToMeshData(mesh);
-        var result = MeanCurvature.Compute(data);
+        var result = MeanCurvature.Compute(input.Data);
+        DA.SetDataList(0, input.Expand(result.Values));
 
-        DA.SetDataList(0, result.Values);
-
-        var normals = new List<Vector3d>(result.Normals.Length);
-        for (int i = 0; i < result.Normals.Length; i++)
-            normals.Add(MeshConvert.ToRhinoVector(result.Normals[i]));
+        var hn = input.Expand(result.CurvatureNormals);
+        var normals = new List<Vector3d>(hn.Length);
+        foreach (var v in hn) normals.Add(MeshConvert.ToRhinoVector(v));
         DA.SetDataList(1, normals);
     }
 }

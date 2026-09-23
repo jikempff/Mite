@@ -208,6 +208,109 @@ def icon_net_joints():
     save(img, "NetJoints")
 
 
+def icon_dynamic_relaxation():
+    """A net hanging from two anchors: catenary edges with a gravity arrow."""
+    img, d = canvas()
+    # anchors
+    d.ellipse([P(2.6, 3.6), P(5.4, 6.4)], fill=WHITE)
+    d.ellipse([P(18.6, 3.6), P(21.4, 6.4)], fill=WHITE)
+    # three hanging chains (catenary-like arcs)
+    for sag in (4.5, 8.0, 11.5):
+        pts = []
+        for i in range(25):
+            t = i / 24
+            x = 4 + 16 * t
+            y = 5 + sag * math.sin(t * math.pi)
+            pts.append(P(x, y))
+        d.line(pts, fill=WHITE, width=int(W * 0.75), joint="curve")
+    # short cross ties
+    for x in (8, 12, 16):
+        d.line([P(x, 5 + 4.5 * math.sin((x - 4) / 16 * math.pi)),
+                P(x, 5 + 11.5 * math.sin((x - 4) / 16 * math.pi))], fill=WHITE, width=int(W * 0.5))
+    save(img, "DynamicRelaxation")
+
+
+def icon_mesh_isocurves():
+    """Nested contour rings on a surface patch."""
+    img, d = canvas()
+    for k, (rx, ry) in enumerate(((8.5, 6.0), (5.5, 3.8), (2.6, 1.7))):
+        d.ellipse([P(12 - rx, 12.5 - ry), P(12 + rx, 12.5 + ry)], outline=WHITE, width=int(W * 0.8))
+    d.line([P(2, 21), P(22, 21)], fill=WHITE, width=int(W * 0.6))
+    save(img, "MeshIsocurves")
+
+
+def icon_pull_to_mesh():
+    """A curve above a surface with arrows pulling it down onto the surface."""
+    img, d = canvas()
+    # surface (wavy line)
+    pts = [P(2 + 20 * i / 30, 17 + 1.6 * math.sin(i / 30 * 2 * math.pi)) for i in range(31)]
+    d.line(pts, fill=WHITE, width=int(W), joint="curve")
+    # floating curve
+    pts2 = [P(4 + 16 * i / 30, 6 + 1.6 * math.sin(i / 30 * 2 * math.pi + 1)) for i in range(31)]
+    d.line(pts2, fill=WHITE, width=int(W * 0.8), joint="curve")
+    # arrows
+    for x in (8, 16):
+        d.line([P(x, 9), P(x, 13)], fill=WHITE, width=int(W * 0.7))
+        d.polygon([P(x - 1.4, 12.4), P(x + 1.4, 12.4), P(x, 14.8)], fill=WHITE)
+    save(img, "PullToMesh")
+
+
+def icon_mesh_colour_map():
+    """A gradient bar with a small mesh patch."""
+    img, d = canvas()
+    # gradient bar drawn as stacked segments of increasing brightness
+    steps = 8
+    for i in range(steps):
+        v = int(90 + 165 * i / (steps - 1))
+        d.rectangle([P(3 + 18 * i / steps, 4), P(3 + 18 * (i + 1) / steps, 8)], fill=(v, v, v, 255))
+    d.rectangle([P(3, 4), P(21, 8)], outline=WHITE, width=int(W * 0.6))
+    # mesh patch
+    for x in (5, 10, 15, 20):
+        d.line([P(x, 12), P(x, 21)], fill=WHITE, width=int(W * 0.6))
+    for y in (12, 16.5, 21):
+        d.line([P(4, y), P(20, y)], fill=WHITE, width=int(W * 0.6))
+    save(img, "MeshColourMap")
+
+
+def icon_geodesic_path():
+    """Two points on a surface patch joined by the shortest (bowed) path."""
+    img, d = canvas()
+    # surface patch: two wavy rails
+    for y0 in (6, 19):
+        pts = [P(2 + 20 * i / 30, y0 + 1.2 * math.sin(i / 30 * 2 * math.pi)) for i in range(31)]
+        d.line(pts, fill=WHITE, width=int(W * 0.55), joint="curve")
+    # geodesic between two points, bowed by the surface
+    ax, ay, bx, by = 5.5, 16.5, 18.5, 8.5
+    pts = []
+    for i in range(31):
+        t = i / 30
+        x = ax + (bx - ax) * t
+        y = ay + (by - ay) * t
+        # bow perpendicular to the chord
+        nx, ny = -(by - ay), (bx - ax)
+        L = math.hypot(nx, ny)
+        b = 2.2 * math.sin(t * math.pi)
+        pts.append(P(x + nx / L * b, y + ny / L * b))
+    d.line(pts, fill=WHITE, width=int(W), joint="curve")
+    for (x, y) in ((ax, ay), (bx, by)):
+        d.ellipse([P(x - 1.9, y - 1.9), P(x + 1.9, y + 1.9)], fill=WHITE)
+    save(img, "GeodesicPath")
+
+
+def icon_net_topology():
+    """A graph: nodes at grid crossings with member lines."""
+    img, d = canvas()
+    xs, ys = (5, 12, 19), (5, 12, 19)
+    for x in xs:
+        d.line([P(x, 3), P(x, 21)], fill=WHITE, width=int(W * 0.6))
+    for y in ys:
+        d.line([P(3, y), P(21, y)], fill=WHITE, width=int(W * 0.6))
+    for x in xs:
+        for y in ys:
+            d.ellipse([P(x - 1.6, y - 1.6), P(x + 1.6, y + 1.6)], fill=WHITE)
+    save(img, "NetTopology")
+
+
 if __name__ == "__main__":
     icon_conjugate_net()
     icon_umbilics()
@@ -219,4 +322,10 @@ if __name__ == "__main__":
     icon_mesh_cleanup()
     icon_lath_sweep()
     icon_net_joints()
+    icon_dynamic_relaxation()
+    icon_mesh_isocurves()
+    icon_pull_to_mesh()
+    icon_mesh_colour_map()
+    icon_geodesic_path()
+    icon_net_topology()
     print("icons written to", os.path.abspath(OUT))
