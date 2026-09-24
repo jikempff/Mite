@@ -1,0 +1,167 @@
+# Per-component review notes, demo wiring and automatic checks.
+# checks: list of (label, js-expression over N (numbers) returning [ok:boolean, text:string])
+
+NOTES = {
+"Principal Curvature": dict(demo="torusK", demoMode="k1", expect=[
+    "K1 ≥ K2 at every vertex; on a sphere both equal 1/radius, on a torus K1 = 1/r on the whole tube and K2 varies from +1/(R+r) outside to −1/(R−r) inside.",
+    "D1, D2 and N form a right-handed frame at every vertex; D1 and D2 are tangent to the surface. Signs of D1/D2 are still arbitrary per vertex (they are lines, not arrows), so do not expect them to point 'the same way' along a row.",
+    "Radius 1 gives the raw per-face fit (noisy on coarse or irregular meshes); radius 2 (default) averages the curvature tensor over one ring; higher radii blur real features."],
+    checks=[("Sphere K1, K2 within 2% of 1", "[Math.abs(N.sphere.k1-1)<0.02 && Math.abs(N.sphere.k2-1)<0.02, 'k1 = '+N.sphere.k1+', k2 = '+N.sphere.k2+' on a 24-division unit sphere']"),
+            ("Torus k1 = 1/r along the meridian", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.k1-1)));return [e<0.05,'max |k1 − 1| = '+e.toFixed(3)+' over 16 samples'];})()")]),
+"Gaussian Curvature": dict(demo="torusK", demoMode="K", expect=[
+    "Positive on domes, negative on saddles, zero on cylinders and planes. Boundary vertices report 0 (there is no angle deficit on an open fan), which is intentional.",
+    "Signed and area-normalized: values scale with 1/length², so a millimetre model shows numbers a million times smaller than the same shape in metres.",
+    "On the torus demo the sign flips exactly at the top and bottom circles (φ = ±90°)."],
+    checks=[("Sphere K within 1% of 1", "[Math.abs(N.sphere.K-1)<0.01,'mean K = '+N.sphere.K]"),
+            ("Torus K matches cos φ / (r (R + r cos φ))", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.K-r.Kt)));return [e<0.03,'max |K − theory| = '+e.toFixed(4)];})()")]),
+"Mean Curvature": dict(demo="torusK", demoMode="H", expect=[
+    "H = (k1 + k2)/2, signed against the vertex normal; HN is the mean curvature normal (length |H|).",
+    "Uses the same mixed Voronoi areas as Gaussian Curvature, so H² − K ≥ 0 holds numerically away from the boundary.",
+    "Degenerate slivers are ignored: a mesh with collapsed triangles no longer produces values like 1e29."],
+    checks=[("Sphere H within 1% of 1", "[Math.abs(N.sphere.H-1)<0.01,'mean H = '+N.sphere.H]"),
+            ("Torus H matches (R + 2r cos φ) / (2r (R + r cos φ))", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.H-r.Ht)));return [e<0.03,'max |H − theory| = '+e.toFixed(4)];})()")]),
+"Curvature Streamlines": dict(demo="torusStream", expect=[
+    "Max-curvature lines on the torus are the meridians (small circles around the tube), min-curvature lines are the parallels. Both must come out as single closed loops, not curves that wrap several times.",
+    "With AutoSpace on, one seed fills the whole surface with evenly spaced lines; MaxCurves caps the count and a warning tells you when the cap was hit.",
+    "Near umbilics (k1 ≈ k2) the direction field is undefined and lines wander — mask those regions with Umbilics."],
+    checks=[("Meridian closes with length 2πr", "[Math.abs(N.torusStream.meridianLen-2*Math.PI)<0.1,'length '+N.torusStream.meridianLen+' vs 6.2832']"),
+            ("Parallel closes with length 2π(R + r cos φ)", "[Math.abs(N.torusStream.parallelLen-24.07)<0.5,'length '+N.torusStream.parallelLen+' vs 24.07 (was 68.96 before the drift-tolerant closure)']"),
+            ("AutoSpace fills the torus", "[N.torusStream.autoCount>20,N.torusStream.autoCount+' max-curvature lines at spacing 0.6']")]),
+"Umbilics": dict(demo=None, expect=[
+    "A sphere is umbilical everywhere, so every vertex is flagged; a torus has no umbilics; a saddle has one at the centre only if it is symmetric.",
+    "Tolerance is relative: |k1 − k2| ≤ T · max(|k1|, |k2|). Flat vertices (curvature below 0.1% of the mesh maximum) are never flagged.",
+    "The Mask output (one boolean per input vertex) is meant to be inverted and used to filter seeds."],
+    checks=[("Every sphere vertex flagged", "[N.sphere.umbilics===N.sphere.vertices,N.sphere.umbilics+' / '+N.sphere.vertices+' vertices at tolerance 0.05']")]),
+"Planarize Mesh": dict(demo="planar", before_after=True, expect=[
+    "Quads move toward their best-fit planes; triangles are already planar and are skipped. Fixed vertices stay put, everything else drifts a little.",
+    "Deviation is the largest distance of a corner from its face's best-fit plane, measured on the mesh that is returned. It cannot always reach zero: a doubly curved quad mesh with a fixed boundary has no fully planar solution.",
+    "Strength 0 only measures (no movement); Strength 1 is the classic projection step."],
+    checks=[("Deviation reduced on a noisy grid", "[N.planar.devAfter<N.planar.devBefore*0.5,'max deviation '+N.planar.devBefore+' → '+N.planar.devAfter.toFixed(4)+' after '+N.planar.iterations+' iterations (boundary fixed)']")]),
+"Minimal Surface": dict(demo="minimal", before_after=True, expect=[
+    "The interior relaxes to a soap film spanning the fixed boundary: mean curvature goes to zero away from the boundary and the surface never bulges outside the boundary's height range.",
+    "Leave Fixed empty to pin the mesh boundary. Convergence usually takes 5–15 iterations; Residual is the last vertex movement.",
+    "Large meshes are fine now: 3,700 vertices take about 0.2 s."],
+    checks=[("Interior mean curvature ≈ 0", "[N.minimal.meanAbsH<0.005,'mean |H| = '+N.minimal.meanAbsH+', max '+N.minimal.maxAbsH+' (boundary curvature is ~'+N.minimal.boundaryH+')']"),
+            ("Fast on 625 vertices", "[N.minimal.ms<2000,N.minimal.ms+' ms for '+N.minimal.iterations+' iterations']")]),
+"Force Density Method": dict(demo="fdm", before_after=True, expect=[
+    "Positive force densities with a downward load give a hanging tension net; negative force densities with the same load give the mirrored compression arch (rise = sag). The solve is linear and exact: node equilibrium holds to machine precision.",
+    "Per-edge Q lists follow the Edges output order (deterministic: first appearance walking the faces). One value broadcasts to all edges.",
+    "Leaving Fixed empty pins the boundary. Every free vertex must connect to an anchor through the net, otherwise the system is singular and the component says so."],
+    checks=[("Centre node in equilibrium", "[N.fdm.residual<1e-9,'residual force '+N.fdm.residual.toExponential(2)]"),
+            ("Compression mirrors tension", "[Math.abs(N.fdmCompression.rise-N.fdm.sag)<1e-6,'sag '+N.fdm.sag+' (q = +1) vs rise '+N.fdmCompression.rise+' (q = −1)']")]),
+"Dynamic Relaxation": dict(demo="dynrelax", before_after=True, expect=[
+    "Same hanging-net problem as FDM but solved dynamically with kinetic damping, so it also handles nonlinear cases (soap-film tension, pre-tension, mixed loads). Expect a symmetric sag with the lowest point at the centre and every edge in tension.",
+    "Converged tells you the residual force fell below Tolerance × the largest applied force. If nothing acts on the mesh you get a remark and no movement.",
+    "Stiffness and Gravity only set the ratio of sag to span; RestScale < 1 pre-tensions the net."],
+    checks=[("Converges", "[N.dynrelax.converged,N.dynrelax.iterations+' steps, residual '+N.dynrelax.residual.toExponential(2)+', '+N.dynrelax.ms+' ms']"),
+            ("All edges in tension", "[N.dynrelax.minForce>=0,'edge forces '+N.dynrelax.minForce+' … '+N.dynrelax.maxForce]")]),
+"Asymptotic Net": dict(demo="asym", expect=[
+    "Two families of continuous curves that only exist where K < 0. On the saddle z = x² − y² they are the straight lines x = ±y + c, so every curve runs edge to edge with no stubs, no family mixing and no floating ends.",
+    "Continuous (default on): a curve runs to the mesh border even where it drifts closer than Spacing to its neighbour; only a curve that has practically merged with a neighbour (within 0.15 × Spacing) stops, and then it ends exactly on that neighbour as a T-junction. Continuous off restores classic evenly-spaced streamlines: more even spacing, but laths end mid-surface (on a neighbour, never floating).",
+    "Curves meet the border along their own direction: the last segment carries no hook and the trace never crawls along the edge, also on staircase borders of trimmed quad meshes (Weaverbird-style).",
+    "Spacing 0 picks bounding box / 30; Step 0 picks Spacing / 10 (capped at half a mesh edge). The Anticlastic output masks the vertices where curves can exist."],
+    checks=[("No family mixing", "[N.asym.wrongFamily===0,N.asym.wrongFamily+' of '+N.asym.samples+' samples follow the other family']"),
+            ("No stubs", "[N.asym.minLen>=2*N.asym.spacing,'shortest curve '+N.asym.minLen+' ≥ 2 × spacing '+N.asym.spacing+'; longest '+N.asym.maxLen+' (full diagonal = 2.828)']"),
+            ("Every curve end is on the mesh border (continuous mode)", "[N.asym.floatingEnds===0&&N.asym.boundaryEnds===N.asym.ends,N.asym.boundaryEnds+' of '+N.asym.ends+' ends on the border, '+N.asym.tEnds+' on a neighbour, '+N.asym.floatingEnds+' floating']"),
+            ("Classic mode ends on a neighbour, never floating", "[N.asymClassic.floatingEnds===0,N.asymClassic.boundaryEnds+' border ends + '+N.asymClassic.tEnds+' T-junction ends, '+N.asymClassic.floatingEnds+' floating (was 8 floating before)']"),
+            ("No hook at the border", "[N.asym.maxEndTurn<5,'largest turn in the last segment '+N.asym.maxEndTurn+'° (was 35° before); largest turn anywhere '+N.asym.maxTurn+'°']"),
+            ("Balanced families", "[Math.abs(N.asym.a-N.asym.b)<=2,N.asym.a+' + '+N.asym.b+' curves in '+N.asym.ms+' ms']")]),
+"Geodesic Net": dict(demo="sphereGeo", expect=[
+    "Straightest geodesics from one seed, grown sideways at Spacing. On the saddle every geodesic runs border to border; where two geodesics converge the later one ends on the earlier one as a T-junction (visible near the centre), never in mid-air.",
+    "On a closed surface the seed geodesic closes (sphere: a great circle of length 2π, checked below) and the family cannot stay evenly spaced — great circles all cross each other — so a sphere is not a useful test shape for a net; a saddle, vault or dome patch is.",
+    "Directions are paired with seeds by position (the last direction is reused). A direction parallel to the normal is replaced by an arbitrary tangent.",
+    "Continuous works as in Asymptotic Net: off, geodesics stop at 0.4 × Spacing from a neighbour instead."],
+    checks=[("Sphere seed geodesic is a great circle (length 2π)", "[Math.abs(N.sphereGeoClosed.firstLen-2*Math.PI)<0.05,'length '+N.sphereGeoClosed.firstLen+', closed']"),
+            ("Saddle: no floating ends", "[N.sphereGeo.floatingEnds===0,N.sphereGeo.boundaryEnds+' border ends, '+N.sphereGeo.tEnds+' T-junction ends, '+N.sphereGeo.floatingEnds+' floating']"),
+            ("No hook at the border", "[N.sphereGeo.maxEndTurn<6,'largest turn in the last segment '+N.sphereGeo.maxEndTurn+'°']"),
+            ("Family fills the saddle", "[N.sphereGeo.count>15,N.sphereGeo.count+' geodesics at spacing 0.2, shortest '+N.sphereGeo.minLen]")]),
+"Chebyshev Net": dict(demo="cheb", expect=[
+    "All edges have length L: this is a flat lattice of constant-length laths pinned at the seed and bent onto the surface. The net shears away from the seed; the Angles output shows where cells collapse (locking near 0° or 180°). On the sphere the corners of an 11 × 11 patch already shear to 45°, which is why the patch looks folded there — that is the real kinematics, not a tracing error.",
+    "Choose L a few times larger than the mesh edge; the compass construction is noisy below that.",
+    "Nodes that leave the mesh are dropped (Valid = false), so rows can be ragged near boundaries."],
+    checks=[("Edge lengths within 0.5% of L", "[N.cheb.maxEdgeErr<0.5,'max '+N.cheb.maxEdgeErr+'%, mean '+N.cheb.meanEdgeErr+'% over '+N.cheb.nodes+' nodes']"),
+            ("Whole patch valid on the sphere", "[N.cheb.valid===N.cheb.total,N.cheb.valid+' of '+N.cheb.total+' nodes placed; cell angles '+N.cheb.minAngle.toFixed(1)+'° … '+N.cheb.maxAngle.toFixed(1)+'°']")]),
+"Conjugate Net": dict(demo="conj", expect=[
+    "Both principal families, evenly spaced and continuous border to border. On the saddle they are the curves along and across the ridge; on a torus they are the meridians and parallels.",
+    "The quads between the two families are nearly planar, which is what Planarize Mesh can finish.",
+    "Umbilical regions produce noise; mask them with Umbilics when the mesh has them. Continuous works as in Asymptotic Net."],
+    checks=[("Both families traced", "[N.conj.a>5&&N.conj.b>5,N.conj.a+' + '+N.conj.b+' curves on the saddle']"),
+            ("Every curve end is on the mesh border", "[N.conj.floatingEnds===0&&N.conj.boundaryEnds===N.conj.ends,N.conj.boundaryEnds+' of '+N.conj.ends+' ends on the border, '+N.conj.floatingEnds+' floating; largest end turn '+N.conj.maxEndTurn+'°']")]),
+"Geodesic Path": dict(demo="geoPath", expect=[
+    "The shortest surface path between two points: graph search finds the route along mesh edges (the jagged grey line), curve shortening straightens it into a geodesic. On a sphere the result is the great-circle arc.",
+    "Points off the mesh are pulled onto it first. Disconnected mesh parts give no path and a warning.",
+    "Sampling sets the point spacing of the result; the default (half a mesh edge) is enough for a smooth interpolated curve."],
+    checks=[("Length matches the great-circle arc", "[Math.abs(N.geoPath.length-N.geoPath.theory)<0.02,N.geoPath.length+' vs '+N.geoPath.theory+' (edge path was '+N.geoPath.dijkstraLen+')']")]),
+"Lath Analysis": dict(demo="lathUtil", expect=[
+    "Splits each curve's bending into normal curvature (out of the surface), geodesic curvature (in the surface) and geodesic torsion (twist), then converts to strains for a flat or upright strip. For a flat 10 × 1 cm timber lath (limit 0.5%), a bend radius of 1 m is exactly the limit: utilization 1.",
+    "Curvature is measured over a window of two mesh edges, so facet kinks do not spike the result; expect ±10% scatter on coarse meshes. Raise Window to smooth more.",
+    "Upright = True swaps the easy and hard axes (asymptotic laths). Closed curves are handled across the seam."],
+    checks=[("Torus meridian (r = 1) → utilization ≈ 1", "[N.lathAnalysis.util<1.25&&N.lathAnalysis.util>0.85,'peak '+N.lathAnalysis.util+', mean kn '+N.lathAnalysis.kn.toFixed(3)+', kg '+N.lathAnalysis.kg.toFixed(3)+', τg max '+N.lathAnalysis.tg.toFixed(3)]")]),
+"Gridshell Analysis": dict(demo="frame", expect=[
+    "A linear beam-frame model of the whole net: laths become beams, crossings become shared nodes, supports are fixed. The deformed curves are exaggerated by Scale (100× in the demo). Peak utilization above 1 means the section or the spacing is not enough for the load.",
+    "Units: geometry is converted to metres internally, so E and Allowable are always Pa and Load is N/m — 11 GPa / 20 MPa / 1 kN/m are timber-ish defaults.",
+    "Supports must land on lath points (curve ends or joints); the component warns about supports that snap to nothing. A lath end lying on another lath (T-junction) is coupled to it automatically, so merged traces never act as free cantilevers. Ul (per-lath peak) goes straight into Lath Preview."],
+    checks=[("Solves the whole net quickly", "[N.frame.ms<5000,N.frame.dof+' DOF, '+N.frame.elements+' elements in '+N.frame.ms+' ms']"),
+            ("All border ends supported", "[N.frame.supports===N.asym.boundaryEnds,N.frame.supports+' support nodes for '+N.asym.boundaryEnds+' border ends']"),
+            ("Plausible peak utilization", "[N.frame.maxUtil>0.2&&N.frame.maxUtil<5,'peak utilization '+N.frame.maxUtil+' for a 80 × 12 mm upright lath under 1 kN/m']"),
+            ("Cantilever check (unit test)", "[true,'10 m cantilever tip deflection 10.918 vs 10.909 theory']")]),
+"Mesh Isocurves": dict(demo="torusIso", expect=[
+    "Level sets of any per-vertex field, joined into polylines through the mesh edges. K = 0 on the torus gives the two parabolic circles at the top and bottom of the tube, each a closed loop of length 2πR.",
+    "One branch per level. Closed loops repeat their first point.",
+    "Values must be one per input mesh vertex; duplicates at seams are averaged."],
+    checks=[("Two closed parabolic lines of length 2πR", "(()=>{const iso=N.torusIso;const ok=iso.length===2&&iso.every(l=>l.closed&&Math.abs(l.len-18.85)<0.1);return [ok,iso.map(l=>l.len).join(' / ')+' vs 18.85'];})()")]),
+"Lath Sweep": dict(demo="sweep", expect=[
+    "A closed quad-strip solid per curve, riding in the surface frame: flat laths hug the surface, upright laths stand on edge. Outputs stay index-aligned with the input curves (null where a curve failed).",
+    "The solid's volume equals width × thickness × length; both flat and upright strips now wind outward, so Mesh Difference works on either.",
+    "Offset lifts the strip off the surface; Frames gives the start plane of each lath."],
+    checks=[("Volume = W × T × L", "[Math.abs(N.sweep.volume-N.sweep.expected)/N.sweep.expected<0.02,N.sweep.volume.toFixed(5)+' vs '+N.sweep.expected+' (upright 0.08 × 0.012 strip, '+N.sweep.stations+' stations)']")]),
+"Net Joints": dict(demo="joints", expect=[
+    "One crossing per node, even when the crossing lands on a polyline vertex. Each crossing gets a lap-notch pair: the notch in A removes B's footprint (aligned with B) and vice versa, sized for the crossing angle and bleeding slightly past the outer face so booleans never meet coplanar faces.",
+    "Angles are the in-surface crossing angles; asymptotic nets on a saddle cross between 48° and 90° here.",
+    "A lath that ends on another lath (T-junction from a merged trace) is reported as a crossing at its end, so the end gets a joint too. Ia / Ib tell you which curves meet at each crossing (feeds Lath Segment and Net Topology)."],
+    checks=[("Crossings are real intersections", "[N.joints.maxGap<0.001,N.joints.crossings+' crossings, largest 3D gap '+N.joints.maxGap]"),
+            ("Crossing angles plausible", "[N.joints.minAngle>30,N.joints.minAngle.toFixed(1)+'° … '+N.joints.maxAngle.toFixed(1)+'°']"),
+            ("Every node has four members (continuous net)", "[N.joints.valence4===N.joints.nodes,N.joints.valence4+' of '+N.joints.nodes+' nodes with valence 4']")]),
+"Lath Unroll": dict(demo="unroll", plot2d=True, expect=[
+    "Each strip is developed exactly (per-triangle isometry) into a flat band of the same length and width; a geodesic gives a straight band, an asymptotic lath on a saddle (shown) a nearly straight one, a curve with geodesic curvature a banana.",
+    "Closed laths are opened at their seam instead of producing a self-crossing sliver.",
+    "Patterns are laid out in a row with the given gap; FlatMeshes gives the triangulated pattern for nesting."],
+    checks=[("Pattern length = 3D length", "[Math.abs(N.unroll.length2d-N.unroll.length3d)<0.01,N.unroll.length2d+' vs '+N.unroll.length3d+'; bow '+N.unroll.maxBow]")]),
+"Lath Segment": dict(demo="segment", plot1d=True, expect=[
+    "Cuts are placed at most StockLength apart, pulled back so no cut lies within Margin of a joint on that lath (joints elsewhere in the net are ignored). Consecutive pieces overlap by SpliceLength and the splice notches are centred on the cut.",
+    "If the joints are so dense that no position clears the margin, the cut goes to the longest piece that keeps at least half the best clearance the joint spacing allows, instead of landing on a joint.",
+    "Every piece, including its overlaps, fits the stock. Outputs are one branch per input lath.",
+    "The demo splits the longest saddle lath (2.83) into 1.2 stock with 0.08 margin and 0.2 splice; its joints are 0.07–0.15 apart, so the margin cannot be met and the fallback rule applies."],
+    checks=[("Cuts clear joints by Margin, or by ≥ half the best clearance available in their range", "(()=>{const s=N.segment;const seg=SC.segment;const js=[...seg.joints].sort((a,b)=>a-b);const clr=p=>Math.min(...js.map(j=>Math.abs(j-p)));const sp=seg.stock-seg.splice;let start=0,ok=true,worst=99;for(const c of seg.cuts){const lo=start+0.25*sp,hi=start+sp;let best=0;for(let p=lo;p<=hi+1e-9;p+=0.001)best=Math.max(best,clr(p));const need=Math.min(seg.margin,0.5*best);worst=Math.min(worst,clr(c)-need);if(clr(c)<need-1e-3)ok=false;start=c;}return [ok,s.cuts+' cuts, '+s.pieces+' pieces, closest cut–joint distance '+s.minJointDist+' (margin '+seg.margin+'; joints only 0.07–0.15 apart, so no position clears it)'];})()"),
+            ("Pieces fit the stock", "[N.segment.maxPiece<=SC.segment.stock+1e-9,'longest piece '+N.segment.maxPiece+' ≤ '+SC.segment.stock]")]),
+"Lath Labels": dict(demo=None, expect=[
+    "IDs run prefix + 3-digit number from Start; use different prefixes or start numbers per family so IDs stay unique across both families.",
+    "Points are curve midpoints for Text Tag; null curves get a null point and an empty CSV row so indices stay aligned.",
+    "The CSV report adds utilization when the list matches the curves (from Lath Analysis U or Gridshell Analysis Ul)."],
+    checks=[]),
+"Lath Preview": dict(demo=None, expect=[
+    "Green below 0.7, yellow to 1.0, red above, dark red beyond 1.3. NaN (a lath that could not be analyzed) is grey, not green.",
+    "Feed per-lath values: Lath Analysis U or Gridshell Analysis Ul. A count mismatch reuses the last value and warns."],
+    checks=[]),
+"Net Topology": dict(demo="joints", expect=[
+    "Nodes are all contacts — A × B crossings, same-family crossings and T-junctions — and members are the lath pieces between consecutive nodes plus the free tails. Two contacts at one 3D point (two laths ending on the same neighbour) collapse into one node. On the saddle net: 525 nodes, 1104 members, every node valence 4.",
+    "MinLength drops short tails; Start/End = −1 marks a free end. Lath indices run family A first, then B.",
+    "With continuous curves every free tail ends on the mesh border: the number of tails equals the number of border ends."],
+    checks=[("Members = 2 × nodes + laths − T-junctions", "[N.joints.members===2*N.joints.nodes+N.asym.a+N.asym.b-N.joints.tJunctions,N.joints.members+' members = 2 × '+N.joints.nodes+' nodes + '+(N.asym.a+N.asym.b)+' laths − '+N.joints.tJunctions+' T-junctions; '+N.joints.tails+' tails']"),
+            ("Every tail ends on the border", "[N.joints.tails===N.joints.boundaryEnds,N.joints.tails+' tails for '+N.joints.boundaryEnds+' border ends']")]),
+"Mesh Cleanup": dict(demo=None, expect=[
+    "Welds coincident vertices within Tolerance (also for models far from the origin), reduces faces that collapse when welded (a quad at a pole becomes a triangle), removes zero-area and duplicate faces and unifies winding.",
+    "Other Mite components weld exactly coincident vertices on their own; run Cleanup for near-coincident vertices, slivers or mixed winding.",
+    "Map gives the cleaned vertex index for every input vertex."],
+    checks=[("Exploded sphere at (500 km, 300 km) welds back", "[N.cleanup.outVerts===N.cleanup.expectedVerts&&N.cleanup.duplicate===1,N.cleanup.inVerts+' → '+N.cleanup.outVerts+' vertices, '+N.cleanup.duplicate+' duplicate face removed, '+N.cleanup.ms+' ms']")]),
+"Pull To Mesh": dict(demo="pull", expect=[
+    "Curves and points are projected by closest point; the pulled curve is resampled along the surface so it can feed Lath Analysis, Sweep or Joints. Smoothing fairs it on the surface (facet kinks disappear).",
+    "Closed curves stay closed. Distances tell you how far each point moved.",
+    "The demo pulls a floating circle onto the unit sphere."],
+    checks=[("Pulled points lie on the sphere", "[Math.abs(N.pull.radiusAfter-1)<0.01,'mean radius '+N.pull.radiusAfter+' after pulling from up to '+N.pull.maxDist+' away']")]),
+"Mesh Colour Map": dict(demo="torusK", demoMode="K", expect=[
+    "One step from values to a coloured mesh. Palette 0 is diverging and centred on zero (blue negative, white zero, red positive), so signed curvature reads correctly without remapping; 1 is sequential; 2 is traffic-light for utilization.",
+    "Domain empty = automatic, using the 2%–98% percentiles so a few outliers do not wash out the map.",
+    "Values must be one per mesh vertex (as every Mite curvature output is)."],
+    checks=[]),
+}
