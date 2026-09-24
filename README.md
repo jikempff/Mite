@@ -129,6 +129,19 @@ or **Asymptotic Net**, check strips with **Lath Analysis** and the whole network
 split to stock with **Lath Segment**, and produce cutting patterns with **Lath Unroll**
 plus IDs and a BOM from **Lath Labels**.
 
+## Changelog
+
+### 1.2.1
+- Continuous curves (new `Continuous` input on Asymptotic Net, Geodesic Net, Conjugate Net, Curvature Streamlines): laths run border to border; merged traces end on their neighbour as T-junctions, never floating.
+- Curves meet the mesh border along their own direction — no hooks, no crawling along the edge, also on staircase borders of trimmed or subdivided quad meshes.
+- Net Intersections reports T-junctions and same-family crossings (`FindAll`); Net Topology merges coincident nodes; Gridshell Analysis couples lath ends resting on another lath automatically.
+- Lath Analysis measures curvature over a window (new `Window` input) instead of per facet; Lath Segment picks the best-clearance cut when joints are denser than the margin.
+- Closed streamlines/geodesics close after one loop on coarse meshes; evenly spaced families keep their spacing on strongly curved tubes.
+- Mite Bench review page generator in `tools/webgen`; roadmap in `docs/ROADMAP.md`.
+
+### 1.2.0
+- Review release: 27 components, built-in sparse solver, Dynamic Relaxation, Mesh Isocurves, Pull To Mesh, Mesh Colour Map, Geodesic Path, Net Topology.
+
 ## License
 
 MIT

@@ -109,7 +109,7 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
 
 <div class="wrap">
   <header class="masthead">
-    <h1><small>Grasshopper plugin · version 1.2.0 · 27 components</small>Mite Bench</h1>
+    <h1><small>Grasshopper plugin · version 1.2.1 · 27 components</small>Mite Bench</h1>
     <p>Every component with its inputs, outputs and defaults, what it should do, a self-test run on the real Mite.Core library, and a live view of the result. Tick the ones that make sense, note what doesn't, and copy the summary back to the chat.</p>
     <div class="progress"><b><span id="done">0</span> / 27</b>reviewed<div class="bar"><i id="barfill"></i></div></div>
   </header>
@@ -125,14 +125,14 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
 
   <main>
     <div class="intro">
-      <div><h4>Self-tests</h4><p>Each PASS / FAIL chip comes from running the shipped 1.2.0 core on analytic shapes (unit sphere, torus R = 3 r = 1, saddle z = x² − y², flat grids) and comparing with theory. The numbers next to the chip are the actual results.</p></div>
+      <div><h4>Self-tests</h4><p>Each PASS / FAIL chip comes from running the 1.2.1 core on analytic shapes (unit sphere, torus R = 3 r = 1, saddle z = x² − y², flat grids) and comparing with theory. The numbers next to the chip are the actual results.</p></div>
       <div><h4>Live views</h4><p>Curves and meshes in the viewers are the library's real output for those shapes, not illustrations. Drag to orbit, scroll to zoom. Family A is teal, family B plum.</p></div>
       <div><h4>Your review</h4><p>Ticks and notes stay in this browser only. "Copy review summary" puts them on the clipboard as text you can paste into the chat.</p></div>
     </div>
     /*__CARDS__*/
     <pre id="summary" hidden></pre>
   </main>
-  <footer class="foot">Generated from the Mite 1.2.0 sources and Mite.Core test run of 2026-09-24 · github.com/jikempff/Mite</footer>
+  <footer class="foot">Generated from the Mite 1.2.1 sources and Mite.Core test run of 2026-09-24 · github.com/jikempff/Mite</footer>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -156,7 +156,7 @@ document.querySelectorAll('[data-note]').forEach(ta => { ta.value = store.get('n
 updateProgress();
 
 function summary(){
-  const lines = ['Mite 1.2.0 review — ' + new Date().toLocaleDateString()];
+  const lines = ['Mite 1.2.1 review — ' + new Date().toLocaleDateString()];
   let ok = 0, fails = [];
   ORDER.forEach(id => {
     const card = document.getElementById(id); const name = card.dataset.name;
