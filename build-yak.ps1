@@ -60,17 +60,26 @@ if (Test-Path $iconPng) {
 }
 
 # --- Build Yak package ---
+# Use the Yak CLI from PATH, or the one that ships with Rhino 8
+$yakExe = Get-Command yak -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+if (-not $yakExe) {
+    $rhinoYak = 'C:\Program Files\Rhino 8\System\Yak.exe'
+    if (Test-Path $rhinoYak) { $yakExe = $rhinoYak } else { throw 'Yak CLI not found (install it or Rhino 8).' }
+}
+# Remove packages of earlier versions so the newest file is the one just built
+Get-ChildItem $distDir -Filter '*.yak' | Remove-Item -Force
+
 Write-Host '==> Running yak build...' -ForegroundColor Cyan
 Push-Location $distDir
 try {
-    yak build
+    & $yakExe build
     if ($LASTEXITCODE -ne 0) { throw 'yak build failed.' }
     $yakFile = Get-ChildItem -Filter '*.yak' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     Write-Host "==> Package created: $($yakFile.FullName)" -ForegroundColor Green
     Write-Host ''
     Write-Host 'To publish:' -ForegroundColor Yellow
     $yakPath = $yakFile.FullName
-    Write-Host ('  yak push "' + $yakPath + '"')
+    Write-Host ('  & "' + $yakExe + '" push "' + $yakPath + '"')
 } finally {
     Pop-Location
 }
