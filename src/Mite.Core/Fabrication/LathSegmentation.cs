@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Mite.Core.Geometry;
 
 namespace Mite.Core.Fabrication;
@@ -91,20 +92,25 @@ public static class LathSegmentation
             double end = start + spacing;
             double minEnd = start + 0.25 * spacing;
 
-            // Pull the cut back until it clears every joint by the margin;
-            // keep a minimum useful segment, otherwise accept the clash
-            for (int guard = 0; guard < joints.Count + 1; guard++)
+            // Keep the full stock length when it clears every joint by the
+            // margin; otherwise pull the cut back to the longest piece that
+            // does. When the joints are so dense that nothing in the useful
+            // range clears the margin, take the longest piece whose clearance
+            // is at least half the best clearance available, instead of an
+            // arbitrary clash.
+            if (margin > 0 && joints.Count > 0 && Clearance(joints, end) < margin)
             {
-                double clash = double.NaN;
-                foreach (double j in joints)
+                var candidates = new List<double> { end, minEnd };
+                for (int k = 0; k < joints.Count; k++)
                 {
-                    if (j >= end + margin) break;
-                    if (j > end - margin) { clash = j; break; }
+                    candidates.Add(joints[k] - margin);
+                    candidates.Add(joints[k] + margin);
+                    if (k + 1 < joints.Count) candidates.Add(0.5 * (joints[k] + joints[k + 1]));
                 }
-                if (double.IsNaN(clash)) break;
-                double candidate = clash - margin;
-                if (candidate < minEnd) break;
-                end = candidate;
+                candidates.RemoveAll(p => p < minEnd || p > start + spacing);
+                double bestClear = candidates.Max(p => Clearance(joints, p));
+                double threshold = bestClear >= margin ? margin : 0.5 * bestClear;
+                end = candidates.Where(p => Clearance(joints, p) >= threshold - 1e-12).Max();
             }
 
             cutArcs.Add(end);
@@ -123,6 +129,18 @@ public static class LathSegmentation
         }
 
         return new Result(segments, cutPoints.ToArray(), cutArcs.ToArray());
+    }
+
+    /// <summary>Distance from an arc-length position to the nearest joint (joints sorted ascending).</summary>
+    private static double Clearance(List<double> joints, double pos)
+    {
+        int idx = joints.BinarySearch(pos);
+        if (idx >= 0) return 0.0;
+        idx = ~idx;
+        double d = double.MaxValue;
+        if (idx < joints.Count) d = Math.Min(d, joints[idx] - pos);
+        if (idx > 0) d = Math.Min(d, pos - joints[idx - 1]);
+        return d;
     }
 
     /// <summary>Polyline piece between arc-length positions a and b (inclusive ends).</summary>

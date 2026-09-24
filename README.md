@@ -28,6 +28,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - **Conjugate Net** — both principal families evenly spaced: an approximate conjugate net, the layout for planar-quad (PQ) panelization
 - **Geodesic Path** — shortest geodesic between two points (graph search + on-surface curve shortening)
 - Tracing is scale-aware: step, step count and spacing default to values derived from the mesh, so millimetre and metre models behave the same
+- Curves are continuous: with **Continuous** on (default) every traced curve runs border to border or closes on itself, and a curve that merges into a neighbour ends exactly on it as a T-junction — no laths floating in the middle of the surface. Curves meet the mesh border along their own direction (no hook, no crawl along the edge), also on the staircase borders of trimmed or subdivided quad meshes
 
 ### Analysis
 - **Lath Analysis** — buildability check for strip laths: Darboux-frame decomposition (geodesic curvature, normal curvature, geodesic torsion) converted to bending strains against a material limit
@@ -40,7 +41,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - **Lath Segment** — splits laths to stock length, cuts kept away from joints, with half-lap splice notch solids
 - **Lath Labels** — lath IDs, label anchor points, and a CSV bill of materials
 - **Lath Preview** — color-codes laths by utilization (green → red)
-- **Net Topology** — nodes and members of a two-family net as a structural graph (for Karamba-style analysis or a node schedule)
+- **Net Topology** — nodes and members of a two-family net as a structural graph (for Karamba-style analysis or a node schedule); same-family crossings and T-junctions are nodes too
 
 ### Utilities
 - **Mesh Cleanup** — weld vertices (also far from the origin), reduce collapsed faces, drop degenerate/duplicate faces, unify winding

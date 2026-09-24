@@ -27,6 +27,7 @@ public class ConjugateNetComponent : MiteComponent
         pManager.AddIntegerParameter("Seed", "S", "First seed vertex (-1 = nearest the mesh centroid)", GH_ParamAccess.item, -1);
         pManager.AddPointParameter("SeedPoint", "P", "First seed as a point (overrides Seed)", GH_ParamAccess.item);
         pManager.AddIntegerParameter("MaxCurves", "Mx", "Cap on curves per family (default 200)", GH_ParamAccess.item, 200);
+        pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
         pManager[5].Optional = true;
     }
 
@@ -41,7 +42,7 @@ public class ConjugateNetComponent : MiteComponent
         var input = LoadMesh(DA, 0);
         if (input == null) return;
 
-        double spacing = 0, step = 0; int maxSteps = 0, seed = -1, maxCurves = 200;
+        double spacing = 0, step = 0; int maxSteps = 0, seed = -1, maxCurves = 200; bool continuous = true;
         Point3d seedPoint = Point3d.Unset;
         DA.GetData(1, ref spacing);
         DA.GetData(2, ref step);
@@ -49,6 +50,7 @@ public class ConjugateNetComponent : MiteComponent
         DA.GetData(4, ref seed);
         DA.GetData(5, ref seedPoint);
         DA.GetData(6, ref maxCurves);
+        DA.GetData(7, ref continuous);
 
         var data = input.Data;
         var proj = new MeshProjection(data);
@@ -57,7 +59,7 @@ public class ConjugateNetComponent : MiteComponent
         var opts = new EvenlySpacedNet.Options
         {
             Spacing = spacing, StepSize = step, MaxSteps = maxSteps,
-            MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled
+            MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous
         };
 
         var net = ConjugateNet.Trace(data, firstSeed, opts);

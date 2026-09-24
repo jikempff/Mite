@@ -14,6 +14,7 @@ public class NetTopologyComponent : MiteComponent
         : base("Net Topology", "NetTopo",
             "Turns a two-family lath net into a structural graph: unique nodes at the crossings " +
             "and one member per lath piece between consecutive crossings (free tails included). " +
+            "Same-family crossings and T-junctions (a lath ending on a neighbour) are nodes too. " +
             "Feed Nodes / Members to a structural package (e.g. Karamba) or use the node " +
             "schedule for fabrication.",
             "Fabrication", "NetTopology") { }
@@ -63,7 +64,7 @@ public class NetTopologyComponent : MiteComponent
 
         var familyA = NetJointsComponent.SampleAligned(curvesA, sampling);
         var familyB = NetJointsComponent.SampleAligned(curvesB, sampling);
-        var crossings = NetIntersections.Find(familyA, familyB, tolerance);
+        var crossings = NetIntersections.FindAll(familyA, familyB, tolerance);
         if (crossings.Count == 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "No crossings found between the families.");
 

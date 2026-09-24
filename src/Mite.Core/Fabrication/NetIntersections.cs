@@ -30,13 +30,48 @@ public static class NetIntersections
         /// <summary>3D gap between the polylines at the crossing (~0 for curves on the same surface).</summary>
         public readonly double Gap;
 
+        /// <summary>
+        /// Which family list CurveA / CurveB index into: 0 = family A, 1 = family B.
+        /// Cross-family crossings are (0, 1); same-family crossings and
+        /// T-junctions within one family are (0, 0) or (1, 1).
+        /// </summary>
+        public readonly int FamilyOfA, FamilyOfB;
+
+        /// <summary>True when one curve ends on the other (a T-junction) rather than crossing it.</summary>
+        public bool IsTJunction => EndA || EndB;
+        internal readonly bool EndA, EndB;
+
         public Crossing(int curveA, int segmentA, double paramA,
             int curveB, int segmentB, double paramB, Vec3d point, double gap)
+            : this(curveA, segmentA, paramA, curveB, segmentB, paramB, point, gap, 0, 1, false, false) { }
+
+        public Crossing(int curveA, int segmentA, double paramA,
+            int curveB, int segmentB, double paramB, Vec3d point, double gap,
+            int familyOfA, int familyOfB, bool endA = false, bool endB = false)
         {
             CurveA = curveA; SegmentA = segmentA; ParamA = paramA;
             CurveB = curveB; SegmentB = segmentB; ParamB = paramB;
             Point = point; Gap = gap;
+            FamilyOfA = familyOfA; FamilyOfB = familyOfB;
+            EndA = endA; EndB = endB;
         }
+    }
+
+    /// <summary>
+    /// All node-forming contacts of a net: crossings between the families plus
+    /// crossings and T-junctions within each family (a lath that ends on a
+    /// neighbouring lath of its own family, as continuous tracing produces
+    /// where curves merge). Use this for topology and structural coupling;
+    /// <see cref="Find"/> for the A×B joints alone.
+    /// </summary>
+    public static List<Crossing> FindAll(
+        IReadOnlyList<Vec3d[]> familyA, IReadOnlyList<Vec3d[]> familyB, double tolerance = 0.0)
+    {
+        var all = Find(familyA, familyB, tolerance);
+        foreach (var c in Find(familyA, null, tolerance)) all.Add(c);
+        foreach (var c in Find(familyB, null, tolerance))
+            all.Add(new Crossing(c.CurveA, c.SegmentA, c.ParamA, c.CurveB, c.SegmentB, c.ParamB, c.Point, c.Gap, 1, 1, c.EndA, c.EndB));
+        return all;
     }
 
     /// <summary>
@@ -52,6 +87,8 @@ public static class NetIntersections
         bool selfMode = familyB == null;
         var segsB = CollectSegments(selfMode ? familyA : familyB!);
         var segsA = CollectSegments(familyA);
+        var lastA = LastSegments(familyA);
+        var lastB = selfMode ? lastA : LastSegments(familyB!);
 
         double avgSeg = 0;
         int segCount = 0;
@@ -93,12 +130,18 @@ public static class NetIntersections
                 if (gap > tol) continue;
 
                 // Params at the far end (≈1) are reported by the next segment
-                // as ≈0 — skipping them here keeps exactly one report per crossing
-                if (s > 1.0 - 1e-9 || t > 1.0 - 1e-9) continue;
+                // as ≈0 — skipping them here keeps exactly one report per
+                // crossing. The last segment of a curve has no next segment: a
+                // contact at its far end is the curve's end touching the other
+                // curve (a T-junction) and must be kept.
+                bool aEnd = s > 1.0 - 1e-9, bEnd = t > 1.0 - 1e-9;
+                if (aEnd && sa.Segment != lastA[sa.Curve]) continue;
+                if (bEnd && sb.Segment != lastB[sb.Curve]) continue;
+                bool aStart = s < 1e-9 && sa.Segment == 0, bStart = t < 1e-9 && sb.Segment == 0;
 
                 crossings.Add(new Crossing(
                     sa.Curve, sa.Segment, s, sb.Curve, sb.Segment, t,
-                    0.5 * (c1 + c2), gap));
+                    0.5 * (c1 + c2), gap, 0, selfMode ? 0 : 1, aEnd || aStart, bEnd || bStart));
             }
         }
 
@@ -135,6 +178,20 @@ public static class NetIntersections
         public readonly Vec3d A, B;
         public readonly int Curve, Segment;
         public Seg(Vec3d a, Vec3d b, int curve, int segment) { A = a; B = b; Curve = curve; Segment = segment; }
+    }
+
+    private static int[] LastSegments(IReadOnlyList<Vec3d[]> family)
+    {
+        var last = new int[family.Count];
+        for (int c = 0; c < family.Count; c++)
+        {
+            var line = family[c];
+            int l = -1;
+            for (int i = 0; i + 1 < line.Length; i++)
+                if ((line[i + 1] - line[i]).LengthSquared > 1e-24) l = i;
+            last[c] = l;
+        }
+        return last;
     }
 
     private static List<Seg> CollectSegments(IReadOnlyList<Vec3d[]> family)

@@ -30,6 +30,7 @@ public class StreamlinesComponent : MiteComponent
         pManager.AddBooleanParameter("AutoSpace", "A", "Fill the mesh with evenly spaced lines grown from the first seed", GH_ParamAccess.item, false);
         pManager.AddNumberParameter("Spacing", "Sp", "Target distance between adjacent lines (AutoSpace; 0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddIntegerParameter("MaxCurves", "Mx", "Cap on the number of lines (AutoSpace, default 200)", GH_ParamAccess.item, 200);
+        pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
         pManager[1].Optional = true;
         pManager[5].Optional = true;
     }
@@ -54,8 +55,9 @@ public class StreamlinesComponent : MiteComponent
         DA.GetDataList(5, seedPts);
         DA.GetData(6, ref autoSpace);
         DA.GetData(7, ref spacing);
-        int maxCurves = 200;
+        int maxCurves = 200; bool continuous = true;
         DA.GetData(8, ref maxCurves);
+        DA.GetData(9, ref continuous);
 
         var data = input.Data;
         var proj = new MeshProjection(data);
@@ -69,7 +71,7 @@ public class StreamlinesComponent : MiteComponent
             var opts = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps, ShouldCancel = Cancelled,
-                MaxCurves = Math.Max(1, maxCurves)
+                MaxCurves = Math.Max(1, maxCurves), Continuous = continuous
             };
             lines = EvenlySpacedNet.TraceField(data, dirs, null, seeds.Count > 0 ? seeds[0] : -1, opts);
             ReportTracing(opts, "Streamlines");

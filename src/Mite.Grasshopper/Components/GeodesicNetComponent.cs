@@ -29,6 +29,7 @@ public class GeodesicNetComponent : MiteComponent
         pManager.AddNumberParameter("Spacing", "Sp", "Target distance between adjacent curves (AutoSpace; 0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddPointParameter("SeedPoints", "P", "Seed points (nearest vertex is used); may be combined with Seeds", GH_ParamAccess.list);
         pManager.AddIntegerParameter("MaxCurves", "Mx", "Cap on the number of curves (AutoSpace, default 200)", GH_ParamAccess.item, 200);
+        pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
         pManager[1].Optional = true;
         pManager[7].Optional = true;
     }
@@ -46,7 +47,7 @@ public class GeodesicNetComponent : MiteComponent
         var seedIdx = new List<int>();
         var seedPts = new List<Point3d>();
         var directions = new List<Vector3d>();
-        double stepSize = 0, spacing = 0; int maxSteps = 0, maxCurves = 200; bool autoSpace = false;
+        double stepSize = 0, spacing = 0; int maxSteps = 0, maxCurves = 200; bool autoSpace = false; bool continuous = true;
         DA.GetDataList(1, seedIdx);
         DA.GetDataList(2, directions);
         DA.GetData(3, ref stepSize);
@@ -55,6 +56,7 @@ public class GeodesicNetComponent : MiteComponent
         DA.GetData(6, ref spacing);
         DA.GetDataList(7, seedPts);
         DA.GetData(8, ref maxCurves);
+        DA.GetData(9, ref continuous);
 
         var data = input.Data;
         var proj = new MeshProjection(data);
@@ -94,7 +96,7 @@ public class GeodesicNetComponent : MiteComponent
             var opts = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
-                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled
+                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous
             };
             lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], opts);
             ReportTracing(opts, "Geodesics");

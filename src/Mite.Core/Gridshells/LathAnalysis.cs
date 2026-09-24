@@ -32,6 +32,16 @@ public static class LathAnalysis
         /// curvature is the easy mode.
         /// </summary>
         public bool Upright { get; set; }
+
+        /// <summary>
+        /// Arc length over which curvature and torsion are measured (0 =
+        /// automatic: twice the average mesh edge length). A polyline that lies
+        /// on a faceted mesh turns by the dihedral angle at every facet edge,
+        /// so vertex-to-vertex curvature spikes at the facet scale even on a
+        /// perfect circle; measuring across a window the size of a few facets
+        /// recovers the curvature of the underlying surface curve.
+        /// </summary>
+        public double Window { get; set; } = 0.0;
     }
 
     public readonly struct Result
@@ -88,51 +98,76 @@ public static class LathAnalysis
             hint = hit.NearestVertex;
         }
 
-        // Geodesic torsion per segment: tau_g = -(dN/ds) . g with g = N x T
-        var segTorsion = new double[n - 1];
-        for (int j = 0; j < n - 1; j++)
-        {
-            Vec3d seg = polyline[j + 1] - polyline[j];
-            double len = seg.Length;
-            if (len < 1e-15) continue;
-
-            Vec3d t = seg / len;
-            Vec3d nAvg = (normals[j] + normals[j + 1]).Normalized();
-            Vec3d g = Vec3d.Cross(nAvg, t).Normalized();
-            segTorsion[j] = -Vec3d.Dot((normals[j + 1] - normals[j]) / len, g);
-        }
         bool closed = n > 3 && (polyline[0] - polyline[n - 1]).LengthSquared < 1e-18;
-        tg[0] = closed ? 0.5 * (segTorsion[n - 2] + segTorsion[0]) : segTorsion[0];
-        tg[n - 1] = closed ? tg[0] : segTorsion[n - 2];
-        for (int i = 1; i < n - 1; i++)
-            tg[i] = 0.5 * (segTorsion[i - 1] + segTorsion[i]);
+        double window = options.Window > 0 ? options.Window : 2.0 * proj.AverageEdgeLength;
 
-        // Curvature decomposition at interior vertices (and across the seam of
-        // a closed lath, whose first/last point is a regular interior point)
-        for (int i = closed ? 0 : 1; i < n - 1; i++)
+        // Cumulative arc length
+        var arc = new double[n];
+        for (int i = 1; i < n; i++) arc[i] = arc[i - 1] + (polyline[i] - polyline[i - 1]).Length;
+        double total = arc[n - 1];
+
+        // Point and normal at a signed arc position, wrapping for closed laths
+        // and clamping to the ends of open ones
+        (Vec3d p, Vec3d nrm, double s) At(double target)
         {
-            Vec3d ePrev = polyline[i] - polyline[i == 0 ? n - 2 : i - 1];
-            Vec3d eNext = polyline[i + 1] - polyline[i];
+            if (closed)
+            {
+                target %= total;
+                if (target < 0) target += total;
+            }
+            else target = Math.Max(0.0, Math.Min(total, target));
+            int k = 1;
+            while (k < n - 1 && arc[k] < target) k++;
+            double segLen = arc[k] - arc[k - 1];
+            double t = segLen > 1e-15 ? (target - arc[k - 1]) / segLen : 0.0;
+            Vec3d nn = ((1 - t) * normals[k - 1] + t * normals[k]).Normalized();
+            return (polyline[k - 1] + t * (polyline[k] - polyline[k - 1]), nn, target);
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            double s0 = arc[i];
+            double half = 0.5 * window;
+            double sBack = s0 - half, sFwd = s0 + half;
+            if (!closed)
+            {
+                // Endpoints of an open lath: one-sided windows
+                sBack = Math.Max(0.0, sBack);
+                sFwd = Math.Min(total, sFwd);
+                if (sFwd - sBack < 1e-12) continue;
+            }
+            var (pb, nb, _) = At(sBack);
+            var (pf, nf, _) = At(sFwd);
+            Vec3d pi = polyline[i];
+
+            Vec3d ePrev = pi - pb, eNext = pf - pi;
             double lPrev = ePrev.Length, lNext = eNext.Length;
             if (lPrev < 1e-15 || lNext < 1e-15) continue;
+            Vec3d tPrev = ePrev / lPrev, tNext = eNext / lNext;
 
-            Vec3d tPrev = ePrev / lPrev;
-            Vec3d tNext = eNext / lNext;
-
+            // Curvature: turning angle over the window, decomposed in the
+            // Darboux frame of the mid tangent
             double dot = Math.Max(-1.0, Math.Min(1.0, Vec3d.Dot(tPrev, tNext)));
             double kappa = Math.Acos(dot) / (0.5 * (lPrev + lNext));
-
+            Vec3d t = (tPrev + tNext);
+            if (t.LengthSquared < 1e-20) t = tNext;
+            t = t.Normalized();
+            Vec3d nrm = normals[i];
+            Vec3d g = Vec3d.Cross(nrm, t);
+            if (g.LengthSquared > 1e-20) g = g.Normalized();
             Vec3d bend = tNext - tPrev;
-            if (bend.LengthSquared < 1e-20) continue;
-            bend = bend.Normalized();
+            if (bend.LengthSquared > 1e-20)
+            {
+                bend = bend.Normalized();
+                kn[i] = kappa * Vec3d.Dot(bend, nrm);
+                kg[i] = kappa * Vec3d.Dot(bend, g);
+            }
 
-            Vec3d t = (tPrev + tNext).Normalized();
-            Vec3d g = Vec3d.Cross(normals[i], t).Normalized();
-
-            kn[i] = kappa * Vec3d.Dot(bend, normals[i]);
-            kg[i] = kappa * Vec3d.Dot(bend, g);
+            // Geodesic torsion: rate of the surface normal's rotation about the
+            // tangent, tau_g = -(dN/ds) . g, over the same window
+            double ds = lPrev + lNext;
+            tg[i] = -Vec3d.Dot((nf - nb) / ds, g);
         }
-        if (closed) { kn[n - 1] = kn[0]; kg[n - 1] = kg[0]; }
 
         // Strain per mode. Flat strip: kn bends about the width axis (fiber
         // distance t/2), kg about the surface normal (fiber distance w/2).

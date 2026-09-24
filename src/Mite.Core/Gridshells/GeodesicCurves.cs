@@ -82,10 +82,20 @@ public static class GeodesicCurves
         MeshProjection proj, Vec3d startPos, int startHint, Vec3d dir,
         double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear)
     {
-        var forward = TraceOneFrom(proj, startPos, startHint, dir, stepSize, maxSteps, stopNear, out bool closed);
+        return TraceBothFrom(proj, startPos, startHint, dir, stepSize, maxSteps, stopNear, out _, out _);
+    }
+
+    /// <param name="startNear">The backward half (start of the returned line) ended on an existing curve.</param>
+    /// <param name="endNear">The forward half (end of the returned line) ended on an existing curve.</param>
+    internal static Vec3d[] TraceBothFrom(
+        MeshProjection proj, Vec3d startPos, int startHint, Vec3d dir,
+        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear, out bool startNear, out bool endNear)
+    {
+        startNear = false;
+        var forward = TraceOneFrom(proj, startPos, startHint, dir, stepSize, maxSteps, stopNear, out bool closed, out endNear);
         if (closed) return forward.ToArray();
 
-        var backward = TraceOneFrom(proj, startPos, startHint, -dir, stepSize, maxSteps, stopNear, out _);
+        var backward = TraceOneFrom(proj, startPos, startHint, -dir, stepSize, maxSteps, stopNear, out _, out startNear);
         return FieldTracer.Join(backward, forward);
     }
 
@@ -93,14 +103,22 @@ public static class GeodesicCurves
         MeshProjection proj, Vec3d startPos, int startHint, Vec3d dir,
         double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear)
     {
-        return TraceOneFrom(proj, startPos, startHint, dir, stepSize, maxSteps, stopNear, out _);
+        return TraceOneFrom(proj, startPos, startHint, dir, stepSize, maxSteps, stopNear, out _, out _);
     }
 
     internal static List<Vec3d> TraceOneFrom(
         MeshProjection proj, Vec3d startPos, int startHint, Vec3d dir,
         double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear, out bool closedLoop)
     {
+        return TraceOneFrom(proj, startPos, startHint, dir, stepSize, maxSteps, stopNear, out closedLoop, out _);
+    }
+
+    internal static List<Vec3d> TraceOneFrom(
+        MeshProjection proj, Vec3d startPos, int startHint, Vec3d dir,
+        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear, out bool closedLoop, out bool stoppedNear)
+    {
         closedLoop = false;
+        stoppedNear = false;
         var points = new List<Vec3d>();
 
         var start = proj.ClosestPoint(startPos, startHint);
@@ -120,6 +138,7 @@ public static class GeodesicCurves
         double captureRadius = Math.Max(0.75 * stepSize, 0.5 * proj.AverageEdgeLength);
         double leaveRadius = Math.Max(8.0 * stepSize, 2.0 * captureRadius);
         double maxStartDist = 0.0;
+        double pathLength = 0.0;
 
         int vert = start.NearestVertex;
         for (int step = 0; step < maxSteps; step++)
@@ -135,14 +154,12 @@ public static class GeodesicCurves
             var hit = proj.ClosestPoint(intended, midHit.NearestVertex);
             Vec3d newPos = hit.Point;
 
-            // Fell off the mesh: the projection clamped the step to a boundary
-            // far from the intended target. End cleanly at the edge instead of
-            // letting the geodesic crawl along the boundary.
-            if ((newPos - intended).Length > 0.5 * stepSize)
+            // Left the mesh: end exactly where the step crosses the border
+            if (FieldTracer.LeftMesh(proj, pos, intended, hit, stepSize, out Vec3d exit))
             {
-                Vec3d clampTravel = newPos - pos;
-                if (Vec3d.Dot(clampTravel, dMid) > 0 && clampTravel.LengthSquared > 0.01 * stepSize * stepSize)
-                    points.Add(newPos);
+                Vec3d clampTravel = exit - pos;
+                if (Vec3d.Dot(clampTravel, dMid) > 0 && clampTravel.LengthSquared > 1e-6 * stepSize * stepSize)
+                    points.Add(exit);
                 break;
             }
 
@@ -150,9 +167,10 @@ public static class GeodesicCurves
             if ((newPos - pos).LengthSquared < 0.01 * stepSize * stepSize) break;
 
             // Ran into an already-traced curve
-            if (stopNear != null && stopNear(newPos)) break;
+            if (stopNear != null && stopNear(newPos)) { stoppedNear = true; break; }
 
             Vec3d travel = newPos - pos;
+            pathLength += travel.Length;
             pos = newPos;
             vert = hit.NearestVertex;
             points.Add(pos);
@@ -161,10 +179,10 @@ public static class GeodesicCurves
 
             // Closed loop: returned to the start after traveling away
             if (step > 4 && FieldTracer.TryCloseLoop(points, pos, startNormal, initialDir,
-                    travel.Normalized(), stepSize, captureRadius, leaveRadius, maxStartDist,
+                    travel.Normalized(), stepSize, captureRadius, leaveRadius, maxStartDist, pathLength,
                     out Vec3d closing))
             {
-                points.Add(closing);
+                FieldTracer.CloseSmoothly(proj, points, closing);
                 closedLoop = true;
                 break;
             }

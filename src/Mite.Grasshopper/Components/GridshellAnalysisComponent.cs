@@ -26,7 +26,7 @@ public class GridshellAnalysisComponent : MiteComponent
     {
         pManager.AddMeshParameter("Mesh", "M", "Reference surface the net lies on", GH_ParamAccess.item);
         pManager.AddCurveParameter("Curves", "C", "Lath centerlines (net curves)", GH_ParamAccess.list);
-        pManager.AddPointParameter("Joints", "J", "Crossing points where laths are coupled (from Net Joints)", GH_ParamAccess.list);
+        pManager.AddPointParameter("Joints", "J", "Crossing points where laths are coupled (from Net Joints or Net Topology nodes). Lath ends lying on another lath (T-junctions) are coupled automatically", GH_ParamAccess.list);
         pManager.AddPointParameter("Supports", "S", "Fixed support points", GH_ParamAccess.list);
         pManager.AddVectorParameter("Load", "L", "Force per unit length in N/m applied along every lath (default: 1 kN/m downward)", GH_ParamAccess.item, new Vector3d(0, 0, -1000));
         pManager.AddNumberParameter("E", "E", "Young's modulus in Pa (default 11 GPa ≈ timber)", GH_ParamAccess.item, 11e9);

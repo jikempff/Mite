@@ -32,6 +32,7 @@ public class LathAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("Thickness", "T", "Strip thickness (default 0.01)", GH_ParamAccess.item, 0.01);
         pManager.AddNumberParameter("MaxStrain", "E", "Allowable bending strain, e.g. sigma/E (default 0.005 ≈ timber; 0.002 steel, 0.008 GFRP)", GH_ParamAccess.item, 0.005);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
+        pManager.AddNumberParameter("Window", "Wn", "Arc length over which curvature is measured (0 = automatic: twice the mesh edge length). Larger windows smooth out facet-scale spikes", GH_ParamAccess.item, 0.0);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -52,12 +53,13 @@ public class LathAnalysisComponent : MiteComponent
         var curves = new List<Curve>();
         if (!DA.GetDataList(1, curves)) return;
         bool upright = false;
-        double width = 0.1, thickness = 0.01, maxStrain = 0.005, sampling = 0.0;
+        double width = 0.1, thickness = 0.01, maxStrain = 0.005, sampling = 0.0, window = 0.0;
         DA.GetData(2, ref upright);
         DA.GetData(3, ref width);
         DA.GetData(4, ref thickness);
         DA.GetData(5, ref maxStrain);
         DA.GetData(6, ref sampling);
+        DA.GetData(7, ref window);
 
         if (width <= 0 || thickness <= 0 || maxStrain <= 0)
         {
@@ -67,7 +69,7 @@ public class LathAnalysisComponent : MiteComponent
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
-        var opts = new LathAnalysis.Options { Upright = upright, Width = width, Thickness = thickness, MaxStrain = maxStrain };
+        var opts = new LathAnalysis.Options { Upright = upright, Width = width, Thickness = thickness, MaxStrain = maxStrain, Window = window };
 
         var buildable = new List<bool>();
         var maxUtil = new List<double>();

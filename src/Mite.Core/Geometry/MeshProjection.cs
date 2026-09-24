@@ -16,6 +16,8 @@ public class MeshProjection
     private readonly Vec3d[] _vertexNormals;
     private readonly double _averageEdgeLength;
     private readonly VertexKdTree _kdTree;
+    private readonly HashSet<long> _boundaryEdges;
+    private readonly bool[] _boundaryVertex;
 
     public MeshData Mesh => _mesh;
 
@@ -45,6 +47,91 @@ public class MeshProjection
             }
         }
         _averageEdgeLength = count > 0 ? sum / count : 1.0;
+
+        // Boundary edges: edges used by exactly one face
+        var edgeUse = new Dictionary<long, int>();
+        foreach (var f in _mesh.Faces)
+            for (int i = 0; i < 3; i++)
+            {
+                long k = EdgeKey(f[i], f[(i + 1) % 3]);
+                edgeUse[k] = edgeUse.TryGetValue(k, out int c) ? c + 1 : 1;
+            }
+        _boundaryEdges = new HashSet<long>();
+        _boundaryVertex = new bool[_mesh.VertexCount];
+        foreach (var kv in edgeUse)
+            if (kv.Value == 1)
+            {
+                _boundaryEdges.Add(kv.Key);
+                _boundaryVertex[(int)(kv.Key / _mesh.VertexCount)] = true;
+                _boundaryVertex[(int)(kv.Key % _mesh.VertexCount)] = true;
+            }
+    }
+
+    private long EdgeKey(int a, int b) =>
+        a < b ? (long)a * _mesh.VertexCount + b : (long)b * _mesh.VertexCount + a;
+
+    /// <summary>True when the edge (a, b) belongs to exactly one face.</summary>
+    public bool IsBoundaryEdge(int a, int b) => _boundaryEdges.Contains(EdgeKey(a, b));
+
+    /// <summary>True when the vertex lies on a mesh boundary.</summary>
+    public bool IsBoundaryVertex(int v) => v >= 0 && v < _boundaryVertex.Length && _boundaryVertex[v];
+
+    /// <summary>
+    /// True when the hit point lies on a boundary edge (or boundary vertex) of
+    /// its face, i.e. the projection clamped a query point that was outside
+    /// the mesh onto the mesh border.
+    /// </summary>
+    public bool IsOnBoundary(in Hit hit, double baryTol = 1e-6)
+    {
+        if (hit.Face < 0) return false;
+        var f = _mesh.Faces[hit.Face];
+        double[] b = { hit.Bary.X, hit.Bary.Y, hit.Bary.Z };
+        for (int k = 0; k < 3; k++)
+        {
+            if (b[k] > baryTol) continue;
+            // on the edge opposite corner k
+            if (IsBoundaryEdge(f[(k + 1) % 3], f[(k + 2) % 3])) return true;
+        }
+        // exactly on a vertex: boundary if the vertex is
+        int zeros = 0, corner = -1;
+        for (int k = 0; k < 3; k++) if (b[k] <= baryTol) zeros++; else corner = k;
+        if (zeros == 2 && corner >= 0 && _boundaryVertex[f[corner]]) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Where a step from → to leaves the mesh: the point on the boundary edges
+    /// around the hit (the clamped projection of "to") closest to the step
+    /// segment. Ending a trace here instead of at the perpendicular foot of
+    /// the projection keeps the last segment on the curve's own direction, so
+    /// curves meet the border without a hook or a crawl along it.
+    /// </summary>
+    public bool TryBoundaryExit(Vec3d from, Vec3d to, in Hit hit, out Vec3d exit)
+    {
+        exit = hit.Point;
+        if (hit.Face < 0) return false;
+
+        var seen = new HashSet<long>();
+        double best = double.MaxValue;
+        bool found = false;
+        var face = _mesh.Faces[hit.Face];
+        for (int c = 0; c < 3; c++)
+        {
+            foreach (int fi in _vertexFaces[face[c]])
+            {
+                var f = _mesh.Faces[fi];
+                for (int i = 0; i < 3; i++)
+                {
+                    int a = f[i], b = f[(i + 1) % 3];
+                    long k = EdgeKey(a, b);
+                    if (!_boundaryEdges.Contains(k) || !seen.Add(k)) continue;
+                    double d = SegmentQueries.SegmentSegment(from, to, _mesh.Vertices[a], _mesh.Vertices[b],
+                        out _, out _, out _, out Vec3d q);
+                    if (d < best) { best = d; exit = q; found = true; }
+                }
+            }
+        }
+        return found;
     }
 
     public readonly struct Hit

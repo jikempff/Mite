@@ -29,6 +29,7 @@ public class AsymptoticNetComponent : MiteComponent
         pManager.AddNumberParameter("Spacing", "Sp", "Target distance between adjacent curves (AutoSpace; 0 = automatic, bounding box / 30)", GH_ParamAccess.item, 0.0);
         pManager.AddPointParameter("SeedPoints", "P", "Seed points (nearest vertex is used); may be combined with Seeds", GH_ParamAccess.list);
         pManager.AddIntegerParameter("MaxCurves", "Mx", "Cap on curves per family (AutoSpace, default 200)", GH_ParamAccess.item, 200);
+        pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
         pManager[1].Optional = true;
         pManager[6].Optional = true;
     }
@@ -47,7 +48,7 @@ public class AsymptoticNetComponent : MiteComponent
 
         var seedIdx = new List<int>();
         var seedPts = new List<Point3d>();
-        double stepSize = 0, spacing = 0; int maxSteps = 0, maxCurves = 200; bool autoSpace = true;
+        double stepSize = 0, spacing = 0; int maxSteps = 0, maxCurves = 200; bool autoSpace = true; bool continuous = true;
         DA.GetDataList(1, seedIdx);
         DA.GetData(2, ref stepSize);
         DA.GetData(3, ref maxSteps);
@@ -55,6 +56,7 @@ public class AsymptoticNetComponent : MiteComponent
         DA.GetData(5, ref spacing);
         DA.GetDataList(6, seedPts);
         DA.GetData(7, ref maxCurves);
+        DA.GetData(8, ref continuous);
 
         var data = input.Data;
         var proj = new MeshProjection(data);
@@ -78,7 +80,7 @@ public class AsymptoticNetComponent : MiteComponent
             var opts = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
-                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled
+                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous
             };
             int firstSeed = -1;
             foreach (int s in seeds) if (field.Exists[s]) { firstSeed = s; break; }
@@ -91,7 +93,7 @@ public class AsymptoticNetComponent : MiteComponent
             var optsB = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
-                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled
+                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous
             };
             familyB = EvenlySpacedNet.TraceField(data, field.Family2, field.Exists, firstSeed, optsB, field.Family1);
             ReportTracing(optsB, "Family B");

@@ -33,6 +33,13 @@ public static class FrameAnalysis
         /// catches crossings that fall at the middle of a segment).
         /// </summary>
         public double SnapTolerance { get; set; } = 0.0;
+
+        /// <summary>
+        /// Couple lath ends that lie on another lath (T-junctions, e.g. where a
+        /// traced curve merged into its neighbour) to that lath automatically,
+        /// as if a joint point had been given there. Default true.
+        /// </summary>
+        public bool CoupleEndsOnLaths { get; set; } = true;
     }
 
     public readonly struct Result
@@ -146,10 +153,44 @@ public static class FrameAnalysis
             foreach (int j in grid.Within(rawPoints[i], coincident))
                 if (j != i) Union(i, j);
 
-        var jointOfRaw = new Dictionary<int, Vec3d>();
-        if (joints != null)
+        // T-junctions: a lath end sitting on another lath's segment is a joint
+        // there even if none was supplied
+        var allJoints = new List<Vec3d>();
+        if (joints != null) allJoints.AddRange(joints);
+        if (options.CoupleEndsOnLaths)
         {
-            foreach (var jp in joints)
+            double onTol = 0.05 * avgSeg;
+            for (int c = 0; c < laths.Count; c++)
+            {
+                var l = laths[c];
+                if (l.Length < 2 || (l[0] - l[l.Length - 1]).LengthSquared < 1e-24) continue;
+                foreach (var end in new[] { l[0], l[l.Length - 1] })
+                {
+                    bool onOther = false;
+                    foreach (int j in grid.Within(end, snap))
+                    {
+                        var (oc, oi) = rawMap[j];
+                        if (oc == c) continue;
+                        var ol = laths[oc];
+                        for (int k = Math.Max(0, oi - 1); k <= oi && k + 1 < ol.Length && !onOther; k++)
+                        {
+                            Vec3d a = ol[k], b = ol[k + 1], ab = b - a;
+                            double len2 = ab.LengthSquared;
+                            if (len2 < 1e-30) continue;
+                            double t = Math.Max(0.0, Math.Min(1.0, Vec3d.Dot(end - a, ab) / len2));
+                            if ((a + t * ab - end).Length <= onTol) onOther = true;
+                        }
+                        if (onOther) break;
+                    }
+                    if (onOther) allJoints.Add(end);
+                }
+            }
+        }
+
+        var jointOfRaw = new Dictionary<int, Vec3d>();
+        if (allJoints.Count > 0)
+        {
+            foreach (var jp in allJoints)
             {
                 int first = -1;
                 foreach (int i in grid.Within(jp, snap))

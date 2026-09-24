@@ -24,7 +24,18 @@ internal static class FieldTracer
         double stepSize, int maxSteps, bool reverse, Func<Vec3d, bool>? stopNear, out bool closedLoop,
         double minFieldMagnitude = 0.3, Vec3d? startDir = null)
     {
+        return Trace(proj, startPos, startHint, dirsA, dirsB, mask, stepSize, maxSteps, reverse, stopNear,
+            out closedLoop, out _, minFieldMagnitude, startDir);
+    }
+
+    /// <param name="stoppedNear">Set when the trace ended because stopNear fired (it ran into an existing curve).</param>
+    internal static List<Vec3d> Trace(
+        MeshProjection proj, Vec3d startPos, int startHint, Vec3d[] dirsA, Vec3d[]? dirsB, bool[]? mask,
+        double stepSize, int maxSteps, bool reverse, Func<Vec3d, bool>? stopNear, out bool closedLoop,
+        out bool stoppedNear, double minFieldMagnitude = 0.3, Vec3d? startDir = null)
+    {
         closedLoop = false;
+        stoppedNear = false;
         var points = new List<Vec3d>();
 
         var hit = proj.ClosestPoint(startPos, startHint);
@@ -62,6 +73,7 @@ internal static class FieldTracer
         double captureRadius = Math.Max(0.75 * stepSize, 0.5 * proj.AverageEdgeLength);
         double leaveRadius = Math.Max(8.0 * stepSize, 2.0 * captureRadius);
         double maxStartDist = 0.0;
+        double pathLength = 0.0;
 
         for (int step = 0; step < maxSteps; step++)
         {
@@ -85,14 +97,12 @@ internal static class FieldTracer
             var newHit = proj.ClosestPoint(intended, midHit.NearestVertex);
             Vec3d newPos = newHit.Point;
 
-            // Fell off the mesh: the projection clamped the step to a boundary
-            // far from the intended target. End cleanly at the edge instead of
-            // letting the trace crawl along the boundary as a "thread".
-            if ((newPos - intended).Length > 0.5 * stepSize)
+            // Left the mesh: end exactly where the step crosses the border
+            if (LeftMesh(proj, pos, intended, newHit, stepSize, out Vec3d exit))
             {
-                Vec3d travel = newPos - pos;
-                if (Vec3d.Dot(travel, d1) > 0 && travel.LengthSquared > 0.01 * stepSize * stepSize)
-                    points.Add(newPos);
+                Vec3d travel = exit - pos;
+                if (Vec3d.Dot(travel, d1) > 0 && travel.LengthSquared > 1e-6 * stepSize * stepSize)
+                    points.Add(exit);
                 break;
             }
 
@@ -100,9 +110,10 @@ internal static class FieldTracer
             if ((newPos - pos).LengthSquared < 0.01 * stepSize * stepSize) break;
 
             // Ran into an already-traced curve
-            if (stopNear != null && stopNear(newPos)) break;
+            if (stopNear != null && stopNear(newPos)) { stoppedNear = true; break; }
 
             prevDir = (newPos - pos).Normalized();
+            pathLength += (newPos - pos).Length;
             pos = newPos;
             hit = newHit;
             points.Add(pos);
@@ -111,15 +122,46 @@ internal static class FieldTracer
 
             // Closed loop: returned to the start after traveling away
             if (step > 4 && TryCloseLoop(points, pos, startNormal, initialDir, prevDir,
-                    stepSize, captureRadius, leaveRadius, maxStartDist, out Vec3d closing))
+                    stepSize, captureRadius, leaveRadius, maxStartDist, pathLength, out Vec3d closing))
             {
-                points.Add(closing);
+                CloseSmoothly(proj, points, closing);
                 closedLoop = true;
                 break;
             }
         }
 
         return points;
+    }
+
+    /// <summary>
+    /// Detects a step that leaves the mesh and computes the exit point on the
+    /// border along the step. Two signs of leaving: the projection clamped the
+    /// step far from the intended target (a clear fall-off), or the projected
+    /// point sits on a boundary edge while the intended point was pulled
+    /// sideways onto it within the face plane (an oblique exit, which would
+    /// otherwise turn into a crawl along the border followed by a hook).
+    /// Steps that merely follow curvature project along the normal, which the
+    /// in-plane test ignores.
+    /// </summary>
+    internal static bool LeftMesh(MeshProjection proj, Vec3d pos, Vec3d intended, in MeshProjection.Hit newHit,
+        double stepSize, out Vec3d exit)
+    {
+        exit = newHit.Point;
+        Vec3d disp = newHit.Point - intended;
+        bool fellOff = disp.Length > 0.5 * stepSize;
+        bool oblique = false;
+        if (!fellOff && newHit.Face >= 0 && proj.IsOnBoundary(newHit))
+        {
+            Vec3d n = newHit.Normal;
+            Vec3d inPlane = disp - Vec3d.Dot(disp, n) * n;
+            oblique = inPlane.Length > 0.02 * stepSize;
+        }
+        if (!fellOff && !oblique) return false;
+
+        if (!proj.TryBoundaryExit(pos, intended, newHit, out exit) ||
+            Vec3d.Dot(exit - pos, intended - pos) < 0)
+            exit = newHit.Point;
+        return true;
     }
 
     /// <summary>
@@ -137,7 +179,7 @@ internal static class FieldTracer
     /// </summary>
     internal static bool TryCloseLoop(
         IReadOnlyList<Vec3d> points, Vec3d cur, Vec3d startNormal, Vec3d initialDir, Vec3d travelDir,
-        double stepSize, double captureRadius, double leaveRadius, double maxStartDist,
+        double stepSize, double captureRadius, double leaveRadius, double maxStartDist, double pathLength,
         out Vec3d closingPoint)
     {
         closingPoint = default;
@@ -151,6 +193,13 @@ internal static class FieldTracer
         }
 
         if (points.Count < 2 || maxStartDist < leaveRadius) return false;
+
+        // Long loops drift: on a faceted mesh the projection walk carries a
+        // small systematic bias per step (measured ~0.8% of the loop length
+        // on a coarse torus), so the capture radius grows with the distance
+        // travelled, up to a few edge lengths. The drift itself is spread
+        // back along the loop by CloseSmoothly.
+        captureRadius = Math.Max(captureRadius, Math.Min(0.015 * pathLength, 4.0 * captureRadius));
 
         // 2. Drifted past the start point, still heading the way the loop left
         if ((cur - p0).Length < captureRadius && Vec3d.Dot(travelDir, initialDir) > 0.5)
@@ -186,6 +235,35 @@ internal static class FieldTracer
         // lies within one step of p0 so the backtrack is negligible.
         closingPoint = p0;
         return true;
+    }
+
+    /// <summary>
+    /// Closes a traced loop onto its start point by spreading the closure gap
+    /// (current end → closing point) linearly along the whole loop and
+    /// reprojecting, so the seam carries no kink and the loop returns exactly
+    /// to its first point.
+    /// </summary>
+    internal static void CloseSmoothly(MeshProjection proj, List<Vec3d> points, Vec3d closingPoint)
+    {
+        int n = points.Count;
+        Vec3d gap = closingPoint - points[n - 1];
+        if (n > 3 && gap.LengthSquared > 1e-24)
+        {
+            var arc = new double[n];
+            for (int i = 1; i < n; i++) arc[i] = arc[i - 1] + (points[i] - points[i - 1]).Length;
+            double total = arc[n - 1];
+            if (total > 1e-15)
+            {
+                int hint = proj.NearestVertexGlobal(points[0]);
+                for (int i = 1; i < n; i++)
+                {
+                    var h = proj.ClosestPoint(points[i] + (arc[i] / total) * gap, hint);
+                    points[i] = h.Point;
+                    hint = h.NearestVertex;
+                }
+            }
+        }
+        points.Add(closingPoint);
     }
 
     /// <summary>
@@ -241,12 +319,24 @@ internal static class FieldTracer
         double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear, double minFieldMagnitude = 0.3,
         Vec3d? initialDir = null)
     {
+        return TraceBoth(proj, startPos, startHint, dirsA, dirsB, mask, stepSize, maxSteps, stopNear,
+            out _, out _, minFieldMagnitude, initialDir);
+    }
+
+    /// <param name="startNear">The backward half (start of the returned line) ended on an existing curve.</param>
+    /// <param name="endNear">The forward half (end of the returned line) ended on an existing curve.</param>
+    internal static Vec3d[] TraceBoth(
+        MeshProjection proj, Vec3d startPos, int startHint, Vec3d[] dirsA, Vec3d[]? dirsB, bool[]? mask,
+        double stepSize, int maxSteps, Func<Vec3d, bool>? stopNear, out bool startNear, out bool endNear,
+        double minFieldMagnitude = 0.3, Vec3d? initialDir = null)
+    {
+        startNear = false;
         var forward = Trace(proj, startPos, startHint, dirsA, dirsB, mask,
-            stepSize, maxSteps, false, stopNear, out bool closed, minFieldMagnitude, initialDir);
+            stepSize, maxSteps, false, stopNear, out bool closed, out endNear, minFieldMagnitude, initialDir);
         if (closed) return forward.ToArray();
 
         var backward = Trace(proj, startPos, startHint, dirsA, dirsB, mask,
-            stepSize, maxSteps, true, stopNear, out _, minFieldMagnitude, initialDir);
+            stepSize, maxSteps, true, stopNear, out _, out startNear, minFieldMagnitude, initialDir);
         return Join(backward, forward);
     }
 

@@ -55,36 +55,75 @@ public static class NetTopology
     }
 
     /// <summary>
-    /// Builds the graph. Crossings come from <see cref="NetIntersections.Find"/>
-    /// on the same two families; members shorter than minLength (e.g.
-    /// free tails) are dropped.
+    /// Builds the graph. Crossings come from <see cref="NetIntersections.FindAll"/>
+    /// (or <see cref="NetIntersections.Find"/>) on the same two families;
+    /// members shorter than minLength (e.g. free tails) are dropped.
     /// </summary>
     public static Result Build(
         IReadOnlyList<Vec3d[]> familyA, IReadOnlyList<Vec3d[]> familyB,
         IReadOnlyList<NetIntersections.Crossing> crossings, double minLength = 0.0)
     {
         int na = familyA.Count;
-        var nodes = new Vec3d[crossings.Count];
-        for (int i = 0; i < crossings.Count; i++) nodes[i] = crossings[i].Point;
+        var arcA = CumulativeArcs(familyA);
+        var arcB = CumulativeArcs(familyB);
+
+        // Unique nodes: crossings at one 3D point (two laths of a family
+        // ending on the same neighbour, or a T-junction that is also a
+        // crossing) collapse into a single node
+        double scale = 0;
+        foreach (var arc in arcA) scale = Math.Max(scale, arc[arc.Length - 1]);
+        foreach (var arc in arcB) scale = Math.Max(scale, arc[arc.Length - 1]);
+        double nodeTol = 1e-7 * Math.Max(scale, 1e-12);
+        var nodeList = new List<Vec3d>();
+        var nodeCrossing = new List<NetIntersections.Crossing>();
+        var nodeOf = new int[crossings.Count];
+        var cells = new Dictionary<(long, long, long), List<int>>();
+        (long, long, long) Cell(Vec3d p) => ((long)Math.Floor(p.X / nodeTol), (long)Math.Floor(p.Y / nodeTol), (long)Math.Floor(p.Z / nodeTol));
+        for (int c = 0; c < crossings.Count; c++)
+        {
+            Vec3d p = crossings[c].Point;
+            var (cx, cy, cz) = Cell(p);
+            int found = -1;
+            for (long dx = -1; dx <= 1 && found < 0; dx++)
+                for (long dy = -1; dy <= 1 && found < 0; dy++)
+                    for (long dz = -1; dz <= 1 && found < 0; dz++)
+                        if (cells.TryGetValue((cx + dx, cy + dy, cz + dz), out var list))
+                            foreach (int n in list)
+                                if ((nodeList[n] - p).LengthSquared <= nodeTol * nodeTol) { found = n; break; }
+            if (found < 0)
+            {
+                found = nodeList.Count;
+                nodeList.Add(p);
+                nodeCrossing.Add(crossings[c]);
+                if (!cells.TryGetValue((cx, cy, cz), out var l)) { l = new List<int>(); cells[(cx, cy, cz)] = l; }
+                l.Add(found);
+            }
+            nodeOf[c] = found;
+        }
+        var nodes = nodeList.ToArray();
 
         // Per lath: (arc length, node) list
         var perLath = new List<(double arc, int node)>[na + familyB.Count];
         for (int i = 0; i < perLath.Length; i++) perLath[i] = new List<(double, int)>();
 
-        var arcA = CumulativeArcs(familyA);
-        var arcB = CumulativeArcs(familyB);
-
         for (int c = 0; c < crossings.Count; c++)
         {
             var x = crossings[c];
-            if (x.CurveA >= 0 && x.CurveA < na)
-                perLath[x.CurveA].Add((ArcAt(arcA[x.CurveA], x.SegmentA, x.ParamA), c));
-            if (x.CurveB >= 0 && x.CurveB < familyB.Count)
-                perLath[na + x.CurveB].Add((ArcAt(arcB[x.CurveB], x.SegmentB, x.ParamB), c));
+            // Crossings carry which family list each curve index refers to,
+            // so same-family crossings and T-junctions become nodes as well
+            var famA = x.FamilyOfA == 0 ? familyA : familyB;
+            var famB = x.FamilyOfB == 0 ? familyA : familyB;
+            var arcsA = x.FamilyOfA == 0 ? arcA : arcB;
+            var arcsB = x.FamilyOfB == 0 ? arcA : arcB;
+            int offA = x.FamilyOfA == 0 ? 0 : na, offB = x.FamilyOfB == 0 ? 0 : na;
+            if (x.CurveA >= 0 && x.CurveA < famA.Count)
+                perLath[offA + x.CurveA].Add((ArcAt(arcsA[x.CurveA], x.SegmentA, x.ParamA), nodeOf[c]));
+            if (x.CurveB >= 0 && x.CurveB < famB.Count)
+                perLath[offB + x.CurveB].Add((ArcAt(arcsB[x.CurveB], x.SegmentB, x.ParamB), nodeOf[c]));
         }
 
         var members = new List<Member>();
-        var valence = new int[crossings.Count];
+        var valence = new int[nodes.Length];
         for (int l = 0; l < perLath.Length; l++)
         {
             bool isA = l < na;
@@ -100,7 +139,8 @@ public static class NetTopology
             // other family meeting at one point)
             var stations = new List<(double arc, int node)>();
             foreach (var s in list)
-                if (stations.Count == 0 || s.arc - stations[stations.Count - 1].arc > 1e-9 * Math.Max(total, 1))
+                if (stations.Count == 0 || (s.node != stations[stations.Count - 1].node &&
+                                            s.arc - stations[stations.Count - 1].arc > 1e-9 * Math.Max(total, 1)))
                     stations.Add(s);
 
             double prevArc = 0;
@@ -128,9 +168,7 @@ public static class NetTopology
             }
         }
 
-        var xs = new NetIntersections.Crossing[crossings.Count];
-        for (int i = 0; i < xs.Length; i++) xs[i] = crossings[i];
-        return new Result(nodes, valence, members, xs);
+        return new Result(nodes, valence, members, nodeCrossing.ToArray());
     }
 
     private static double[][] CumulativeArcs(IReadOnlyList<Vec3d[]> family)

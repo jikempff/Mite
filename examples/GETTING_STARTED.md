@@ -33,6 +33,11 @@ Use a doubly-curved mesh. For asymptotic nets it must have anticlastic
 - `A` (AutoSpace) — `True` (the default)
 - `Sp` (Spacing) — roughly mesh size / 15, or leave `0` for an automatic value
 - `St` (Step) — leave `0`: it is derived from the spacing and mesh
+- `Ct` (Continuous) — `True` (the default): every curve runs border to border,
+  and a curve that merges into its neighbour ends on it (a T-junction) instead
+  of floating in mid-surface. Set `False` for classic evenly spaced streamlines
+  that stop at 0.4 × Spacing from a neighbour — more even, but laths end
+  mid-surface
 
 You get two crossing curve families that only exist where K < 0 (the `K`
 output flags those vertices). These are the layouts buildable from straight
