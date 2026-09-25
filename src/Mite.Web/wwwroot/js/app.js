@@ -97,7 +97,7 @@ const S = {
   loft: null, file: null,
   lath: null, selected: null, lathUtil: null,
   frame: null,
-  busy: 0, gen: 0,
+  busy: 0, gen: 0, loading: false,
 };
 
 function busy(on, text) {
@@ -162,6 +162,18 @@ async function loadShape({ light = false } = {}) {
 
 async function applyShape(light) {
   const gen = ++S.gen;
+  // While a shape is in flight, S.size / S.stats still describe the previous
+  // mesh (or the placeholder size 1 at boot). traceNet() refuses to run in
+  // that window: a trace issued then would queue behind the new mesh in the
+  // worker and run with a spacing scaled to the wrong size — at boot 4 % of
+  // 1 instead of 4 % of the mesh, i.e. hundreds of near-endless curves and
+  // an app stuck on "tracing…". The load itself re-traces when it lands.
+  S.loading = true;
+  try { await applyShapeInner(gen, light); }
+  finally { if (gen === S.gen) S.loading = false; } // a superseded load leaves the flag to its successor
+}
+
+async function applyShapeInner(gen, light) {
   let stats;
   if (S.shape === 'loft') {
     if (!S.loft) S.loft = new Loft(4, 6, 3);
@@ -194,6 +206,7 @@ async function applyShape(light) {
   $('lath-result').classList.add('hidden');
   $('frame-stats').textContent = '';
   updateSpacingReadout();
+  S.loading = false; // the mesh, size and stats are current from here on
   await applyMode();
   if (S.seed >= S.stats.vertices) S.seed = -1;
   if (!light) await updateSeedHandle();
@@ -221,8 +234,30 @@ async function ensureCurvature() {
   return S.curv;
 }
 
+// Which plugin component each web control runs — shown as an icon + name
+// under the chip rows so the app reads as a front end of the Grasshopper tab.
+const GH_MODE = {
+  shaded: null, K: ['GaussianCurvature', 'Gaussian Curvature'], H: ['MeanCurvature', 'Mean Curvature'],
+  k1: ['PrincipalCurvature', 'Principal Curvature', 'K1'], k2: ['PrincipalCurvature', 'Principal Curvature', 'K2'],
+  radius: ['PrincipalCurvature', 'Principal Curvature', '1 / max |k|'], zebra: null, anticlastic: ['AsymptoticNet', 'Asymptotic Net', 'Anticlastic output'],
+};
+const GH_NET = {
+  none: null, asymptotic: ['AsymptoticNet', 'Asymptotic Net'], conjugate: ['ConjugateNet', 'Conjugate Net'],
+  geodesic: ['GeodesicNet', 'Geodesic Net', 'one family'], geodesicBoth: ['GeodesicNet', 'Geodesic Net', 'two families'],
+  streamMax: ['Streamlines', 'Curvature Streamlines', 'MaxDir on'], streamMin: ['Streamlines', 'Curvature Streamlines', 'MaxDir off'],
+  chebyshev: ['ChebyshevNet', 'Chebyshev Net'], isocurves: ['MeshIsocurves', 'Mesh Isocurves'],
+};
+function showComponent(stripId, entry) {
+  const el = $(stripId); if (!el) return;
+  el.classList.toggle('hidden', !entry);
+  if (!entry) return;
+  el.querySelector('img').src = `icons/${entry[0]}.png`;
+  el.querySelector('span').innerHTML = `Grasshopper <b>${entry[1]}</b>` + (entry[2] ? ` <span class="unit">${entry[2]}</span>` : '');
+}
+
 async function applyMode() {
   const v = S.viewer;
+  showComponent('gh-mode', GH_MODE[S.mode]);
   const legend = $('legend');
   v.setZebra(S.mode === 'zebra');
   $('mode-note').textContent = MODE_NOTES[S.mode];
@@ -315,12 +350,14 @@ async function traceNet() {
   $('lath-result').classList.add('hidden');
   $('frame-stats').textContent = '';
   $('net-note').textContent = NET_NOTES[S.net];
+  showComponent('gh-net', GH_NET[S.net]);
   $('famB-row').classList.toggle('hidden', ['geodesic', 'streamMax', 'streamMin', 'isocurves'].includes(S.net));
   if (S.net === 'none') {
     v.clearCurves(); v.clearOverlay('ends'); S.netData = null;
     $('net-stats').textContent = ''; $('net-warn').classList.add('hidden'); $('hud-net').textContent = ''; $('quality').classList.add('hidden'); $('spacing-count').textContent = '';
     await updateSeedHandle(); updateRecipe(); return;
   }
+  if (!S.stats || S.loading) return; // the pending shape load traces the net itself
   const gen = S.gen;
   v.ghostCurves(true);
   await withBusy('tracing…', async () => {
@@ -664,9 +701,13 @@ async function main() {
 
   window.addEventListener('keydown', (e) => { if (e.key === 'f' && !e.target.closest('input,select,textarea')) S.viewer.view('iso'); });
 
-  await loadShape();
-  $('nets').querySelector('[data-net=asymptotic]').click();
+  // Default net: select it before the first shape loads so the load itself
+  // traces it (with the loaded mesh's size) instead of a second, racing call.
+  const first = $('nets').querySelector('[data-net=asymptotic]');
+  $('nets').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === first));
+  S.net = 'asymptotic'; showNetParams(); $('upright').checked = true;
   window.__mite = S; // for tests
+  await loadShape();
 }
 
 main().catch((e) => { console.error(e); $('boot-text').textContent = 'Failed to start: ' + (e.message || e); });

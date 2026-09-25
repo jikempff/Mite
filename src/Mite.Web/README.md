@@ -24,3 +24,8 @@ tools/build-web.sh ../kempffseleme/mite     # → static site folder, ~4 MB, ~2 
 
 Local run: `python3 -m http.server` inside the output folder and open
 `index.html` (ES modules need http, not file://).
+
+Smoke test (Playwright, headless): `node tools/web-smoke.js http://localhost:8765`
+— boot race, mid-trace shape switches, component strips and icons. The
+component icons under `wwwroot/icons` are the plugin's, written by
+`tools/generate_icons.py` at 48 px.

@@ -22,7 +22,7 @@
 <header class="top">
   <a class="brand" href="../" title="kempff/seleme">kempff/seleme</a>
   <span class="sep">/</span>
-  <span class="title">mite <em>interactive</em></span>
+  <img class="mark" src="icons/Mite_Tab.png" alt="" width="20" height="20"><span class="title">mite <em>interactive</em></span>
   <span id="version" class="pill">loading…</span>
   <nav class="links">
     <a href="https://www.food4rhino.com/en/app/mite" target="_blank" rel="noopener">Grasshopper plugin</a>
@@ -62,18 +62,19 @@
       <h2>Analysis <small>per vertex</small></h2>
       <div class="chips" id="modes" role="radiogroup">
         <button data-mode="shaded" class="on">Shaded</button>
-        <button data-mode="K">Gaussian K</button>
-        <button data-mode="H">Mean H</button>
-        <button data-mode="k1">k1</button>
-        <button data-mode="k2">k2</button>
-        <button data-mode="radius">Min radius</button>
-        <button data-mode="zebra">Zebra</button>
-        <button data-mode="anticlastic">K &lt; 0 mask</button>
+        <button data-mode="K" title="Grasshopper: Gaussian Curvature">Gaussian K</button>
+        <button data-mode="H" title="Grasshopper: Mean Curvature">Mean H</button>
+        <button data-mode="k1" title="Grasshopper: Principal Curvature (K1)">k1</button>
+        <button data-mode="k2" title="Grasshopper: Principal Curvature (K2)">k2</button>
+        <button data-mode="radius" title="Grasshopper: Principal Curvature → 1 / max(|K1|, |K2|)">Min radius</button>
+        <button data-mode="zebra" title="Rhino: Zebra analysis (view-dependent)">Zebra</button>
+        <button data-mode="anticlastic" title="Grasshopper: Asymptotic Net → Anticlastic output">K &lt; 0 mask</button>
       </div>
+      <div class="gh" id="gh-mode" title="The plugin component behind the active mode"><img src="icons/PrincipalCurvature.png" alt=""><span></span></div>
       <div class="row slider"><label for="smooth">smoothing rings</label><input id="smooth" type="range" min="1" max="4" step="1" value="2"><output for="smooth">2</output></div>
       <div class="row toggles">
-        <label class="chk"><input id="dirs" type="checkbox"> principal directions</label>
-        <label class="chk"><input id="umb" type="checkbox"> umbilics</label>
+        <label class="chk" title="Grasshopper: Principal Curvature → D1, D2"><input id="dirs" type="checkbox"> principal directions</label>
+        <label class="chk" title="Grasshopper: Umbilics"><input id="umb" type="checkbox"> umbilics</label>
         <label class="chk"><input id="wire" type="checkbox"> wireframe</label>
       </div>
       <p id="mode-note" class="note"></p>
@@ -84,15 +85,16 @@
       <h2>Net <small>curve families</small></h2>
       <div class="chips" id="nets" role="radiogroup">
         <button data-net="none" class="on">None</button>
-        <button data-net="asymptotic">Asymptotic</button>
-        <button data-net="conjugate">Curvature lines</button>
-        <button data-net="geodesic">Geodesics</button>
-        <button data-net="geodesicBoth">Geodesic net</button>
-        <button data-net="streamMax">Stream k1</button>
-        <button data-net="streamMin">Stream k2</button>
-        <button data-net="chebyshev">Chebyshev</button>
-        <button data-net="isocurves">Isocurves</button>
+        <button data-net="asymptotic" title="Grasshopper: Asymptotic Net">Asymptotic</button>
+        <button data-net="conjugate" title="Grasshopper: Conjugate Net">Curvature lines</button>
+        <button data-net="geodesic" title="Grasshopper: Geodesic Net (one family)">Geodesics</button>
+        <button data-net="geodesicBoth" title="Grasshopper: Geodesic Net (two families)">Geodesic net</button>
+        <button data-net="streamMax" title="Grasshopper: Curvature Streamlines (MaxDir on)">Stream k1</button>
+        <button data-net="streamMin" title="Grasshopper: Curvature Streamlines (MaxDir off)">Stream k2</button>
+        <button data-net="chebyshev" title="Grasshopper: Chebyshev Net">Chebyshev</button>
+        <button data-net="isocurves" title="Grasshopper: Mesh Isocurves">Isocurves</button>
       </div>
+      <div class="gh" id="gh-net" title="The plugin component behind the active net"><img src="icons/AsymptoticNet.png" alt=""><span></span></div>
       <div id="net-params">
         <div class="row slider" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin"><label for="spacing">spacing</label><input id="spacing" type="range" min="1" max="15" step="0.25" value="4"><output for="spacing" id="spacing-out">–</output></div>
         <div class="row presets" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin"><span class="unit">presets</span><button class="ghost small" data-sp="8">coarse</button><button class="ghost small" data-sp="4">medium</button><button class="ghost small" data-sp="2">fine</button><span id="spacing-count" class="unit"></span></div>
@@ -111,7 +113,7 @@
           <label class="chk"><input id="fromborder" type="checkbox"> from the border</label>
         </div>
         <div class="row slider" data-for="geodesic geodesicBoth" id="borderangle-row"><label for="borderangle">border angle <span class="unit">° from normal</span></label><input id="borderangle" type="range" min="-60" max="60" step="5" value="0"><output for="borderangle">0</output></div>
-        <div class="row" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin chebyshev"><label>seed</label><span id="seed-label" class="mono">auto</span><button id="seed-clear" class="ghost small">reset</button><span class="unit">shift-click the surface to move it</span></div>
+        <div class="row" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin chebyshev"><label>seed</label><span id="seed-label" class="mono">auto</span><button id="seed-clear" class="ghost small">reset</button><span class="unit">shift-click the surface to move</span></div>
         <div class="row toggles"><label class="chk"><input id="famA" type="checkbox" checked> <i class="sw swA"></i> family A</label><label class="chk" id="famB-row"><input id="famB" type="checkbox" checked> <i class="sw swB"></i> family B</label></div>
       </div>
       <p id="net-note" class="note"></p>
@@ -127,6 +129,7 @@
 
     <section class="block" id="lath-block">
       <h2>Lath <small>click a curve</small></h2>
+      <div class="gh"><img src="icons/LathAnalysis.png" alt="" title="Lath Analysis"><img src="icons/LathSweep.png" alt="" title="Lath Sweep"><img src="icons/LathUnroll.png" alt="" title="Lath Unroll"><span>Grasshopper <b>Lath Analysis</b> · <b>Sweep</b> · <b>Unroll</b></span></div>
       <div class="grid2">
         <div class="row slider"><label for="width">width <span class="unit">% of size</span></label><input id="width" type="range" min="0.5" max="6" step="0.25" value="2"><output for="width">2</output></div>
         <div class="row slider"><label for="thick">thickness <span class="unit">% of size</span></label><input id="thick" type="range" min="0.05" max="1.5" step="0.05" value="0.4"><output for="thick">0.4</output></div>
@@ -134,7 +137,7 @@
       <div class="row"><label for="section">section</label><select id="section"><option value="0">rectangle (width × thickness)</option><option value="1">round bar (Ø width)</option></select></div>
       <div class="row toggles">
         <label class="chk"><input id="upright" type="checkbox" checked> upright (asymptotic)</label>
-        <label class="chk"><input id="solid" type="checkbox"> show solid</label>
+        <label class="chk" title="Grasshopper: Lath Sweep"><input id="solid" type="checkbox"> show solid</label>
         <label class="chk"><input id="colorutil" type="checkbox"> colour all laths by utilization</label>
       </div>
       <div class="row slider"><label for="strain">allowable strain <span class="unit">%</span></label><input id="strain" type="range" min="0.1" max="2" step="0.05" value="0.5"><output for="strain">0.5</output></div>
@@ -149,11 +152,12 @@
 
     <section class="block">
       <h2>Structure <small>beam frame of the net</small></h2>
+      <div class="gh"><img src="icons/GridshellAnalysis.png" alt="" title="Gridshell Analysis"><span>Grasshopper <b>Gridshell Analysis</b></span></div>
       <div class="grid2">
         <div class="row slider"><label for="load">load <span class="unit">kN/m</span></label><input id="load" type="range" min="0.1" max="5" step="0.1" value="0.5"><output for="load">0.5</output></div>
         <div class="row slider"><label for="scale">model size <span class="unit">m across</span></label><input id="scale" type="range" min="2" max="40" step="1" value="10"><output for="scale">10</output></div>
       </div>
-      <div class="row"><button id="frame" class="btn">Analyse</button><label class="chk"><input id="deformed" type="checkbox" checked> show deformed ×</label><input id="defscale" type="number" min="1" max="1000" value="50" class="num"></div>
+      <div class="row"><button id="frame" class="btn" title="Grasshopper: Gridshell Analysis">Analyse</button><label class="chk"><input id="deformed" type="checkbox" checked> show deformed ×</label><input id="defscale" type="number" min="1" max="1000" value="50" class="num"></div>
       <p class="note">Laths become beams with the section above (timber: E = 11 GPa, allowable 20 MPa), coupled at crossings and T-junctions, fixed where they meet the border, loaded vertically.</p>
       <p id="frame-stats" class="stats"></p>
     </section>
@@ -163,14 +167,14 @@
       <div class="row wrap">
         <button class="btn" id="dl-mesh">mesh .obj</button>
         <button class="btn" id="dl-curves">curves .obj</button>
-        <button class="btn" id="dl-pattern">pattern .svg</button>
+        <button class="btn" id="dl-pattern" title="Grasshopper: Lath Unroll">pattern .svg</button>
         <button class="btn" id="dl-png">view .png</button>
-        <button class="btn" id="dl-recipe">Grasshopper recipe</button>
+        <button class="btn" id="dl-recipe" title="The Grasshopper components and inputs that reproduce this view"><img class="ci s" src="icons/Mite_Tab.png" alt="">Grasshopper recipe</button>
       </div>
       <pre id="recipe" class="recipe hidden"></pre>
     </section>
 
-    <footer class="foot">Everything here runs in your browser on the same Mite.Core library the Grasshopper plugin ships — no upload, no server. <a href="https://github.com/jikempff/Mite/blob/main/docs/ROADMAP.md" target="_blank" rel="noopener">Roadmap</a></footer>
+    <footer class="foot">Everything here runs in your browser on the same Mite.Core library the Grasshopper plugin ships — no upload, no server. Each block names the plugin component it runs — the same icons you see in the Mite tab of Grasshopper. <a href="https://github.com/jikempff/Mite/blob/main/docs/ROADMAP.md" target="_blank" rel="noopener">Roadmap</a></footer>
   </aside>
 </main>
 

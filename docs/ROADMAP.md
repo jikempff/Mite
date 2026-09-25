@@ -175,8 +175,17 @@ remains the self-test review page.
       Schwarz D and gyroid (nodal form → marching tetrahedra → relaxation);
       Lath block section choice (rectangle / round); favicon, touch icon and
       Open Graph share image — 2026-09-25.
+- [x] App: the plugin's component icons in the panel — a strip under each
+      block names the Grasshopper component the active control runs (Analysis
+      and Net follow the chip; Lath and Structure list theirs); chips stay
+      text-only, icons at 24 px from `tools/generate_icons.py` — 2026-09-25.
+- [x] App: boot race fixed (shape change during the first load traced the
+      default net at the placeholder size and hung on "tracing…");
+      `tools/web-smoke.js` is the headless regression — 2026-09-25.
 - [ ] App: the kinetic "fold" slider of E; custom section curves in the lath
       views; a "buildable" summary that waits for the colouring pass.
+- [ ] App: run `tools/web-smoke.js` from `tools/build-web.sh` (needs a
+      Playwright install on the deploying machine).
 - [ ] Bench to reuse the app's typologies once the shape generators are
       unified (A).
 

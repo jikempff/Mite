@@ -135,6 +135,10 @@ plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
 
+### 1.2.6 (unreleased)
+- Web app: each block names the plugin component it runs, with its Grasshopper icon (Analysis and Net strips follow the active chip; Lath and Structure list theirs), the knot mark in the header and the tab icon on the recipe button — the 48 px icons come from `tools/generate_icons.py`. Chips stay text-only for legibility.
+- Web app: fixed a boot race — changing the shape while the first one was still loading traced the default net with the placeholder size (spacing 0.04 instead of 4 % of the mesh) and left the page on "tracing…" for minutes. `traceNet` now waits for the load, which traces the net itself. `tools/web-smoke.js` (Playwright) reproduces it and checks the component strips.
+
 ### 1.2.5
 - Web app: the catalogue gains n-fold Enneper, a skew bilinear ruled patch and Schwarz D / gyroid patches (marching tetrahedra + Minimal Surface relaxation, `AnalyticShapes` / `ImplicitSurface` in the core); the Lath block gets a section choice (rectangle or round bar); favicon back to the black hexagon mark, PNG/Apple icons and Open Graph share image for links.
 - New Mite logo (black hexagon with the asymptotic knot) as package icon, Grasshopper tab icon and web app favicon; the tab icon is now registered as the category icon, so it shows in the ribbon tab and its tooltip instead of a plain "M". 1.2.3 went out with the previous logo and 1.2.4 with the hexagon tab icon; 1.2.5 has the knot tab icon and the loading-error fix.

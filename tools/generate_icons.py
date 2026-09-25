@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw, ImageFilter
 S = 8
 SIZE = 24
 OUT = os.path.join(os.path.dirname(__file__), "..", "src", "Mite.Grasshopper", "Resources")
+WEB_OUT = os.path.join(os.path.dirname(__file__), "..", "src", "Mite.Web", "wwwroot", "icons")
 
 FAM = {
     "surface": dict(top="#FFD34D", bot="#FF7900", edge="#6E0000"),
@@ -114,8 +115,10 @@ def finish(img, name):
     a = a.point(lambda v: int(v * 0.32))
     shadow = Image.merge("RGBA", (r, g, b, a))
     out = Image.alpha_composite(shadow, img)
-    out = out.resize((SIZE, SIZE), Image.LANCZOS)
-    out.save(os.path.join(OUT, name + ".png"))
+    out.resize((SIZE, SIZE), Image.LANCZOS).save(os.path.join(OUT, name + ".png"))
+    # 2x copy for the web app (crisp on HiDPI screens, shown at 16-20 px)
+    os.makedirs(WEB_OUT, exist_ok=True)
+    out.resize((2 * SIZE, 2 * SIZE), Image.LANCZOS).save(os.path.join(WEB_OUT, name + ".png"))
 
 
 # ---------------------------------------------------------------- a surface patch in perspective
@@ -516,6 +519,12 @@ def icon_tab():
     out = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     out.paste(im, ((SIZE - im.width) // 2, (SIZE - im.height) // 2), im)
     out.save(os.path.join(OUT, "Mite_Tab.png"))
+    os.makedirs(WEB_OUT, exist_ok=True)
+    big2 = Image.new("RGBA", (2 * SIZE, 2 * SIZE), (0, 0, 0, 0))
+    sc2 = 2 * SIZE / max(src.size)
+    im2 = tile.resize((max(1, round(src.width * sc2)), max(1, round(src.height * sc2))), Image.LANCZOS)
+    big2.paste(im2, ((2 * SIZE - im2.width) // 2, (2 * SIZE - im2.height) // 2), im2)
+    big2.save(os.path.join(WEB_OUT, "Mite_Tab.png"))
 
 
 ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics,
