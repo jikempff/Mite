@@ -109,6 +109,11 @@ for tab in TAB_ORDER:
     cards.append("</section>")
 
 page = open("template.html").read()
+# favicon: the K mark of kempffsele.me (tools/webgen/favicon.svg), inlined so the single-file page keeps it
+import base64, os
+if os.path.exists("favicon.svg"):
+    fav = base64.b64encode(open("favicon.svg", "rb").read()).decode()
+    page = page.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,' + fav + '">', 1)
 page = page.replace("/*__NAV__*/", "".join(nav)).replace("/*__CARDS__*/", "".join(cards))
 page = page.replace("/*__SCENES__*/", json.dumps(scenes, separators=(",", ":"))).replace("/*__NUMBERS__*/", json.dumps(numbers)).replace("/*__ORDER__*/", json.dumps([slug(n) for n in COMP_ORDER]))
 open("site/index.html", "w").write(page)

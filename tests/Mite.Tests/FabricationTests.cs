@@ -65,6 +65,77 @@ public class FabricationTests
         Assert.Equal(0.1, maxY - minY, 6);
     }
 
+    private static double SignedVolume(MeshData m)
+    {
+        double vol = 0;
+        foreach (var f in m.Faces)
+            for (int i = 1; i + 1 < f.Length; i++)
+                vol += Vec3d.Dot(m.Vertices[f[0]], Vec3d.Cross(m.Vertices[f[i]], m.Vertices[f[i + 1]])) / 6.0;
+        return vol;
+    }
+
+    [Fact]
+    public void StripSweep_RoundSection_IsATubeOfTheRightVolume()
+    {
+        var proj = PlaneProj();
+        var line = new Vec3d[11];
+        for (int i = 0; i <= 10; i++) line[i] = new Vec3d(5 + i, 10, 0);
+
+        var profile = LathProfile.Round(0.3, segments: 32, offset: 0.05);
+        var r = StripSweep.Sweep(proj, line, profile)!.Value;
+
+        Assert.Equal(32 * 11, r.Mesh.Vertices.Length);
+        Assert.Equal(32 * 10 + 2 * 30, r.Mesh.Faces.Length); // quad sides + two fan caps
+        double minZ = double.MaxValue, maxZ = double.MinValue;
+        foreach (var v in r.Mesh.Vertices) { minZ = Math.Min(minZ, v.Z); maxZ = Math.Max(maxZ, v.Z); }
+        Assert.Equal(0.05, minZ, 6);      // bar rests Offset above the surface
+        Assert.Equal(0.35, maxZ, 6);      // diameter 0.3 along the normal
+
+        double expected = profile.SectionArea() * 10.0; // 32-gon area × length
+        Assert.True(Math.Abs(profile.SectionArea() - Math.PI * 0.15 * 0.15) < 0.01 * Math.PI * 0.15 * 0.15, "32-gon area within 1% of the circle");
+        Assert.True(Math.Abs(SignedVolume(r.Mesh) - expected) < 1e-6 * expected,
+            $"Tube volume {SignedVolume(r.Mesh):F6} should equal section area × length {expected:F6} (positive: outward winding)");
+    }
+
+    [Fact]
+    public void StripSweep_CustomTriangleSection_AppliesToEveryCurve()
+    {
+        var proj = PlaneProj();
+        // A triangle given clockwise with a duplicate closing point: re-oriented and centred on its box
+        var tri = new (double, double)[] { (0, 0), (0, 0.2), (0.4, 0), (0, 0) };
+        var profile = LathProfile.Custom(tri, upright: false, offset: 0.0);
+        Assert.Equal(0.4, profile.Width, 9);
+        Assert.Equal(0.2, profile.Thickness, 9);
+        Assert.Equal(0.5 * 0.4 * 0.2, profile.SectionArea(), 9);
+
+        var lines = new List<Vec3d[]>();
+        for (int k = 0; k < 3; k++)
+        {
+            var line = new Vec3d[11];
+            for (int i = 0; i <= 10; i++) line[i] = new Vec3d(5 + i, 6 + 4 * k, 0);
+            lines.Add(line);
+        }
+        var results = StripSweep.SweepAll(proj, lines, profile);
+        Assert.Equal(3, results.Count);
+        foreach (var r in results)
+        {
+            Assert.Equal(3 * 11, r.Mesh.Vertices.Length);
+            double minZ = double.MaxValue, maxZ = double.MinValue;
+            foreach (var v in r.Mesh.Vertices) { minZ = Math.Min(minZ, v.Z); maxZ = Math.Max(maxZ, v.Z); }
+            Assert.Equal(0.0, minZ, 6);
+            Assert.Equal(0.2, maxZ, 6);
+            Assert.True(Math.Abs(SignedVolume(r.Mesh) - 0.04 * 10.0) < 1e-9, $"Prism volume {SignedVolume(r.Mesh):F6} should be 0.4");
+        }
+
+        // Upright custom section: the first section axis follows the normal
+        var up = LathProfile.Custom(tri, upright: true, offset: 0.1);
+        var ru = StripSweep.Sweep(proj, lines[0], up)!.Value;
+        double lo = double.MaxValue, hi = double.MinValue;
+        foreach (var v in ru.Mesh.Vertices) { lo = Math.Min(lo, v.Z); hi = Math.Max(hi, v.Z); }
+        Assert.Equal(0.1, lo, 6);
+        Assert.Equal(0.5, hi, 6);   // 0.4 extent along the normal above the 0.1 offset
+    }
+
     [Fact]
     public void StripSweep_ClosedLoop_WrapsWithoutCaps()
     {

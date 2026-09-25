@@ -77,6 +77,9 @@ Wire the net curves into **Lath Sweep** (Mite > Fabrication) with the same mesh:
 - `W` / `T` — strip cross-section (same values you analyzed)
 - `U` (Upright) — `True` for asymptotic nets, `False` for geodesic nets
 - `O` (Offset) — lift the laths off the surface, e.g. half the cladding depth
+- `Sh` (Shape) — `0` rectangle W × T, `1` round bar of diameter W, `2` your own
+  closed planar `Sc` (Section) curve; whichever you pick is applied to every
+  curve in the list and stays normal to the surface along the whole net
 
 You get one closed strip mesh per curve. Then wire both curve families into
 **Net Joints** to get the crossing points, joint planes, crossing angles, and a

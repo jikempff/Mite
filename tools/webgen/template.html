@@ -78,7 +78,7 @@ h4{margin:0 0 6px;font:600 11px/1 var(--mono);letter-spacing:.08em;text-transfor
 .demo canvas:active{cursor:grabbing}
 .demo[data-kind="sparkline"] canvas,.demo[data-kind="plot1d"] canvas{aspect-ratio:16/5}
 .demo[data-kind="plot2d"] canvas{aspect-ratio:16/6}
-.demo-ctl{position:absolute;top:8px;left:8px;display:flex;gap:10px;font:12px var(--sans);background:color-mix(in srgb,var(--surface) 85%,transparent);padding:4px 8px;border-radius:5px;z-index:2}
+.demo-ctl{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:6px 10px;max-width:calc(100% - 16px);font:12px var(--sans);background:color-mix(in srgb,var(--surface) 85%,transparent);padding:4px 8px;border-radius:5px;z-index:2}
 .demo-ctl label{display:flex;gap:4px;align-items:center;cursor:pointer}
 .demo-ctl input{margin:0;accent-color:var(--acc)}
 .ctl-l{color:var(--muted)}
@@ -257,7 +257,8 @@ const builders = {
     legend(el.dataset.id, [[WIRE(), 'saddle'], [A(), 'geodesics from one seed']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.sphereGeo.wire), { lines: SC.sphereGeo.curves, color: A(), width: 1.6 }] }; },
   geoPath(el){ const g = SC.geoPath; legend(el.dataset.id, [[WIRE(), 'sphere'], [MUTED(), 'edge path (Dijkstra)'], [A(), 'straightened geodesic']]); return { layers: [wireLayer(g.wire), { lines: [g.dijkstra], color: MUTED(), width: 1.2, dash: [4,3] }, { lines: [g.path], color: A(), width: 2.4 }], points: [{ pts: g.ends, color: INK(), r: 3.5 }] }; },
   cheb(el){ legend(el.dataset.id, [[WIRE(), 'sphere'], [A(), 'family U'], [B(), 'family V (all edges L = 0.2)']]); return { layers: [wireLayer(SC.cheb.wire), { lines: SC.cheb.u, color: A(), width: 1.6 }, { lines: SC.cheb.v, color: B(), width: 1.6 }] }; },
-  asym(el){ if (mode(el) === 'asymHyp') { legend(el.dataset.id, [[WIRE(), 'hyperboloid x² + y² − z² = 1'], [A(), 'family A (straight rulings)'], [B(), 'family B']]); return { view: { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(SC.asymHyp.wire), { lines: SC.asymHyp.a, color: A(), width: 1.6 }, { lines: SC.asymHyp.b, color: B(), width: 1.6 }] }; }
+  asym(el){ const m = mode(el) || ''; if (m.startsWith('asymCat_')) { const sc = SC[m]; legend(el.dataset.id, [[WIRE(), sc.label], [A(), 'family A'], [B(), 'family B']]); return { view: { yaw: -0.6, pitch: 0.5 }, layers: [wireLayer(sc.wire), { lines: sc.a, color: A(), width: 1.6 }, { lines: sc.b, color: B(), width: 1.6 }] }; }
+    if (m === 'asymHyp') { legend(el.dataset.id, [[WIRE(), 'hyperboloid x² + y² − z² = 1'], [A(), 'family A (straight rulings)'], [B(), 'family B']]); return { view: { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(SC.asymHyp.wire), { lines: SC.asymHyp.a, color: A(), width: 1.6 }, { lines: SC.asymHyp.b, color: B(), width: 1.6 }] }; }
     legend(el.dataset.id, [[WIRE(), 'saddle z = x² − y²'], [A(), 'family A'], [B(), 'family B']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.asym.wire), { lines: SC.asym.a, color: A(), width: 1.6 }, { lines: SC.asym.b, color: B(), width: 1.6 }] }; },
   conj(el){ legend(el.dataset.id, [[WIRE(), 'saddle'], [A(), 'max-curvature family'], [B(), 'min-curvature family']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.conj.wire), { lines: SC.conj.a, color: A(), width: 1.6 }, { lines: SC.conj.b, color: B(), width: 1.6 }] }; },
   joints(el){ const j = SC.joints; legend(el.dataset.id, [[A(), 'family A'], [B(), 'family B'], [INK(), 'crossings (' + j.nodes.length + ')']]); return { view: SADDLE_VIEW, layers: [{ lines: j.a, color: A(), width: 1.2, alpha: 0.7 }, { lines: j.b, color: B(), width: 1.2, alpha: 0.7 }], points: [{ pts: j.nodes, color: INK(), r: 1.8 }] }; },

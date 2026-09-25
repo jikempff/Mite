@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Mite.Core.Geometry;
 
 namespace Mite.Tests;
@@ -220,6 +221,244 @@ public static class TestMeshes
         Vec3d dp = (Math.Cos(phi) * t1 + Math.Sin(phi) * t2).Normalized();
         Vec3d dm = (Math.Cos(phi) * t1 - Math.Sin(phi) * t2).Normalized();
         return (dp, dm);
+    }
+
+    // ------------------------------------------------------------------
+    // Minimal-surface catalogue (José I. Kempff et al., "Adaptive Behaviour in
+    // Asymptotic Gridshells", Studio X 2026, catalogue of geometries: concave
+    // cylinder ≈ catenoid, ruled surface, 2-fold and 3-fold Enneper, Schoen's
+    // Batwing) plus the Schwarz D surface of Schling's asymptotic pavilion.
+    // On a minimal surface (H = 0) the two asymptotic directions are
+    // orthogonal and bisect the principal directions (do Carmo 1976 §3-2).
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// n-fold Enneper surface (Weierstrass data f = 1, g = w^(n−1); Weisstein,
+    /// MathWorld "Enneper's Minimal Surface"), polar parametrization
+    ///   x = r cos φ − r^(2n−1) cos((2n−1)φ) / (2n−1),
+    ///   y = −r sin φ − r^(2n−1) sin((2n−1)φ) / (2n−1),
+    ///   z = 2 r^n cos(nφ) / n,
+    /// which for n = 2 is the classic Enneper surface x = u − u³/3 + u v²,
+    /// y = −(v − v³/3 + v u²), z = u² − v². H = 0 everywhere; the coordinate
+    /// lines of the isothermal (u, v) chart are curvature lines and the
+    /// asymptotic curves are u ± v = const, i.e. their tangents are X_u ± X_v.
+    /// Disk mesh: centre vertex, then rings × segments; the parameters of each
+    /// vertex are returned in <paramref name="uv"/> as (r cos φ, r sin φ).
+    /// </summary>
+    public static MeshData CreateEnneper(int folds, double radius, int rings, int segments, out (double u, double v)[] uv)
+    {
+        var verts = new List<Vec3d>();
+        var prm = new List<(double, double)>();
+        var faces = new List<int[]>();
+        verts.Add(EnneperPoint(folds, 0, 0)); prm.Add((0, 0));
+        for (int j = 1; j <= rings; j++)
+        {
+            double r = radius * j / rings;
+            for (int i = 0; i < segments; i++)
+            {
+                double phi = 2.0 * Math.PI * i / segments;
+                verts.Add(EnneperPoint(folds, r, phi));
+                prm.Add((r * Math.Cos(phi), r * Math.Sin(phi)));
+            }
+        }
+        for (int i = 0; i < segments; i++)
+            faces.Add(new[] { 0, 1 + i, 1 + (i + 1) % segments });
+        for (int j = 0; j < rings - 1; j++)
+        {
+            int a0 = 1 + j * segments, b0 = 1 + (j + 1) * segments;
+            for (int i = 0; i < segments; i++)
+            {
+                int n = (i + 1) % segments;
+                faces.Add(new[] { a0 + i, b0 + i, b0 + n });
+                faces.Add(new[] { a0 + i, b0 + n, a0 + n });
+            }
+        }
+        uv = prm.ToArray();
+        return new MeshData(verts.ToArray(), faces.ToArray());
+    }
+
+    public static MeshData CreateEnneper(int folds = 2, double radius = 1.0, int rings = 24, int segments = 72) =>
+        CreateEnneper(folds, radius, rings, segments, out _);
+
+    public static Vec3d EnneperPoint(int n, double r, double phi)
+    {
+        int m = 2 * n - 1;
+        double rm = Math.Pow(r, m);
+        return new Vec3d(
+            r * Math.Cos(phi) - rm * Math.Cos(m * phi) / m,
+            -r * Math.Sin(phi) - rm * Math.Sin(m * phi) / m,
+            2.0 * Math.Pow(r, n) * Math.Cos(n * phi) / n);
+    }
+
+    /// <summary>
+    /// Analytic asymptotic directions of the n-fold Enneper surface at chart
+    /// parameter w = u + i v. With Weierstrass data f = 1, g = w^(n−1) the Hopf
+    /// differential is f g' dw² = (n−1) w^(n−2) dw², and asymptotic directions
+    /// dw = e^(iθ) satisfy Re((n−1) w^(n−2) e^(2iθ)) = 0, i.e.
+    /// θ = (±π/2 − (n−2) arg w) / 2. For n = 2 this is θ = ±45°: X_u ± X_v.
+    /// For n ≥ 3 the two families rotate with arg w and swap after one turn
+    /// around the flat point at the origin (a monkey-saddle-like singularity).
+    /// </summary>
+    public static (Vec3d plus, Vec3d minus) EnneperAsymptoticDirections(int n, double u, double v)
+    {
+        // central differences in the (u, v) chart; the chart is isothermal so X_u ⊥ X_v, |X_u| = |X_v|
+        double h = 1e-5;
+        Vec3d At(double uu, double vv) => EnneperPoint(n, Math.Sqrt(uu * uu + vv * vv), Math.Atan2(vv, uu));
+        Vec3d xu = (1.0 / (2 * h)) * (At(u + h, v) - At(u - h, v));
+        Vec3d xv = (1.0 / (2 * h)) * (At(u, v + h) - At(u, v - h));
+        double arg = Math.Atan2(v, u);
+        double tp = (Math.PI / 2 - (n - 2) * arg) / 2, tm = (-Math.PI / 2 - (n - 2) * arg) / 2;
+        return ((Math.Cos(tp) * xu + Math.Sin(tp) * xv).Normalized(), (Math.Cos(tm) * xu + Math.Sin(tm) * xv).Normalized());
+    }
+
+    /// <summary>
+    /// Catenoid x = c cosh(z/c) cos φ, y = c cosh(z/c) sin φ for z in [−h/2, h/2]
+    /// (the "concave cylinder" of the catalogue): H = 0, K = −1/(c² cosh⁴(z/c)),
+    /// meridians and parallels are the curvature lines and the asymptotic
+    /// directions sit at ±45° to them. Vertex index = row * segments + segment.
+    /// </summary>
+    public static MeshData CreateCatenoid(double c = 1.0, double height = 2.0, int segments = 64, int rows = 32)
+    {
+        var verts = new List<Vec3d>();
+        var faces = new List<int[]>();
+        for (int j = 0; j <= rows; j++)
+        {
+            double z = height * (j / (double)rows - 0.5);
+            double r = c * Math.Cosh(z / c);
+            for (int i = 0; i < segments; i++)
+            {
+                double th = 2.0 * Math.PI * i / segments;
+                verts.Add(new Vec3d(r * Math.Cos(th), r * Math.Sin(th), z));
+            }
+        }
+        AddRingFaces(faces, segments, rows);
+        return new MeshData(verts.ToArray(), faces.ToArray());
+    }
+
+    public static double CatenoidGaussianCurvature(double z, double c = 1.0)
+    {
+        double ch = Math.Cosh(z / c);
+        return -1.0 / (c * c * ch * ch * ch * ch);
+    }
+
+    /// <summary>
+    /// Bilinear (hyperbolic-paraboloid) patch spanned by four corners, the
+    /// "ruled surface" of the catalogue: P(u, v) = (1−u)(1−v) p00 + u(1−v) p10 +
+    /// (1−u) v p01 + u v p11. Doubly ruled: the iso-lines u = const and
+    /// v = const are straight, and they are exactly the two asymptotic
+    /// families (K &lt; 0 wherever the corners are not coplanar). Vertex index
+    /// = j * (nu + 1) + i.
+    /// </summary>
+    public static MeshData CreateBilinearPatch(Vec3d p00, Vec3d p10, Vec3d p01, Vec3d p11, int nu = 40, int nv = 40)
+    {
+        var verts = new Vec3d[(nu + 1) * (nv + 1)];
+        var faces = new List<int[]>();
+        for (int j = 0; j <= nv; j++)
+            for (int i = 0; i <= nu; i++)
+            {
+                double u = i / (double)nu, v = j / (double)nv;
+                verts[j * (nu + 1) + i] = (1 - u) * (1 - v) * p00 + u * (1 - v) * p10 + (1 - u) * v * p01 + u * v * p11;
+            }
+        for (int j = 0; j < nv; j++)
+            for (int i = 0; i < nu; i++)
+            {
+                int a = j * (nu + 1) + i, b = a + 1, c = b + nu + 1, d = a + nu + 1;
+                faces.Add(new[] { a, b, c });
+                faces.Add(new[] { a, c, d });
+            }
+        return new MeshData(verts, faces.ToArray());
+    }
+
+    /// <summary>The two unit ruling directions of the bilinear patch at parameter (u, v): ∂P/∂u and ∂P/∂v.</summary>
+    public static (Vec3d du, Vec3d dv) BilinearRulings(Vec3d p00, Vec3d p10, Vec3d p01, Vec3d p11, double u, double v)
+    {
+        Vec3d du = (1 - v) * (p10 - p00) + v * (p11 - p01);
+        Vec3d dv = (1 - u) * (p01 - p00) + u * (p11 - p10);
+        return (du.Normalized(), dv.Normalized());
+    }
+
+    /// <summary>
+    /// A patch of the Schwarz D (diamond) triply periodic minimal surface, the
+    /// surface of Schling's asymptotic pavilion (Schling, Hitrec &amp; Barthel
+    /// 2017), from its nodal approximation
+    ///   sin x sin y sin z + sin x cos y cos z + cos x sin y cos z + cos x cos y sin z = 0
+    /// (Schnering &amp; Nesper 1991) by marching tetrahedra on a regular grid
+    /// over the box [lo, hi]³. The nodal surface is close to, not exactly,
+    /// minimal (|H| small); K &lt; 0 everywhere except at flat points.
+    /// </summary>
+    public static MeshData CreateSchwarzD(double lo = 0.0, double hi = Math.PI, int cells = 24, int relaxIterations = 30)
+    {
+        double F(Vec3d p) =>
+            Math.Sin(p.X) * Math.Sin(p.Y) * Math.Sin(p.Z) + Math.Sin(p.X) * Math.Cos(p.Y) * Math.Cos(p.Z) +
+            Math.Cos(p.X) * Math.Sin(p.Y) * Math.Cos(p.Z) + Math.Cos(p.X) * Math.Cos(p.Y) * Math.Sin(p.Z);
+        var nodal = MarchingTetrahedra(F, lo, hi, cells);
+        if (relaxIterations <= 0) return nodal;
+        // Marching tetrahedra leaves slivers and an uneven vertex distribution
+        // that make discrete curvature noisy; relaxing the patch to the true
+        // minimal surface spanning its (fixed) boundary also fairs the mesh
+        var fixedFlags = nodal.BuildBoundaryVertexFlags();
+        var relaxed = Mite.Core.FormFinding.MinimalSurface.Compute(nodal, fixedFlags,
+            new Mite.Core.FormFinding.MinimalSurface.Options { MaxIterations = relaxIterations });
+        return new MeshData(relaxed.Vertices, nodal.Faces);
+    }
+
+    /// <summary>Zero level set of an implicit function on a cubic grid (six tetrahedra per cell), vertices welded on edges.</summary>
+    public static MeshData MarchingTetrahedra(Func<Vec3d, double> f, double lo, double hi, int cells)
+    {
+        int n = cells + 1;
+        double h = (hi - lo) / cells;
+        var val = new double[n * n * n];
+        Vec3d G(int i, int j, int k) => new Vec3d(lo + i * h, lo + j * h, lo + k * h);
+        int Id(int i, int j, int k) => (i * n + j) * n + k;
+        for (int i = 0; i < n; i++) for (int j = 0; j < n; j++) for (int k = 0; k < n; k++) val[Id(i, j, k)] = f(G(i, j, k));
+
+        var verts = new List<Vec3d>();
+        var edgeVert = new Dictionary<(int, int), int>();
+        var faces = new List<int[]>();
+        int VertexOnEdge(int a, int b)
+        {
+            var key = a < b ? (a, b) : (b, a);
+            if (edgeVert.TryGetValue(key, out int id)) return id;
+            double va = val[a], vb = val[b];
+            double t = Math.Abs(vb - va) < 1e-15 ? 0.5 : va / (va - vb);
+            int ia = a / (n * n), ja = (a / n) % n, ka = a % n;
+            int ib = b / (n * n), jb = (b / n) % n, kb = b % n;
+            Vec3d p = G(ia, ja, ka) + t * (G(ib, jb, kb) - G(ia, ja, ka));
+            id = verts.Count; verts.Add(p); edgeVert[key] = id;
+            return id;
+        }
+        // six tetrahedra per cube (Kuhn subdivision), corners as (di, dj, dk) bit triples
+        int[][] tets = { new[] { 0, 1, 3, 7 }, new[] { 0, 1, 5, 7 }, new[] { 0, 2, 3, 7 }, new[] { 0, 2, 6, 7 }, new[] { 0, 4, 5, 7 }, new[] { 0, 4, 6, 7 } };
+        for (int i = 0; i < cells; i++) for (int j = 0; j < cells; j++) for (int k = 0; k < cells; k++)
+        {
+            var c = new int[8];
+            for (int b = 0; b < 8; b++) c[b] = Id(i + ((b >> 2) & 1), j + ((b >> 1) & 1), k + (b & 1));
+            foreach (var t in tets)
+            {
+                var v = new[] { c[t[0]], c[t[1]], c[t[2]], c[t[3]] };
+                var inside = new List<int>(); var outside = new List<int>();
+                foreach (int id in v) (val[id] < 0 ? inside : outside).Add(id);
+                if (inside.Count == 0 || outside.Count == 0) continue;
+                if (inside.Count == 1 || outside.Count == 1)
+                {
+                    int apex = inside.Count == 1 ? inside[0] : outside[0];
+                    var others = inside.Count == 1 ? outside : inside;
+                    int a = VertexOnEdge(apex, others[0]), b2 = VertexOnEdge(apex, others[1]), c2 = VertexOnEdge(apex, others[2]);
+                    faces.Add(inside.Count == 1 ? new[] { a, b2, c2 } : new[] { a, c2, b2 });
+                }
+                else
+                {
+                    int a = VertexOnEdge(inside[0], outside[0]), b2 = VertexOnEdge(inside[0], outside[1]);
+                    int c2 = VertexOnEdge(inside[1], outside[1]), d2 = VertexOnEdge(inside[1], outside[0]);
+                    faces.Add(new[] { a, b2, c2 });
+                    faces.Add(new[] { a, c2, d2 });
+                }
+            }
+        }
+        // Weld the on-edge vertices that coincide where a grid value is exactly 0,
+        // drop the slivers that produces and orient all faces consistently
+        var raw = new MeshData(verts.ToArray(), faces.ToArray());
+        return MeshCleanup.Compute(raw, 1e-9 * (hi - lo), unifyWinding: true).Mesh;
     }
 
     private static void AddRingFaces(List<int[]> faces, int segments, int rows)

@@ -179,6 +179,14 @@ var sw = Stopwatch.StartNew();
     double vol = 0; foreach (var f in swp.Mesh.Faces) for (int i = 1; i + 1 < f.Length; i++) vol += Vec3d.Dot(swp.Mesh.Vertices[f[0]], Vec3d.Cross(swp.Mesh.Vertices[f[i]], swp.Mesh.Vertices[f[i + 1]])) / 6;
     scenes["sweep"] = new { wire = SaddleWire(40, 2.0, 5), mesh = new { verts = swp.Mesh.Vertices.Select(P).ToArray(), faces = swp.Mesh.Faces }, center = Line(longest, 2) };
     numbers["sweep"] = new { stations = swp.Centers.Length, faces = swp.Mesh.FaceCount, volume = vol, expected = R3(0.08 * 0.012 * ArcLen(longest)) };
+    // round and custom (triangular) sections along the same lath: volume = section area × length
+    var roundProfile = LathProfile.Round(0.05, 24);
+    var swpR = StripSweep.Sweep(proj, longest, roundProfile)!.Value;
+    double volR = 0; foreach (var f in swpR.Mesh.Faces) for (int i = 1; i + 1 < f.Length; i++) volR += Vec3d.Dot(swpR.Mesh.Vertices[f[0]], Vec3d.Cross(swpR.Mesh.Vertices[f[i]], swpR.Mesh.Vertices[f[i + 1]])) / 6;
+    var triProfile = LathProfile.Custom(new (double, double)[] { (-0.04, 0), (0.04, 0), (0, 0.06) }, upright: true);
+    var swpT = StripSweep.Sweep(proj, longest, triProfile)!.Value;
+    double volT = 0; foreach (var f in swpT.Mesh.Faces) for (int i = 1; i + 1 < f.Length; i++) volT += Vec3d.Dot(swpT.Mesh.Vertices[f[0]], Vec3d.Cross(swpT.Mesh.Vertices[f[i]], swpT.Mesh.Vertices[f[i + 1]])) / 6;
+    numbers["sweepSections"] = new { roundVolume = volR, roundExpected = roundProfile.SectionArea() * ArcLen(longest), triVolume = volT, triExpected = triProfile.SectionArea() * ArcLen(longest), roundVerts = swpR.Mesh.VertexCount };
     // unroll the same lath
     var un = StripUnroll.Unroll(proj, longest, new LathProfile(0.08, 0.012, true))!.Value;
     scenes["unroll"] = new { a = Line(un.EdgeA), b = Line(un.EdgeB), c = Line(un.Centerline) };
@@ -306,6 +314,38 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         lathRows.Add(new { family = fam ? "B" : "A", chordDev = R3(ChordDev(r)), knMax = R3(mid.Max(i => Math.Abs(la.NormalCurvature[i]))), kgMax = R3(mid.Max(i => Math.Abs(la.GeodesicCurvature[i]))), tgThroat = R3(la.GeodesicTorsion[throat]), tgErr = R3(mid.Max(i => Math.Abs(Math.Abs(la.GeodesicTorsion[i]) - Math.Sqrt(-TestMeshes.HyperboloidGaussianCurvature(r[i].Z))))), utilThroat = R3(la.Utilization[throat]), utilTheory = R3(0.01 / Math.Sqrt(3.0) / 0.005) });
     }
     numbers["hypLath"] = lathRows;
+}
+
+// ---------- Minimal-surface catalogue (Studio X submission p. 48 + Schwarz D): asymptotic nets ----------
+{
+    var p00 = new Vec3d(0, 0, 0); var p10 = new Vec3d(2, 0, 0.8); var p01 = new Vec3d(0.3, 1.5, 0.6); var p11 = new Vec3d(2.2, 1.6, -0.5);
+    var catalogue = new (string key, string label, MeshData mesh, double spacing, int wireEvery)[] {
+        ("catenoid", "catenoid (concave cylinder)", TestMeshes.CreateCatenoid(1, 2, 64, 32), 0.3, 4),
+        ("enneper2", "Enneper, 2-fold", TestMeshes.CreateEnneper(2, 1.0, 24, 72), 0.12, 3),
+        ("enneper3", "Enneper, 3-fold", TestMeshes.CreateEnneper(3, 0.9, 24, 72), 0.12, 3),
+        ("bilinear", "ruled surface (bilinear patch)", TestMeshes.CreateBilinearPatch(p00, p10, p01, p11, 40, 40), 0.15, 4),
+        ("schwarzD", "Schwarz D patch (relaxed)", TestMeshes.CreateSchwarzD(0, Math.PI, 24), 0.25, 9),
+    };
+    var rows = new List<object>();
+    foreach (var (key, label, mesh, spacing, wireEvery) in catalogue)
+    {
+        var pc = PrincipalCurvature.Compute(mesh);
+        var H = MeanCurvature.Compute(mesh).Values; var K = GaussianCurvature.Compute(mesh);
+        var bnd = mesh.BuildBoundaryVertexFlags();
+        var interior = Enumerable.Range(0, mesh.VertexCount).Where(v => !bnd[v]).ToArray();
+        var field = AsymptoticCurves.ComputeDirections(pc);
+        var proj = new MeshProjection(mesh);
+        var tt = Stopwatch.StartNew();
+        var A = EvenlySpacedNet.TraceField(mesh, field.Family1, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = spacing }, field.Family2);
+        var B = EvenlySpacedNet.TraceField(mesh, field.Family2, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = spacing }, field.Family1);
+        tt.Stop();
+        var e = Ends(A.Concat(B).ToList(), proj);
+        double orth = 0; int cnt = 0;
+        foreach (int v in interior) if (field.Exists[v]) { orth += Math.Abs(90 - AngleDeg(field.Family1[v], field.Family2[v])); cnt++; }
+        scenes["asymCat_" + key] = new { label, wire = Edges(mesh, wireEvery), a = A.Select(l => Line(l, 3)).ToArray(), b = B.Select(l => Line(l, 3)).ToArray() };
+        rows.Add(new { key, label, a = A.Count, b = B.Count, ends = e.ends, boundaryEnds = e.boundary, tEnds = e.onCurve, floatingEnds = e.floating, maxTurn = R3(e.turn), meanAbsH = R3(interior.Average(v => Math.Abs(H[v]))), meanK1 = R3(interior.Average(v => Math.Abs(pc.K1[v]))), positiveK = interior.Count(v => K[v] > 1e-6), meanOrthDev = R3(cnt > 0 ? orth / cnt : 0), ms = tt.ElapsedMilliseconds, vertices = mesh.VertexCount, spacing });
+    }
+    numbers["asymCatalogue"] = rows;
 }
 
 // ---------- Form finding on a 24x24 grid ----------

@@ -5,8 +5,9 @@ using Mite.Core.Geometry;
 namespace Mite.Core.Fabrication;
 
 /// <summary>
-/// Sweeps a rectangular lath profile along an on-surface polyline, producing
-/// a closed quad strip solid. The cross-section rides in the Darboux frame of
+/// Sweeps a lath profile (rectangle, round bar or any closed section polygon,
+/// see <see cref="LathProfile"/>) along an on-surface polyline, producing a
+/// closed quad strip solid. The cross-section rides in the Darboux frame of
 /// the surface (tangent / surface normal / in-surface across), so a flat
 /// lath hugs the surface and an upright lath stands perpendicular to it —
 /// the two gridshell construction modes. Surface normals are the smooth
@@ -17,7 +18,7 @@ public static class StripSweep
 {
     public readonly struct Result
     {
-        /// <summary>Closed quad mesh of the swept strip (4 vertices per station).</summary>
+        /// <summary>Closed mesh of the swept strip (one vertex per section point per station, quad sides, capped ends).</summary>
         public readonly MeshData Mesh;
 
         /// <summary>Strip centerline per station (reference curve lifted by Offset + half the normal depth).</summary>
@@ -51,6 +52,8 @@ public static class StripSweep
     {
         if (profile.Width <= 0 || profile.Thickness <= 0)
             throw new ArgumentException("Profile width and thickness must be positive.", nameof(profile));
+        if (profile.SectionPoints().Length < 3)
+            throw new ArgumentException("Profile section needs at least three points.", nameof(profile));
 
         // Drop consecutive duplicate points (they would poison the tangents)
         var pts = new List<Vec3d>(polyline.Length);
@@ -117,43 +120,54 @@ public static class StripSweep
             across[i] = Vec3d.Cross(nv, t);
         }
 
-        // Cross-section axes: across the strip / through the strip
-        double halfW = 0.5 * profile.Width;
-        double halfT = 0.5 * profile.Thickness;
-        double lift = profile.Offset + 0.5 * profile.NormalDepth;
+        // Cross-section in the (a, b) profile plane; the lowest section point
+        // along the normal sits Offset above the surface
+        var section = profile.SectionPoints();
+        int m = section.Length;
+        double lift = profile.Offset - profile.NormalLow;
 
-        var verts = new Vec3d[4 * n];
+        var verts = new Vec3d[m * n];
         var centers = new Vec3d[n];
         for (int i = 0; i < n; i++)
         {
-            // (a, b, tangent) must stay right-handed so the quad strip winds
+            // (a, b, tangent) must stay right-handed so the strip winds
             // outward in both modes: across x normal = tangent for flat laths,
             // normal x (-across) = tangent for upright ones
             Vec3d a = profile.Upright ? normals[i] : across[i];
             Vec3d b = profile.Upright ? -across[i] : normals[i];
             Vec3d c = pts[i] + lift * normals[i];
             centers[i] = c;
-            verts[4 * i + 0] = c - halfW * a - halfT * b;
-            verts[4 * i + 1] = c + halfW * a - halfT * b;
-            verts[4 * i + 2] = c + halfW * a + halfT * b;
-            verts[4 * i + 3] = c - halfW * a + halfT * b;
+            for (int k = 0; k < m; k++)
+                verts[m * i + k] = c + section[k].A * a + section[k].B * b;
         }
 
-        var faces = new List<int[]>(4 * (closed ? n : n - 1) + (closed ? 0 : 2));
+        var faces = new List<int[]>(m * (closed ? n : n - 1) + (closed ? 0 : 2 * m));
         int stationCount = closed ? n : n - 1;
         for (int i = 0; i < stationCount; i++)
         {
             int i2 = (i + 1) % n;
-            for (int s = 0; s < 4; s++)
+            for (int s = 0; s < m; s++)
             {
-                int s2 = (s + 1) % 4;
-                faces.Add(new[] { 4 * i + s, 4 * i + s2, 4 * i2 + s2, 4 * i2 + s });
+                int s2 = (s + 1) % m;
+                faces.Add(new[] { m * i + s, m * i + s2, m * i2 + s2, m * i2 + s });
             }
         }
         if (!closed)
         {
-            faces.Add(new[] { 3, 2, 1, 0 });
-            faces.Add(new[] { 4 * (n - 1), 4 * (n - 1) + 1, 4 * (n - 1) + 2, 4 * (n - 1) + 3 });
+            // End caps as fans (sections are convex or star-shaped about their centre in practice)
+            if (m == 4)
+            {
+                faces.Add(new[] { 3, 2, 1, 0 });
+                faces.Add(new[] { m * (n - 1), m * (n - 1) + 1, m * (n - 1) + 2, m * (n - 1) + 3 });
+            }
+            else
+            {
+                for (int k = 1; k + 1 < m; k++)
+                {
+                    faces.Add(new[] { 0, k + 1, k });
+                    faces.Add(new[] { m * (n - 1), m * (n - 1) + k, m * (n - 1) + k + 1 });
+                }
+            }
         }
 
         return new Result(new MeshData(verts, faces.ToArray()), centers, tangents, normals, across);
