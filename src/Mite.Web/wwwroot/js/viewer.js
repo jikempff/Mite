@@ -50,6 +50,11 @@ export class Viewer {
     this.onPickVertex = null;
     this.onHandleDrag = null;
     this.onHandleDragEnd = null;
+    this.onDirectionDrag = null;
+    this.onDirectionDragEnd = null;
+    this.onHover = null;
+    this.hovered = null;
+    this.dirHandle = null;
     this.raycaster = new THREE.Raycaster();
     this.raycaster.params.Line2 = { threshold: 6 };
     this.pointer = new THREE.Vector2();
@@ -188,7 +193,17 @@ export class Viewer {
 
   // ---- curves -----------------------------------------------------------------
 
+  _hover(o) {
+    if (this.hovered === o) return;
+    if (this.hovered && this.hovered !== this.selected) { this.hovered.line.material.linewidth = 2.2; }
+    this.hovered = o;
+    if (o && o !== this.selected) o.line.material.linewidth = 3.4;
+    this.canvas.style.cursor = o ? 'pointer' : '';
+    this.onHover?.(o);
+  }
+
   clearCurves() {
+    this.hovered = null;
     for (const o of this.curveObjects) { this.curvesGroup.remove(o.line); o.line.geometry.dispose(); }
     this.curveObjects = [];
     this.lineMaterials = this.lineMaterials.filter((m) => m.userData.keep);
@@ -199,7 +214,7 @@ export class Viewer {
   }
 
   _lineMaterial(color, width) {
-    const m = new LineMaterial({ color, linewidth: width, worldUnits: false, alphaToCoverage: true });
+    const m = new LineMaterial({ color, linewidth: width, worldUnits: false, alphaToCoverage: false });
     m.resolution.set(this.canvas.clientWidth, this.canvas.clientHeight);
     this.lineMaterials.push(m);
     return m;
@@ -246,15 +261,71 @@ export class Viewer {
     for (const c of rm) { this.overlayGroup.remove(c); c.geometry?.dispose(); }
   }
 
-  showPoints(tag, flat, color, size) {
+  showPoints(tag, flat, color, size, colors = null) {
     this.clearOverlay(tag);
     if (!flat || !flat.length) return;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(flat), 3));
-    const m = new THREE.PointsMaterial({ color, size, sizeAttenuation: false, depthTest: true });
+    if (colors) g.setAttribute('color', new THREE.BufferAttribute(Float32Array.from(colors), 3));
+    const m = new THREE.PointsMaterial({ color: colors ? 0xffffff : color, size, sizeAttenuation: false, depthTest: true, vertexColors: !!colors });
     const p = new THREE.Points(g, m);
     p.userData.tag = tag;
     this.overlayGroup.add(p);
+  }
+
+  /** Dim or restore the current curve families (used while a new net is computing) */
+  ghostCurves(on) {
+    for (const o of this.curveObjects) { o.line.material.transparent = true; o.line.material.opacity = on ? 0.3 : 1; o.line.material.needsUpdate = true; }
+  }
+
+  setFamilyVisible(family, visible) {
+    for (const o of this.curveObjects) if (o.family === family) o.line.visible = visible;
+  }
+
+  // ---- seed direction handle ----------------------------------------------------
+
+  /** Arrow at the seed showing the start direction; its tip is draggable in the tangent plane */
+  setDirectionHandle(seed, normal, dir, length) {
+    this.clearDirectionHandle();
+    const p = new THREE.Vector3(...seed), n = new THREE.Vector3(...normal).normalize();
+    let d = new THREE.Vector3(...dir); d.addScaledVector(n, -d.dot(n)); if (d.lengthSq() < 1e-12) d.set(1, 0, 0).addScaledVector(n, -n.x); d.normalize();
+    const tip = p.clone().addScaledVector(d, length);
+    const g = new LineGeometry(); g.setPositions([p.x, p.y, p.z, tip.x, tip.y, tip.z]);
+    const m = this._lineMaterial(0xf59e0b, 3); m.userData.keep = true;
+    const line = new Line2(g, m); line.computeLineDistances(); line.userData.tag = 'dirline';
+    this.overlayGroup.add(line);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(length * 0.12, 16, 12), new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4, emissive: 0x000000 }));
+    knob.position.copy(tip);
+    knob.userData = { handle: -1, kind: 'dir', origin: p, normal: n, length };
+    this.handlesGroup.add(knob);
+    const base = new THREE.Mesh(new THREE.SphereGeometry(length * 0.08, 12, 10), new THREE.MeshStandardMaterial({ color: 0x1f2937 }));
+    base.position.copy(p); base.userData.tag = 'dirbase';
+    this.overlayGroup.add(base);
+    this.dirHandle = knob;
+  }
+
+  clearDirectionHandle() {
+    if (this.dirHandle) { this.handlesGroup.remove(this.dirHandle); this.dirHandle = null; }
+    this.clearOverlay('dirline'); this.clearOverlay('dirbase');
+  }
+
+  _updateDirectionLine() {
+    const k = this.dirHandle; if (!k) return;
+    const l = this.overlayGroup.children.find((c) => c.userData.tag === 'dirline');
+    if (l) { l.geometry.setPositions([k.userData.origin.x, k.userData.origin.y, k.userData.origin.z, k.position.x, k.position.y, k.position.z]); l.computeLineDistances(); }
+  }
+
+  // ---- camera presets ----------------------------------------------------------------
+
+  view(kind) {
+    const r = this.sceneRadius, c = this.center || new THREE.Vector3();
+    const dist = r / Math.sin((this.camera.fov * Math.PI) / 360) * 1.05;
+    const dirs = { iso: [-0.55, -0.85, 0.6], top: [0, -0.0001, 1], front: [0, -1, 0.0001], side: [1, 0, 0.0001] };
+    const dir = new THREE.Vector3(...(dirs[kind] || dirs.iso)).normalize();
+    this.controls.target.copy(c);
+    this.camera.position.copy(c).addScaledVector(dir, dist);
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
   }
 
   showSegments(tag, flat, color, width = 1.2) {
@@ -327,7 +398,7 @@ export class Viewer {
   }
 
   clearHandles() {
-    for (const h of [...this.handlesGroup.children]) { this.handlesGroup.remove(h); h.material.dispose(); }
+    for (const h of [...this.handlesGroup.children]) { if (h.userData.kind === 'dir') continue; this.handlesGroup.remove(h); h.material.dispose(); }
   }
 
   // ---- picking ------------------------------------------------------------------
@@ -346,8 +417,10 @@ export class Viewer {
       this._setPointer(e);
       const hit = this.raycaster.intersectObjects(this.handlesGroup.children, false)[0];
       if (hit) {
-        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(this.camera.getWorldDirection(new THREE.Vector3()), hit.object.position);
-        this.dragging = { obj: hit.object, plane, offset: hit.object.position.clone().sub(hit.point) };
+        const isDir = hit.object.userData.kind === 'dir';
+        const planeNormal = isDir ? hit.object.userData.normal : this.camera.getWorldDirection(new THREE.Vector3());
+        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, isDir ? hit.object.userData.origin : hit.object.position);
+        this.dragging = { obj: hit.object, plane, offset: isDir ? new THREE.Vector3() : hit.object.position.clone().sub(hit.point) };
         this.controls.enabled = false;
         this.canvas.setPointerCapture(e.pointerId);
         hit.object.material.emissive.setHex(0xf59e0b);
@@ -359,24 +432,43 @@ export class Viewer {
         const p = new THREE.Vector3();
         if (this.raycaster.ray.intersectPlane(this.dragging.plane, p)) {
           p.add(this.dragging.offset);
+          const u = this.dragging.obj.userData;
+          if (u.kind === 'dir') {
+            const d = p.clone().sub(u.origin); d.addScaledVector(u.normal, -d.dot(u.normal));
+            if (d.lengthSq() < 1e-12) return;
+            d.normalize();
+            this.dragging.obj.position.copy(u.origin).addScaledVector(d, u.length);
+            this._updateDirectionLine();
+            this.onDirectionDrag?.([d.x, d.y, d.z]);
+            return;
+          }
           this.dragging.obj.position.copy(p);
-          this.onHandleDrag?.(this.dragging.obj.userData.handle, [p.x, p.y, p.z]);
+          this.onHandleDrag?.(u.handle, [p.x, p.y, p.z]);
         }
         return;
       }
+      this._setPointer(e);
       if (this.handlesGroup.children.length) {
-        this._setPointer(e);
         const hit = this.raycaster.intersectObjects(this.handlesGroup.children, false)[0];
         this.canvas.style.cursor = hit ? 'grab' : '';
+        if (hit) { this._hover(null); return; }
+      }
+      if (this.curveObjects.length && this.onHover) {
+        const now = performance.now();
+        if (now - (this._lastHover || 0) > 60) {
+          this._lastHover = now;
+          const hit = this.raycaster.intersectObjects(this.curveObjects.filter((o) => o.line.visible).map((o) => o.line), false)[0];
+          this._hover(hit ? this.curveObjects.find((c) => c.line === hit.object) : null);
+        }
       }
     });
     const up = (e) => {
       if (this.dragging) {
         this.dragging.obj.material.emissive.setHex(0x000000);
-        const id = this.dragging.obj.userData.handle;
+        const u = this.dragging.obj.userData;
         this.dragging = null;
         this.controls.enabled = true;
-        this.onHandleDragEnd?.(id);
+        if (u.kind === 'dir') this.onDirectionDragEnd?.(); else this.onHandleDragEnd?.(u.handle);
         return;
       }
       if (!down) return;

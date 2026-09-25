@@ -26,8 +26,8 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - All linear systems run on a built-in sparse envelope LDLᵀ solver (reverse Cuthill–McKee ordering): tens of thousands of unknowns solve in seconds
 
 ### Gridshells
-- **Asymptotic Net** — both families of asymptotic curves (zero normal curvature) for asymptotic gridshells, with optional evenly-spaced auto-seeding
-- **Geodesic Net** — straightest geodesics traced on the mesh for geodesic (lath) gridshells, with optional evenly-spaced auto-seeding
+- **Asymptotic Net** — both families of asymptotic curves (zero normal curvature) for asymptotic gridshells, with combed family labels, a minimum crossing angle and evenly-spaced auto-seeding
+- **Geodesic Net** — straightest geodesics for geodesic (lath) gridshells; families grow with Jacobi-field start angles for even strips, from a seed or from a border edge
 - **Chebyshev Net** — equal-edge-length nets by the compass method: the kinematics of elastic gridshells bent from flat lattices
 - **Conjugate Net** — both principal families evenly spaced: an approximate conjugate net, the layout for planar-quad (PQ) panelization
 - **Geodesic Path** — shortest geodesic between two points (graph search + on-surface curve shortening)
@@ -134,6 +134,11 @@ split to stock with **Lath Segment**, and produce cutting patterns with **Lath U
 plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
+
+### 1.2.2
+- Asymptotic Net: family labels are combed over the mesh (A and B are consistent everywhere, no more mixed families on general surfaces); new `MinAngle` input keeps the net out of the near-parabolic band where the two families collapse onto each other; flat points no longer pass as anticlastic; regions the first seed cannot reach get their own seed.
+- Geodesic Net: each new geodesic starts at the Jacobi-field angle that keeps its strip closest to constant width (Pottmann et al. 2010, "Geodesic patterns") instead of parallel to its neighbour — dome and saddle families lose their fans and merges; new `FromBorder` / `BorderAngle` inputs grow the family from a border edge (vault helices).
+- Web app (kempffsele.me/mite): kernel in a Web Worker with stop button, seed direction handle in the viewport, real-unit spacing with presets, net quality card (strip width, crossing angles, end classes, buildable share), end markers, family toggles, hover, camera presets.
 
 ### 1.2.1
 - Continuous curves (new `Continuous` input on Asymptotic Net, Geodesic Net, Conjugate Net, Curvature Streamlines): laths run border to border; merged traces end on their neighbour as T-junctions, never floating.

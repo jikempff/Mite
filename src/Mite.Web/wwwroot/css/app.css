@@ -103,3 +103,23 @@ button, input, select { font: inherit; color: inherit; }
   .panel { border-left: 0; border-top: 1px solid var(--line); }
   .links a { display: none; }
 }
+
+/* camera + hover + quality card */
+.cam { position: absolute; right: 14px; bottom: 34px; display: flex; gap: 4px; }
+.cam button { font: 11px var(--sans); letter-spacing: 0.04em; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 3px 9px; cursor: pointer; }
+.cam button:hover { color: var(--ink); border-color: var(--muted); }
+.hud-hover { top: 34px; left: 14px; color: var(--ink); }
+.busy button { pointer-events: auto; margin-left: 4px; }
+.busy { pointer-events: auto; }
+.presets { gap: 6px; }
+.presets .unit { margin-left: auto; }
+.sw { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; }
+.swA { background: var(--famA); } .swB { background: var(--famB); }
+.quality { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 10px; }
+.q-h { font-size: 12px; color: var(--muted); }
+.q-h span { color: var(--ink); }
+.mini { width: 100%; height: 44px; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; margin-top: 4px; }
+.ends { font-size: 12px; color: var(--muted); line-height: 1.7; }
+.ends i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.buildbar { height: 8px; border-radius: 4px; background: var(--surface2); overflow: hidden; margin-top: 8px; border: 1px solid var(--line); }
+.buildbar i { display: block; height: 100%; background: var(--ok); }

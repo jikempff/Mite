@@ -56,7 +56,7 @@ NOTES = {
     checks=[("Converges", "[N.dynrelax.converged,N.dynrelax.iterations+' steps, residual '+N.dynrelax.residual.toExponential(2)+', '+N.dynrelax.ms+' ms']"),
             ("All edges in tension", "[N.dynrelax.minForce>=0,'edge forces '+N.dynrelax.minForce+' … '+N.dynrelax.maxForce]")]),
 "Asymptotic Net": dict(demo="asym", expect=[
-    "Two families of continuous curves that only exist where K < 0. On the saddle z = x² − y² they are the straight lines x = ±y + c, so every curve runs edge to edge with no stubs, no family mixing and no floating ends.",
+    "Two families of continuous curves that only exist where K < 0 — and only where the families cross at more than MinAngle (default 15°): near the K = 0 line they collapse onto each other and traced curves would swap family. The family labels are combed over the mesh, so A and B are consistent colours everywhere. On the saddle z = x² − y² they are the straight lines x = ±y + c, so every curve runs edge to edge with no stubs, no family mixing and no floating ends.",
     "Continuous (default on): a curve runs to the mesh border even where it drifts closer than Spacing to its neighbour; only a curve that has practically merged with a neighbour (within 0.15 × Spacing) stops, and then it ends exactly on that neighbour as a T-junction. Continuous off restores classic evenly-spaced streamlines: more even spacing, but laths end mid-surface (on a neighbour, never floating).",
     "Curves meet the border along their own direction: the last segment carries no hook and the trace never crawls along the edge, also on staircase borders of trimmed quad meshes (Weaverbird-style).",
     "Spacing 0 picks bounding box / 30; Step 0 picks Spacing / 10 (capped at half a mesh edge). The Anticlastic output masks the vertices where curves can exist."],
@@ -67,7 +67,7 @@ NOTES = {
             ("No hook at the border", "[N.asym.maxEndTurn<5,'largest turn in the last segment '+N.asym.maxEndTurn+'° (was 35° before); largest turn anywhere '+N.asym.maxTurn+'°']"),
             ("Balanced families", "[Math.abs(N.asym.a-N.asym.b)<=2,N.asym.a+' + '+N.asym.b+' curves in '+N.asym.ms+' ms']")]),
 "Geodesic Net": dict(demo="sphereGeo", expect=[
-    "Straightest geodesics from one seed, grown sideways at Spacing. On the saddle every geodesic runs border to border; where two geodesics converge the later one ends on the earlier one as a T-junction (visible near the centre), never in mid-air.",
+    "Straightest geodesics from one seed, grown sideways at Spacing. Each new geodesic starts at the angle that keeps its strip closest to constant width along its whole length (Jacobi field J″ + K·J = 0, Pottmann et al. 2010) instead of parallel to its neighbour, so on the saddle every geodesic runs border to border with no merges; where a strip still closes the later curve ends on the earlier one as a T-junction, never in mid-air.",
     "On a closed surface the seed geodesic closes (sphere: a great circle of length 2π, checked below) and the family cannot stay evenly spaced — great circles all cross each other — so a sphere is not a useful test shape for a net; a saddle, vault or dome patch is.",
     "Directions are paired with seeds by position (the last direction is reused). A direction parallel to the normal is replaced by an arbitrary tangent.",
     "Continuous works as in Asymptotic Net: off, geodesics stop at 0.4 × Spacing from a neighbour instead."],

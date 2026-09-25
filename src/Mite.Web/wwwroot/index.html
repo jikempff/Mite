@@ -26,13 +26,15 @@
   <section class="stage" id="stage">
     <canvas id="gl"></canvas>
     <div class="hud hud-tl" id="hud-shape"></div>
+    <div class="hud hud-hover" id="hud-hover"></div>
     <div class="hud hud-bl">
       <div id="legend" class="legend hidden"><span id="legend-min"></span><i id="legend-bar"></i><span id="legend-max"></span><b id="legend-title"></b></div>
-      <div class="hint">drag orbit · right-drag pan · scroll zoom · click a curve for its lath · shift-click the surface to set the seed</div>
+      <div class="hint">drag orbit · right-drag pan · scroll zoom · hover / click a curve · shift-click the surface to move the seed · drag the orange knob to turn the seed direction</div>
     </div>
     <div class="hud hud-tr" id="hud-net"></div>
+    <div class="cam"><button data-view="iso" title="Isometric (f)">iso</button><button data-view="top" title="Top">top</button><button data-view="front" title="Front">front</button><button data-view="side" title="Side">side</button></div>
     <div id="drop" class="drop hidden">Drop an .obj / .stl / .ply</div>
-    <div id="busy" class="busy hidden"><span></span><em id="busy-text">computing…</em></div>
+    <div id="busy" class="busy hidden"><span></span><em id="busy-text">computing…</em><button id="cancel" class="ghost small" title="Stop and restart the kernel">stop</button></div>
     <div id="boot" class="boot"><div class="boot-card"><h1>Mite</h1><p>Loading the geometry kernel (≈2 MB, once)…</p><div class="bar"><i id="boot-bar"></i></div><small id="boot-text"></small></div></div>
   </section>
 
@@ -83,22 +85,35 @@
         <button data-net="isocurves">Isocurves</button>
       </div>
       <div id="net-params">
-        <div class="row slider" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin"><label for="spacing">spacing <span class="unit">% of size</span></label><input id="spacing" type="range" min="1.5" max="15" step="0.5" value="4"><output for="spacing">4</output></div>
-        <div class="row slider" data-for="chebyshev"><label for="edge">edge length <span class="unit">% of size</span></label><input id="edge" type="range" min="2" max="20" step="0.5" value="6"><output for="edge">6</output></div>
+        <div class="row slider" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin"><label for="spacing">spacing</label><input id="spacing" type="range" min="1" max="15" step="0.25" value="4"><output for="spacing" id="spacing-out">–</output></div>
+        <div class="row presets" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin"><span class="unit">presets</span><button class="ghost small" data-sp="8">coarse</button><button class="ghost small" data-sp="4">medium</button><button class="ghost small" data-sp="2">fine</button><span id="spacing-count" class="unit"></span></div>
+        <div class="row slider" data-for="chebyshev"><label for="edge">edge length</label><input id="edge" type="range" min="2" max="20" step="0.5" value="6"><output for="edge" id="edge-out">–</output></div>
         <div class="row slider" data-for="chebyshev"><label for="count">nodes per side</label><input id="count" type="range" min="2" max="24" step="1" value="8"><output for="count">8</output></div>
-        <div class="row slider" data-for="geodesic geodesicBoth chebyshev"><label for="dirangle">direction <span class="unit">° from x</span></label><input id="dirangle" type="range" min="0" max="180" step="5" value="30"><output for="dirangle">30</output></div>
         <div class="row slider" data-for="geodesicBoth chebyshev"><label for="famangle">family angle <span class="unit">°</span></label><input id="famangle" type="range" min="30" max="150" step="5" value="90"><output for="famangle">90</output></div>
+        <div class="row slider" data-for="asymptotic"><label for="minangle">min crossing <span class="unit">°</span></label><input id="minangle" type="range" min="0" max="45" step="1" value="15"><output for="minangle">15</output></div>
         <div class="row slider" data-for="isocurves"><label for="levels">levels</label><input id="levels" type="range" min="3" max="40" step="1" value="12"><output for="levels">12</output></div>
         <div class="row" data-for="isocurves"><label for="isofield">field</label><select id="isofield"><option value="K">Gaussian K</option><option value="H">Mean H</option><option value="k1">k1</option><option value="k2">k2</option><option value="z">height z</option></select></div>
         <div class="row toggles" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin">
           <label class="chk"><input id="continuous" type="checkbox" checked> continuous <span class="unit">run to the border</span></label>
           <label class="chk"><input id="crossings" type="checkbox"> crossing dots</label>
         </div>
-        <div class="row" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin chebyshev"><label>seed</label><span id="seed-label" class="mono">auto (centre)</span><button id="seed-clear" class="ghost small">reset</button></div>
+        <div class="row toggles" data-for="geodesic geodesicBoth">
+          <label class="chk"><input id="jacobi" type="checkbox" checked> Jacobi start angles <span class="unit">even strips</span></label>
+          <label class="chk"><input id="fromborder" type="checkbox"> from the border</label>
+        </div>
+        <div class="row slider" data-for="geodesic geodesicBoth" id="borderangle-row"><label for="borderangle">border angle <span class="unit">° from normal</span></label><input id="borderangle" type="range" min="-60" max="60" step="5" value="0"><output for="borderangle">0</output></div>
+        <div class="row" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin chebyshev"><label>seed</label><span id="seed-label" class="mono">auto</span><button id="seed-clear" class="ghost small">reset</button><span class="unit">shift-click the surface to move it</span></div>
+        <div class="row toggles"><label class="chk"><input id="famA" type="checkbox" checked> <i class="sw swA"></i> family A</label><label class="chk" id="famB-row"><input id="famB" type="checkbox" checked> <i class="sw swB"></i> family B</label></div>
       </div>
       <p id="net-note" class="note"></p>
       <p id="net-stats" class="stats"></p>
       <p id="net-warn" class="warn hidden"></p>
+      <div id="quality" class="quality hidden">
+        <div class="q"><div class="q-h">strip width <span id="q-width-txt"></span></div><canvas id="q-width" class="mini"></canvas><div class="caption">distance to the neighbouring curve, 0 … 2 × spacing</div></div>
+        <div class="q"><div class="q-h">crossing angle <span id="q-angle-txt"></span></div><canvas id="q-angle" class="mini"></canvas><div class="caption">0 … 90°, 10° bins</div></div>
+        <div class="q"><div class="q-h">ends</div><div id="q-ends" class="ends"></div></div>
+        <div class="q"><div class="q-h">buildable laths <span id="q-build-txt"></span></div><div id="q-build" class="buildbar"></div><div class="caption">with the section in the Lath block; colour all laths to see which</div></div>
+      </div>
     </section>
 
     <section class="block" id="lath-block">

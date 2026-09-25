@@ -80,7 +80,8 @@ carries the typology switcher, live parameters, a draggable loft, OBJ/STL
 drop, all analysis modes and nets, lath plots with unrolled patterns, frame
 analysis and exports. Remaining and new items:
 
-- [ ] Run the kernel in a Web Worker so long traces never block the page.
+- [x] Kernel in a Web Worker (stop = restart), seed/direction handle, quality
+      card, end markers, family toggles, hover, camera presets.
 - [ ] Lath segmentation, joints and nesting sheet (material %) in the app.
 - [ ] Planarization and Chebyshev angle map in the app; isocurve labels.
 - [ ] Bench (`tools/webgen`) to reuse the app's typologies (AnalyticShapes).
@@ -99,6 +100,9 @@ analysis and exports. Remaining and new items:
 
 ## D. Algorithms to research and improve (with literature)
 
+- [x] Geodesic families: Jacobi-field start angles after Pottmann et al. 2010
+      (§4 evolution), border seeding; regions unreachable by sideways growth
+      get their own seed (field nets). Still open: farthest-point seeding.
 - [ ] Evenly spaced curve families on surfaces: Jobard & Lefer 1997
       (Creating evenly-spaced streamlines of arbitrary density); Mebarki,
       Alliez & Devillers 2005 (Farthest point seeding for efficient

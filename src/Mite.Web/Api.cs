@@ -55,6 +55,19 @@ public class NetOptions
     public double AngleDeg { get; set; } = 90;
     public int Levels { get; set; } = 10;
     public string Field { get; set; } = "K";
+    public double MinAngle { get; set; } = 15;
+    public bool FromBorder { get; set; } = false;
+    public double BorderAngle { get; set; } = 0;
+    public bool Jacobi { get; set; } = true;
+}
+
+public class WidthStats
+{
+    public double Min { get; set; }
+    public double Mean { get; set; }
+    public double Max { get; set; }
+    public double Cv { get; set; }
+    public int[] Histogram { get; set; } = Array.Empty<int>(); // 12 bins over 0..2 spacing
 }
 
 public class EndStats
@@ -89,6 +102,11 @@ public class NetPayload
     public double ResolvedSpacing { get; set; }
     public double ResolvedStep { get; set; }
     public EndStats Ends { get; set; } = new EndStats();
+    /// <summary>Flat xyz of every open end followed by its class: 0 border, 1 region edge, 2 on a neighbour, 3 floating.</summary>
+    public double[] EndPoints { get; set; } = Array.Empty<double>();
+    public int[] EndClasses { get; set; } = Array.Empty<int>();
+    public WidthStats? Widths { get; set; }
+    public int[] AngleHistogram { get; set; } = Array.Empty<int>(); // 9 bins of 10° from 0 to 90
     public CrossingStats? Crossings { get; set; }
     public string[] Warnings { get; set; } = Array.Empty<string>();
     public long Ms { get; set; }
@@ -133,6 +151,7 @@ public class FramePayload
 [JsonSerializable(typeof(CurvaturePayload))]
 [JsonSerializable(typeof(NetOptions))]
 [JsonSerializable(typeof(NetPayload))]
+[JsonSerializable(typeof(WidthStats))]
 [JsonSerializable(typeof(LathPayload))]
 [JsonSerializable(typeof(FramePayload))]
 internal partial class MiteJson : JsonSerializerContext { }
@@ -246,7 +265,7 @@ public static partial class MiteApi
         var pc = Pc(Math.Max(1, radius));
         var K = GaussianCurvature.Compute(_mesh!);
         var H = MeanCurvature.Compute(_mesh!).Values;
-        var field = AsymptoticCurves.ComputeDirections(pc);
+        var field = AsymptoticCurves.ComputeDirections(pc, _mesh, 15.0);
         int anti = 0; foreach (bool e in field.Exists) if (e) anti++;
         var p = new CurvaturePayload
         {
@@ -274,7 +293,8 @@ public static partial class MiteApi
 
         EvenlySpacedNet.Options Opts() => new EvenlySpacedNet.Options
         {
-            Spacing = o.Spacing, StepSize = o.Step, Continuous = o.Continuous, MaxCurves = Math.Max(1, o.MaxCurves)
+            Spacing = o.Spacing, StepSize = o.Step, Continuous = o.Continuous, MaxCurves = Math.Max(1, o.MaxCurves),
+            JacobiSeeding = o.Jacobi, FromBorder = o.FromBorder, BorderAngle = o.BorderAngle
         };
         int seed = o.Seed >= 0 && o.Seed < _mesh.VertexCount ? o.Seed : -1;
         var dir = new Vec3d(o.Direction[0], o.Direction[1], o.Direction[2]);
@@ -285,16 +305,16 @@ public static partial class MiteApi
             case "asymptotic":
             {
                 var pc = Pc(2);
-                var field = AsymptoticCurves.ComputeDirections(pc);
+                var field = AsymptoticCurves.ComputeDirections(pc, _mesh, o.MinAngle);
                 int anti = 0; foreach (bool e in field.Exists) if (e) anti++;
-                if (anti == 0) { warnings.Add("No anticlastic region (K < 0): asymptotic curves do not exist on this shape."); break; }
+                if (anti == 0) { warnings.Add(o.MinAngle > 0 ? $"No usable anticlastic region: nowhere do the asymptotic families cross at more than {o.MinAngle:0}° (lower MinAngle or pick a more saddle-shaped surface)." : "No anticlastic region (K < 0): asymptotic curves do not exist on this shape."); break; }
                 int s = seed >= 0 && field.Exists[seed] ? seed : -1;
                 var oa = Opts(); var ob = Opts();
                 a = EvenlySpacedNet.TraceField(_mesh, field.Family1, field.Exists, s, oa, field.Family2);
                 b = EvenlySpacedNet.TraceField(_mesh, field.Family2, field.Exists, s, ob, field.Family1);
                 resolvedSpacing = oa.ResolvedSpacing; resolvedStep = oa.ResolvedStepSize;
                 if (oa.ReachedMaxCurves || ob.ReachedMaxCurves) warnings.Add("MaxCurves reached; raise it or the spacing.");
-                if (anti < _mesh.VertexCount) warnings.Add($"Only {anti} of {_mesh.VertexCount} vertices are anticlastic; curves fade out at the K = 0 line.");
+                if (anti < _mesh.VertexCount) warnings.Add($"{anti} of {_mesh.VertexCount} vertices are usable anticlastic region (families crossing at ≥ {o.MinAngle:0}°); curves end where the families collapse near K = 0.");
                 break;
             }
             case "conjugate":
@@ -392,14 +412,17 @@ public static partial class MiteApi
 
         _famA = a; _famB = b;
         var all = a.Concat(b).ToList();
-        bool[]? regionMask = kind == "asymptotic" ? AsymptoticCurves.ComputeDirections(Pc(2)).Exists : null;
+        bool[]? regionMask = kind == "asymptotic" ? AsymptoticCurves.ComputeDirections(Pc(2), _mesh, o.MinAngle).Exists : null;
         var payload = new NetPayload
         {
             Kind = kind, A = ToJagged(a), B = ToJagged(b), CountA = a.Count, CountB = b.Count,
             MinLength = all.Count > 0 ? all.Min(ArcLength) : 0, MaxLength = all.Count > 0 ? all.Max(ArcLength) : 0,
             ResolvedSpacing = resolvedSpacing, ResolvedStep = resolvedStep,
-            Ends = EndStatistics(all, regionMask), Warnings = warnings.ToArray()
+            Warnings = warnings.ToArray()
         };
+        payload.Ends = EndStatistics(all, regionMask, out var endPts, out var endCls);
+        payload.EndPoints = endPts; payload.EndClasses = endCls;
+        payload.Widths = StripWidths(a, b, resolvedSpacing > 0 ? resolvedSpacing : o.Spacing);
         if (crossFamilies && a.Count > 0 && b.Count > 0)
         {
             var xs = NetIntersections.Find(a, b);
@@ -417,6 +440,9 @@ public static partial class MiteApi
                 MaxGap = xs.Count > 0 ? xs.Max(x => x.Gap) : 0, Points = pts,
                 TJunctions = NetIntersections.FindAll(a, b).Count(x => x.IsTJunction)
             };
+            var hist = new int[9];
+            foreach (double ang in angles) hist[Math.Min(8, (int)Math.Floor(ang / 10.0))]++;
+            payload.AngleHistogram = hist;
         }
         payload.Ms = sw.ElapsedMilliseconds;
         return JsonSerializer.Serialize(payload, MiteJson.Default.NetPayload);
@@ -553,9 +579,12 @@ public static partial class MiteApi
         return s;
     }
 
-    private static EndStats EndStatistics(List<Vec3d[]> all, bool[]? regionMask)
+    private static EndStats EndStatistics(List<Vec3d[]> all, bool[]? regionMask, out double[] endPoints, out int[] endClasses)
     {
         var st = new EndStats();
+        var pts = new List<double>();
+        var cls = new List<int>();
+        endPoints = Array.Empty<double>(); endClasses = Array.Empty<int>();
         if (_proj == null || _mesh == null) return st;
         double tol = 1e-6 * Math.Max(_proj.AverageEdgeLength, 1e-12);
         int[][]? nbrs = regionMask != null ? _mesh.BuildVertexNeighbors() : null;
@@ -566,8 +595,9 @@ public static partial class MiteApi
             foreach (var p in new[] { l[0], l[^1] })
             {
                 st.Ends++;
+                pts.Add(p.X); pts.Add(p.Y); pts.Add(p.Z);
                 var h = _proj.ClosestPoint(p, _proj.NearestVertexGlobal(p));
-                if (_proj.IsOnBoundary(h, 1e-4) || (h.Point - p).Length > tol) { st.Border++; continue; }
+                if (_proj.IsOnBoundary(h, 1e-4) || (h.Point - p).Length > tol) { st.Border++; cls.Add(0); continue; }
                 if (regionMask != null && nbrs != null)
                 {
                     // end at the edge of the region where the field exists (K = 0 line)
@@ -579,7 +609,7 @@ public static partial class MiteApi
                         foreach (int nb in nbrs[vi]) if (!regionMask[nb]) { edge = true; break; }
                         if (edge) break;
                     }
-                    if (edge) { st.RegionEdge++; continue; }
+                    if (edge) { st.RegionEdge++; cls.Add(1); continue; }
                 }
                 double best = double.MaxValue;
                 foreach (var m in all)
@@ -594,9 +624,54 @@ public static partial class MiteApi
                     }
                     if (best < tol) break;
                 }
-                if (best < tol) st.OnCurve++; else st.Floating++;
+                if (best < tol) { st.OnCurve++; cls.Add(2); } else { st.Floating++; cls.Add(3); }
             }
         }
+        endPoints = pts.ToArray(); endClasses = cls.ToArray();
         return st;
+    }
+
+    /// <summary>
+    /// Strip width along the curves of each family: distance from sampled
+    /// points to the nearest other curve of the same family (capped at 2×
+    /// spacing, which also excludes lone curves). Even nets have a low
+    /// coefficient of variation.
+    /// </summary>
+    private static WidthStats? StripWidths(List<Vec3d[]> a, List<Vec3d[]> b, double spacing)
+    {
+        if (spacing <= 0) return null;
+        var widths = new List<double>();
+        foreach (var fam in new[] { a, b })
+        {
+            if (fam.Count < 2) continue;
+            // registry of the family's points for a coarse nearest lookup
+            foreach (var c in fam)
+            {
+                int stride = Math.Max(1, c.Length / 24);
+                for (int i = 0; i < c.Length; i += stride)
+                {
+                    double best = double.MaxValue;
+                    foreach (var m in fam)
+                    {
+                        if (ReferenceEquals(m, c)) continue;
+                        // quick reject by bounding sphere of the segment run
+                        for (int k = 0; k + 1 < m.Length; k++)
+                        {
+                            var ab = m[k + 1] - m[k];
+                            double t = Math.Max(0, Math.Min(1, Vec3d.Dot(c[i] - m[k], ab) / Math.Max(ab.LengthSquared, 1e-30)));
+                            double d = (m[k] + t * ab - c[i]).Length;
+                            if (d < best) best = d;
+                        }
+                    }
+                    if (best < 2 * spacing) widths.Add(best);
+                }
+            }
+        }
+        if (widths.Count < 4) return null;
+        double mean = widths.Average();
+        double sd = Math.Sqrt(widths.Average(w => (w - mean) * (w - mean)));
+        var hist = new int[12];
+        foreach (double w in widths) hist[Math.Min(11, (int)Math.Floor(w / (2 * spacing) * 12))]++;
+        return new WidthStats { Min = widths.Min(), Mean = mean, Max = widths.Max(), Cv = sd / mean, Histogram = hist };
     }
 }
