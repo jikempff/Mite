@@ -3,7 +3,8 @@
 # and copies a static, self-contained site into a target folder — e.g. the
 # `mite/` folder of a GitHub Pages repo.
 #
-#   tools/build-web.sh ../kempffseleme/mite
+#   tools/build-web.sh ../kempffseleme/mite        # Mac / Linux / Git Bash
+#   .\tools\build-web.ps1 ..\kempffseleme\mite     # Windows PowerShell (tools/build-web.ps1)
 #
 # Requirements: .NET 10 SDK with the wasm-tools workload
 #   dotnet workload install wasm-tools

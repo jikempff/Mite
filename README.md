@@ -137,6 +137,7 @@ plus IDs and a BOM from **Lath Labels**.
 
 ### 1.2.6 (unreleased)
 - Web app: each block names the plugin component it runs, with its Grasshopper icon (Analysis and Net strips follow the active chip; Lath and Structure list theirs), the knot mark in the header and the tab icon on the recipe button — the 48 px icons come from `tools/generate_icons.py`. Chips stay text-only for legibility.
+- Web app: `tools/build-web.ps1` deploys from PowerShell (the bash script needs Git Bash or a Mac); `.gitattributes` keeps `*.sh` at LF on Windows checkouts.
 - Web app: fixed a boot race — changing the shape while the first one was still loading traced the default net with the placeholder size (spacing 0.04 instead of 4 % of the mesh) and left the page on "tracing…" for minutes. `traceNet` now waits for the load, which traces the net itself. `tools/web-smoke.js` (Playwright) reproduces it and checks the component strips.
 
 ### 1.2.5

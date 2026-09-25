@@ -19,8 +19,16 @@ Build and deploy:
 
 ```bash
 dotnet workload install wasm-tools
-tools/build-web.sh ../kempffseleme/mite     # → static site folder, ~4 MB, ~2 MB over the wire
+tools/build-web.sh ../kempffseleme/mite     # Mac / Linux → static site folder, ~4 MB, ~2 MB over the wire
 ```
+
+```powershell
+.\tools\build-web.ps1 ..\kempffseleme\mite   # Windows (PowerShell; `bash` there is usually WSL without dotnet)
+```
+
+The target is the `mite/` folder of the site repo, github.com/jikempff/kempffseleme
+(GitHub Pages, custom domain kempffsele.me): clone it next to Mite, build into
+it, then `git add mite && git commit && git push` in that repo.
 
 Local run: `python3 -m http.server` inside the output folder and open
 `index.html` (ES modules need http, not file://).
