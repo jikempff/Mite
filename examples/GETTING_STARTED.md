@@ -66,6 +66,10 @@ Wire any net's curves into **Lath Analysis** together with the same mesh:
 - `W` / `T` — strip cross-section in model units
 - `E` (MaxStrain) — allowable bending strain; 0.005 suits timber,
   0.002 steel, 0.008 GFRP
+- `Sh` / `Sc` (Shape / Section, last inputs) — the same choice as on Lath
+  Sweep: `0` rectangle, `1` round bar of diameter `W` (then `Up` does not
+  matter: a bar bends and twists the same way round), `2` your own closed
+  section curve. The strain check uses that section's real fibre distances.
 
 `B` tells you per lath whether it can be physically bent into place; `U` is the
 peak strain utilization (over 1 fails). Graft the per-point `u` tree into a
@@ -113,7 +117,10 @@ Optionally, check the whole network structurally with **Gridshell Analysis**
 (Mite > Analysis): supports at the boundary, a downward `L` load in N/m, and it
 reports deflections, per-element and per-lath stress utilization (`Ul` goes
 straight into **Lath Preview**). Geometry is converted to metres internally,
-so `E`, `Al` (Pa) and `L` (N/m) are always SI whatever your model units.
+so `E`, `Al` (Pa) and `L` (N/m) are always SI whatever your model units. The
+beams take their area, inertia and torsion constant from the same `Sh` / `Sc`
+section as Lath Sweep and Lath Analysis, so one profile feeds the model, the
+strain check and the statics.
 
 ## Units
 

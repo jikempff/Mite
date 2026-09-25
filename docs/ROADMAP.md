@@ -182,6 +182,10 @@ remains the self-test review page.
 - [x] App: boot race fixed (shape change during the first load traced the
       default net at the placeholder size and hung on "tracing…");
       `tools/web-smoke.js` is the headless regression — 2026-09-25.
+- [x] Profile applied to every curve *and every check*: Lath Analysis and
+      Gridshell Analysis take Shape / Section; `LathProfile.SectionProperties`
+      (rectangle, round, custom polygon) feeds strain fibres, twist length,
+      A / I / J — 2026-09-25.
 - [ ] App: the kinetic "fold" slider of E; custom section curves in the lath
       views; a "buildable" summary that waits for the colouring pass.
 - [ ] App: run `tools/web-smoke.js` from `tools/build-web.sh` (needs a

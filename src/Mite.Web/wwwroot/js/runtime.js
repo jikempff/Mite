@@ -52,7 +52,7 @@ export async function bootMite(onProgress) {
     nearestVertex: (x, y, z) => api.NearestVertex(x, y, z),
     curvature: (radius, umbilicTol) => J(api.Curvature(radius, umbilicTol)),
     net: (kind, opts) => J(api.Net(kind, JSON.stringify(opts))),
-    lath: (poly, width, thickness, upright, maxStrain, sweep) => J(api.Lath(Array.from(poly), width, thickness, !!upright, maxStrain, !!sweep)),
-    frame: (width, thickness, upright, load, toMetres, sampling) => J(api.Frame(width, thickness, !!upright, load, toMetres, sampling)),
+    lath: (poly, width, thickness, upright, maxStrain, sweep, shape) => J(api.Lath(Array.from(poly), width, thickness, !!upright, maxStrain, !!sweep, shape | 0)),
+    frame: (width, thickness, upright, load, toMetres, sampling, shape) => J(api.Frame(width, thickness, !!upright, load, toMetres, sampling, shape | 0)),
   };
 }

@@ -267,12 +267,16 @@ public static class FrameAnalysis
         }
 
         // ---- Section properties ------------------------------------------
-        double A = profile.Width * profile.Thickness;
-        double Iy = profile.Width * Math.Pow(profile.Thickness, 3) / 12.0; // bending through thickness
-        double Iz = profile.Thickness * Math.Pow(profile.Width, 3) / 12.0; // bending across the width
-        double J = profile.Width * Math.Pow(profile.Thickness, 3) / 3.0;   // thin-rectangle torsion
-        double Wy = Iy / (0.5 * profile.Thickness);
-        double Wz = Iz / (0.5 * profile.Width);
+        // From the profile's section (rectangle, round bar or custom polygon,
+        // see LathProfile.SectionProperties): the same profile Lath Sweep
+        // builds is what the frame is made of.
+        var section = profile.SectionProperties();
+        double A = section.Area;
+        double Iy = section.IA; // bending through the thickness (about the first axis)
+        double Iz = section.IB; // bending across the width (about the second axis)
+        double J = section.J;   // Saint-Venant torsion
+        double Wy = Iy / section.ExtentB;
+        double Wz = Iz / section.ExtentA;
         double E = options.E;
         double G = options.G > 0 ? options.G : options.E / 2.6;
 

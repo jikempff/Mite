@@ -1,2470 +1,2504 @@
 [
-  {
-    "file": "AsymptoticNetComponent.cs",
-    "name": "Asymptotic Net",
-    "nick": "AsymNet",
-    "desc": "Traces both families of asymptotic curves (zero normal curvature) for gridshell design. Asymptotic curves only exist where Gaussian curvature is negative; with AutoSpace the whole anticlastic region is filled with evenly spaced curves grown from one seed.",
-    "tab": "Gridshells",
-    "icon": "AsymptoticNet",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE8",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Seeds",
-        "nick": "S",
-        "type": "Integer",
-        "desc": "Seed vertex indices (optional with AutoSpace: the first one starts the net)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Step",
-        "nick": "St",
-        "type": "Number",
-        "desc": "Integration step (0 = automatic: Spacing / 10, or from the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "MaxSteps",
-        "nick": "N",
-        "type": "Integer",
-        "desc": "Maximum steps per curve half (0 = automatic from the mesh size)",
-        "access": "item",
-        "default": "0"
-      },
-      {
-        "name": "AutoSpace",
-        "nick": "A",
-        "type": "Boolean",
-        "desc": "Fill the anticlastic region with evenly-spaced curves instead of tracing only from seeds",
-        "access": "item",
-        "default": "true"
-      },
-      {
-        "name": "Spacing",
-        "nick": "Sp",
-        "type": "Number",
-        "desc": "Target distance between adjacent curves (AutoSpace; 0 = automatic, bounding box / 30)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "SeedPoints",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Seed points (nearest vertex is used); may be combined with Seeds",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "MaxCurves",
-        "nick": "Mx",
-        "type": "Integer",
-        "desc": "Cap on curves per family (AutoSpace, default 200)",
-        "access": "item",
-        "default": "200"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "FamilyA",
-        "nick": "A",
-        "type": "Curve",
-        "desc": "First asymptotic curve family",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "FamilyB",
-        "nick": "B",
-        "type": "Curve",
-        "desc": "Second asymptotic curve family",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Anticlastic",
-        "nick": "K",
-        "type": "Boolean",
-        "desc": "Per input vertex: true where asymptotic directions exist (K < 0)",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "ChebyshevNetComponent.cs",
-    "name": "Chebyshev Net",
-    "nick": "ChebNet",
-    "desc": "Constructs a Chebyshev net: equal edge lengths in both families everywhere. This is the kinematics of an elastic gridshell — a flat lattice of constant-length laths with rotating joints, bent into shape. Axis curves are geodesics from the seed; interior nodes are placed by the compass method.",
-    "tab": "Gridshells",
-    "icon": "ChebyshevNet",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDEB",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Seed",
-        "nick": "S",
-        "type": "Integer",
-        "desc": "Seed vertex index (net origin)",
-        "access": "item",
-        "default": "0"
-      },
-      {
-        "name": "Direction",
-        "nick": "D",
-        "type": "Vector",
-        "desc": "First family direction at the seed",
-        "access": "item",
-        "default": "Vector3d.XAxis"
-      },
-      {
-        "name": "EdgeLength",
-        "nick": "L",
-        "type": "Number",
-        "desc": "Lath segment length between joints",
-        "access": "item",
-        "default": "1.0"
-      },
-      {
-        "name": "CountU",
-        "nick": "U",
-        "type": "Integer",
-        "desc": "Nodes per side of the seed, first family (default 10)",
-        "access": "item",
-        "default": "10"
-      },
-      {
-        "name": "CountV",
-        "nick": "V",
-        "type": "Integer",
-        "desc": "Nodes per side of the seed, second family (default 10)",
-        "access": "item",
-        "default": "10"
-      },
-      {
-        "name": "Angle",
-        "nick": "A",
-        "type": "Angle",
-        "desc": "Angle between families at the seed (default 90 degrees)",
-        "access": "item",
-        "default": "Math.PI / 2"
-      },
-      {
-        "name": "SeedPoint",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Net origin as a point (overrides Seed; nearest vertex is used)",
-        "access": "item",
-        "default": null,
-        "optional": true
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Points",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Net nodes, one branch per row",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "UCurves",
-        "nick": "Cu",
-        "type": "Curve",
-        "desc": "Laths of the first family",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "VCurves",
-        "nick": "Cv",
-        "type": "Curve",
-        "desc": "Laths of the second family",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "NetMesh",
-        "nick": "N",
-        "type": "Mesh",
-        "desc": "Quad mesh over the valid net cells",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Angles",
-        "nick": "An",
-        "type": "Number",
-        "desc": "Shear angle between the families at each node (degrees); locking occurs near 0 / 180",
-        "access": "tree",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "ConjugateNetComponent.cs",
-    "name": "Conjugate Net",
-    "nick": "ConjNet",
-    "desc": "Traces both families of principal curvature lines with even spacing, giving an approximate conjugate net — the curve layout whose quad cells can be planarized into a planar-quad (PQ) panelization of the surface.",
-    "tab": "Gridshells",
-    "icon": "ConjugateNet",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF1",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Spacing",
-        "nick": "Sp",
-        "type": "Number",
-        "desc": "Target distance between adjacent curves (0 = automatic, bounding box / 30)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Step",
-        "nick": "St",
-        "type": "Number",
-        "desc": "Tracing step (0 = automatic: Spacing / 10)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "MaxSteps",
-        "nick": "N",
-        "type": "Integer",
-        "desc": "Maximum steps per curve half (0 = automatic)",
-        "access": "item",
-        "default": "0"
-      },
-      {
-        "name": "Seed",
-        "nick": "S",
-        "type": "Integer",
-        "desc": "First seed vertex (-1 = nearest the mesh centroid)",
-        "access": "item",
-        "default": "-1"
-      },
-      {
-        "name": "SeedPoint",
-        "nick": "P",
-        "type": "Point",
-        "desc": "First seed as a point (overrides Seed)",
-        "access": "item",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "MaxCurves",
-        "nick": "Mx",
-        "type": "Integer",
-        "desc": "Cap on curves per family (default 200)",
-        "access": "item",
-        "default": "200"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "CurvesA",
-        "nick": "A",
-        "type": "Curve",
-        "desc": "Max-curvature direction family",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "CurvesB",
-        "nick": "B",
-        "type": "Curve",
-        "desc": "Min-curvature direction family",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "DynamicRelaxationComponent.cs",
-    "name": "Dynamic Relaxation",
-    "nick": "DynRelax",
-    "desc": "Form finding by dynamic relaxation with kinetic damping: the mesh edges act as springs, optionally under gravity / point loads, soap-film tension and smoothing, and the system is integrated until it rests in equilibrium. Hanging models, pre-tensioned cable nets and quick minimal-surface-like relaxations of a gridshell mesh.",
-    "tab": "Form Finding",
-    "icon": "DynamicRelaxation",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF8",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh (edges become springs)",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Fixed",
-        "nick": "F",
-        "type": "Boolean",
-        "desc": "Fixed vertex flags, one per input mesh vertex (empty = fix the boundary)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Stiffness",
-        "nick": "K",
-        "type": "Number",
-        "desc": "Edge spring stiffness (default 1)",
-        "access": "item",
-        "default": "1.0"
-      },
-      {
-        "name": "RestScale",
-        "nick": "R",
-        "type": "Number",
-        "desc": "Rest length factor: 1 keeps edge lengths, < 1 pre-tensions the net (default 1)",
-        "access": "item",
-        "default": "1.0"
-      },
-      {
-        "name": "Gravity",
-        "nick": "G",
-        "type": "Vector",
-        "desc": "Acceleration applied to every free vertex (default none; e.g. 0,0,-1 for a hanging model)",
-        "access": "item",
-        "default": "Vector3d.Zero"
-      },
-      {
-        "name": "Loads",
-        "nick": "L",
-        "type": "Vector",
-        "desc": "Point load per input mesh vertex (one vector broadcasts)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Tension",
-        "nick": "Te",
-        "type": "Number",
-        "desc": "Soap-film (area minimization) strength (default 0)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Smoothness",
-        "nick": "Sm",
-        "type": "Number",
-        "desc": "Laplacian smoothing strength (default 0)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Iterations",
-        "nick": "I",
-        "type": "Integer",
-        "desc": "Maximum integration steps (default 2000)",
-        "access": "item",
-        "default": "2000"
-      },
-      {
-        "name": "Tolerance",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Convergence: residual force / applied force (default 1e-4)",
-        "access": "item",
-        "default": "1e-4"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Relaxed mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Points",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Relaxed vertex positions (one per input mesh vertex)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Edges",
-        "nick": "E",
-        "type": "Line",
-        "desc": "Springs in the order of the Forces output",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Forces",
-        "nick": "N",
-        "type": "Number",
-        "desc": "Axial force per edge (tension positive)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Iterations",
-        "nick": "I",
-        "type": "Integer",
-        "desc": "Steps performed",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Converged",
-        "nick": "C",
-        "type": "Boolean",
-        "desc": "True when the residual dropped below the tolerance",
-        "access": "item",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "ForceDensityComponent.cs",
-    "name": "Force Density Method",
-    "nick": "FDM",
-    "desc": "Solves the equilibrium shape of a cable / strut net with the Force Density Method (linear, exact). Positive force densities give tension nets, negative ones compression shells. The Edges output lists the edge order used for per-edge force densities.",
-    "tab": "Form Finding",
-    "icon": "ForceDensity",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE7",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh (edges define the net)",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "ForceDensity",
-        "nick": "Q",
-        "type": "Number",
-        "desc": "Force density per edge (one value broadcasts; per-edge lists follow the Edges output order)",
-        "access": "list",
-        "default": "1.0"
-      },
-      {
-        "name": "Loads",
-        "nick": "L",
-        "type": "Vector",
-        "desc": "Load vector per input mesh vertex (one vector broadcasts; coincident vertices share one load)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Fixed",
-        "nick": "F",
-        "type": "Boolean",
-        "desc": "Fixed vertex flags, one per input mesh vertex (empty = fix the boundary)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Equilibrium mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Points",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Equilibrium vertex positions (one per input mesh vertex)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Edges",
-        "nick": "E",
-        "type": "Line",
-        "desc": "Net edges in the order per-edge force densities are applied",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Forces",
-        "nick": "N",
-        "type": "Number",
-        "desc": "Axial force per edge (q * length; tension positive)",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "GaussianCurvatureComponent.cs",
-    "name": "Gaussian Curvature",
-    "nick": "GaussCurv",
-    "desc": "Computes per-vertex Gaussian curvature via angle deficit over mixed Voronoi areas. Positive on domes, negative on saddles, zero on developable and boundary vertices. One value per input mesh vertex.",
-    "tab": "Curvature",
-    "icon": "GaussianCurvature",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE2",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      }
-    ],
-    "outputs": [
-      {
-        "name": "K",
-        "nick": "K",
-        "type": "Number",
-        "desc": "Gaussian curvature per vertex",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "GeodesicNetComponent.cs",
-    "name": "Geodesic Net",
-    "nick": "GeoNet",
-    "desc": "Traces straightest geodesics from seeds along given directions for gridshell design. Geodesics extend both ways from each seed; with AutoSpace one family fills the mesh with evenly spaced geodesics grown from the first seed and direction.",
-    "tab": "Gridshells",
-    "icon": "GeodesicNet",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE9",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Seeds",
-        "nick": "S",
-        "type": "Integer",
-        "desc": "Seed vertex indices",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Directions",
-        "nick": "D",
-        "type": "Vector",
-        "desc": "Initial direction per seed (last reused if fewer)",
-        "access": "list",
-        "default": "Vector3d.XAxis"
-      },
-      {
-        "name": "Step",
-        "nick": "St",
-        "type": "Number",
-        "desc": "Integration step (0 = automatic)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "MaxSteps",
-        "nick": "N",
-        "type": "Integer",
-        "desc": "Maximum steps per curve half (0 = automatic from the mesh size)",
-        "access": "item",
-        "default": "0"
-      },
-      {
-        "name": "AutoSpace",
-        "nick": "A",
-        "type": "Boolean",
-        "desc": "Fill the surface with evenly-spaced geodesics of one family, grown from the first seed and direction",
-        "access": "item",
-        "default": "false"
-      },
-      {
-        "name": "Spacing",
-        "nick": "Sp",
-        "type": "Number",
-        "desc": "Target distance between adjacent curves (AutoSpace; 0 = automatic)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "SeedPoints",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Seed points (nearest vertex is used); may be combined with Seeds",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "MaxCurves",
-        "nick": "Mx",
-        "type": "Integer",
-        "desc": "Cap on the number of curves (AutoSpace, default 200)",
-        "access": "item",
-        "default": "200"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Geodesics",
-        "nick": "G",
-        "type": "Curve",
-        "desc": "Geodesic curves (smooth interpolated curves)",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "GeodesicPathComponent.cs",
-    "name": "Geodesic Path",
-    "nick": "GeoPath",
-    "desc": "Shortest path on a mesh between two points: the straight lath you would lay from A to B. Graph search finds the route, curve shortening on the surface straightens it into a geodesic. Points are matched pairwise (the last is reused when lists differ).",
-    "tab": "Gridshells",
-    "icon": "GeodesicPath",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFC",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "From",
-        "nick": "A",
-        "type": "Point",
-        "desc": "Start points",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "To",
-        "nick": "B",
-        "type": "Point",
-        "desc": "End points",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Sampling",
-        "nick": "S",
-        "type": "Number",
-        "desc": "Point spacing of the result (0 = automatic: half the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Iterations",
-        "nick": "I",
-        "type": "Integer",
-        "desc": "Maximum straightening passes per level (default 500)",
-        "access": "item",
-        "default": "500"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Paths",
-        "nick": "G",
-        "type": "Curve",
-        "desc": "Geodesic paths (smooth interpolated curves)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Lengths",
-        "nick": "L",
-        "type": "Number",
-        "desc": "Geodesic length per path",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "GridshellAnalysisComponent.cs",
-    "name": "Gridshell Analysis",
-    "nick": "GridFE",
-    "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the strip section, coupled at net crossings; supports are fixed points. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. A first-order sanity check, not a full FE package.",
-    "tab": "Analysis",
-    "icon": "GridshellAnalysis",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF3",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Reference surface the net lies on",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Curves",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Lath centerlines (net curves)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Joints",
-        "nick": "J",
-        "type": "Point",
-        "desc": "Crossing points where laths are coupled (from Net Joints)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Supports",
-        "nick": "S",
-        "type": "Point",
-        "desc": "Fixed support points",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Load",
-        "nick": "L",
-        "type": "Vector",
-        "desc": "Force per unit length in N/m applied along every lath (default: 1 kN/m downward)",
-        "access": "item",
-        "default": "new Vector3d(0, 0, -1000"
-      },
-      {
-        "name": "E",
-        "nick": "E",
-        "type": "Number",
-        "desc": "Young's modulus in Pa (default 11 GPa ≈ timber)",
-        "access": "item",
-        "default": "11e9"
-      },
-      {
-        "name": "Allowable",
-        "nick": "Al",
-        "type": "Number",
-        "desc": "Allowable combined stress in Pa (default 20 MPa)",
-        "access": "item",
-        "default": "20e6"
-      },
-      {
-        "name": "Width",
-        "nick": "W",
-        "type": "Number",
-        "desc": "Lath width in model units (default 0.1)",
-        "access": "item",
-        "default": "0.1"
-      },
-      {
-        "name": "Thickness",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Lath thickness in model units (default 0.01)",
-        "access": "item",
-        "default": "0.01"
-      },
-      {
-        "name": "Upright",
-        "nick": "U",
-        "type": "Boolean",
-        "desc": "Lath orientation, as in Lath Sweep",
-        "access": "item",
-        "default": "false"
-      },
-      {
-        "name": "Scale",
-        "nick": "Sc",
-        "type": "Number",
-        "desc": "Deformation display scale (default 1)",
-        "access": "item",
-        "default": "1.0"
-      },
-      {
-        "name": "Sampling",
-        "nick": "Sa",
-        "type": "Number",
-        "desc": "Chord deviation for curve sampling (0 = automatic)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "MaxSegment",
-        "nick": "Ms",
-        "type": "Number",
-        "desc": "Beam element size in model units (0 = automatic: twice the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Deformed",
-        "nick": "D",
-        "type": "Curve",
-        "desc": "Deformed lath curves at the given display scale (one per input curve)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "MaxDisplacement",
-        "nick": "Dm",
-        "type": "Number",
-        "desc": "Largest node displacement (model units)",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Utilization",
-        "nick": "u",
-        "type": "Number",
-        "desc": "Stress utilization per lath element, one branch per lath (>1 fails)",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "MaxUtilization",
-        "nick": "Um",
-        "type": "Number",
-        "desc": "Peak utilization over the network",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "LathUtilization",
-        "nick": "Ul",
-        "type": "Number",
-        "desc": "Peak utilization per lath (one per input curve; wire into Lath Preview)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Nodes",
-        "nick": "N",
-        "type": "Point",
-        "desc": "Frame nodes after merging",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Displacements",
-        "nick": "Dv",
-        "type": "Vector",
-        "desc": "Displacement vector per node (model units)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Axial",
-        "nick": "Nx",
-        "type": "Number",
-        "desc": "Axial force per element in N (tension positive), one branch per lath",
-        "access": "tree",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "LathAnalysisComponent.cs",
-    "name": "Lath Analysis",
-    "nick": "LathA",
-    "desc": "Checks whether gridshell laths can be physically bent along curves on a mesh. Decomposes each curve into geodesic curvature (in-surface bend), normal curvature (out-of-surface bend), and geodesic torsion (twist), then compares the resulting bending strains of a rectangular strip against an allowable material strain.",
-    "tab": "Analysis",
-    "icon": "LathAnalysis",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDEA",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Mesh the laths lie on",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Laths",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Lath curves on the mesh (e.g. from Asymptotic Net or Geodesic Net)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Upright",
-        "nick": "U",
-        "type": "Boolean",
-        "desc": "False: strip lies flat on the surface (geodesic gridshells). True: strip stands upright, perpendicular to the surface (asymptotic gridshells).",
-        "access": "item",
-        "default": "false"
-      },
-      {
-        "name": "Width",
-        "nick": "W",
-        "type": "Number",
-        "desc": "Strip width, across the curve (default 0.1)",
-        "access": "item",
-        "default": "0.1"
-      },
-      {
-        "name": "Thickness",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Strip thickness (default 0.01)",
-        "access": "item",
-        "default": "0.01"
-      },
-      {
-        "name": "MaxStrain",
-        "nick": "E",
-        "type": "Number",
-        "desc": "Allowable bending strain, e.g. sigma/E (default 0.005 ≈ timber; 0.002 steel, 0.008 GFRP)",
-        "access": "item",
-        "default": "0.005"
-      },
-      {
-        "name": "Sampling",
-        "nick": "S",
-        "type": "Number",
-        "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Window",
-        "nick": "Wn",
-        "type": "Number",
-        "desc": "Arc length over which curvature is measured (0 = automatic: twice the mesh edge length). Larger windows smooth out facet-scale spikes",
-        "access": "item",
-        "default": "0.0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Buildable",
-        "nick": "B",
-        "type": "Boolean",
-        "desc": "True if the lath stays within the strain limit (one per input curve)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "MaxUtilization",
-        "nick": "U",
-        "type": "Number",
-        "desc": "Peak strain / allowable strain per lath (>1 fails)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Utilization",
-        "nick": "u",
-        "type": "Number",
-        "desc": "Strain utilization per point along each lath",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "GeodesicCurvature",
-        "nick": "Kg",
-        "type": "Number",
-        "desc": "In-surface bending per point",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "NormalCurvature",
-        "nick": "Kn",
-        "type": "Number",
-        "desc": "Out-of-surface bending per point (surface normal curvature along the lath; 0 on asymptotic curves)",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "GeodesicTorsion",
-        "nick": "Tg",
-        "type": "Number",
-        "desc": "Twist rate per point",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "Points",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Sample points the per-point values refer to",
-        "access": "tree",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "LathLabelsComponent.cs",
-    "name": "Lath Labels",
-    "nick": "Labels",
-    "desc": "Assigns an ID to every lath, places a label point at each midpoint, and builds a CSV bill of materials (id, length, optional strain utilization from Lath Analysis). Wire the points and labels into a Text Tag component for display.",
-    "tab": "Fabrication",
-    "icon": "LathLabels",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF6",
-    "inputs": [
-      {
-        "name": "Curves",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Lath centerlines",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Prefix",
-        "nick": "P",
-        "type": "Text",
-        "desc": "ID prefix (default \\\"L\\\")",
-        "access": "item",
-        "default": "\"L\""
-      },
-      {
-        "name": "Utilization",
-        "nick": "U",
-        "type": "Number",
-        "desc": "Optional per-lath utilization (from Lath Analysis / Gridshell Analysis) for the report",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Start",
-        "nick": "N",
-        "type": "Integer",
-        "desc": "First ID number (default 0; use e.g. 100 for a second family)",
-        "access": "item",
-        "default": "0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Points",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Label anchor points (lath midpoints)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Labels",
-        "nick": "L",
-        "type": "Text",
-        "desc": "Lath IDs",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Report",
-        "nick": "R",
-        "type": "Text",
-        "desc": "CSV bill of materials",
-        "access": "item",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "LathPreviewComponent.cs",
-    "name": "Lath Preview",
-    "nick": "Preview",
-    "desc": "Colors swept laths by utilization (e.g. from Lath Analysis or Gridshell Analysis): green within limits, yellow near the limit, red beyond it.",
-    "tab": "Fabrication",
-    "icon": "LathPreview",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF7",
-    "inputs": [
-      {
-        "name": "Laths",
-        "nick": "L",
-        "type": "Mesh",
-        "desc": "Swept lath meshes (from Lath Sweep)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Utilization",
-        "nick": "U",
-        "type": "Number",
-        "desc": "Per-lath utilization values (1.0 = at the limit)",
-        "access": "list",
-        "default": null
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Laths",
-        "nick": "L",
-        "type": "Mesh",
-        "desc": "Colored lath meshes",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "LathSegmentComponent.cs",
-    "name": "Lath Segment",
-    "nick": "Segment",
-    "desc": "Splits laths into pieces that fit stock material length, keeping cuts away from net crossings. Consecutive pieces overlap by the splice length, and half-lap splice notch solids (Ne for the upstream piece, Ns for the downstream one) are built at each cut: subtract them from the swept pieces with Mesh Difference.",
-    "tab": "Fabrication",
-    "icon": "LathSegment",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF5",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Reference surface",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Curves",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Lath centerlines",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "StockLength",
-        "nick": "St",
-        "type": "Number",
-        "desc": "Available material length (default 3)",
-        "access": "item",
-        "default": "3.0"
-      },
-      {
-        "name": "Margin",
-        "nick": "Ma",
-        "type": "Number",
-        "desc": "Minimum distance between a cut and a joint (default 0.05)",
-        "access": "item",
-        "default": "0.05"
-      },
-      {
-        "name": "Joints",
-        "nick": "J",
-        "type": "Point",
-        "desc": "Crossing points to avoid (from Net Joints; only those on each lath are used)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "SpliceLength",
-        "nick": "SL",
-        "type": "Number",
-        "desc": "Half-lap splice overlap length (default 0.15)",
-        "access": "item",
-        "default": "0.15"
-      },
-      {
-        "name": "Width",
-        "nick": "W",
-        "type": "Number",
-        "desc": "Lath width (default 0.1)",
-        "access": "item",
-        "default": "0.1"
-      },
-      {
-        "name": "Thickness",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Lath thickness (default 0.01)",
-        "access": "item",
-        "default": "0.01"
-      },
-      {
-        "name": "Upright",
-        "nick": "U",
-        "type": "Boolean",
-        "desc": "Lath orientation, as in Lath Sweep",
-        "access": "item",
-        "default": "false"
-      },
-      {
-        "name": "Clearance",
-        "nick": "Cl",
-        "type": "Number",
-        "desc": "Fit clearance (default 0)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Sampling",
-        "nick": "S",
-        "type": "Number",
-        "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Offset",
-        "nick": "O",
-        "type": "Number",
-        "desc": "Gap between the surface and the nearest lath face, as in Lath Sweep (default 0)",
-        "access": "item",
-        "default": "0.0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Segments",
-        "nick": "S",
-        "type": "Curve",
-        "desc": "Lath pieces, one branch per input lath",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "Cuts",
-        "nick": "Cu",
-        "type": "Point",
-        "desc": "Cut points, one branch per input lath",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "NotchesEnd",
-        "nick": "Ne",
-        "type": "Box",
-        "desc": "Splice notches for the upstream piece at each cut",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "NotchesStart",
-        "nick": "Ns",
-        "type": "Box",
-        "desc": "Splice notches for the downstream piece at each cut",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "Lengths",
-        "nick": "L",
-        "type": "Number",
-        "desc": "Piece lengths, one branch per input lath",
-        "access": "tree",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "LathSweepComponent.cs",
-    "name": "Lath Sweep",
-    "nick": "Sweep",
-    "desc": "Extrudes curves lying on a mesh into solid laths with a rectangular profile. The profile rides in the surface frame: flat laths hug the surface (geodesic gridshells), upright laths stand on edge (asymptotic gridshells). Outputs stay index-aligned with the input curves (null where a curve could not be swept).",
-    "tab": "Fabrication",
-    "icon": "LathSweep",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDEC",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Reference surface the curves lie on",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Curves",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Lath centerlines on the surface",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Width",
-        "nick": "W",
-        "type": "Number",
-        "desc": "Profile width across the curve (default 0.1)",
-        "access": "item",
-        "default": "0.1"
-      },
-      {
-        "name": "Thickness",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Profile thickness through the strip (default 0.01)",
-        "access": "item",
-        "default": "0.01"
-      },
-      {
-        "name": "Upright",
-        "nick": "U",
-        "type": "Boolean",
-        "desc": "False: strip lies flat on the surface. True: strip stands upright on edge",
-        "access": "item",
-        "default": "false"
-      },
-      {
-        "name": "Offset",
-        "nick": "O",
-        "type": "Number",
-        "desc": "Gap between the surface and the nearest strip face (default 0)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Sampling",
-        "nick": "S",
-        "type": "Number",
-        "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Shape",
-        "nick": "Sh",
-        "type": "Integer",
-        "access": "item",
-        "desc": "Section shape applied to every curve: 0 = rectangle W × T, 1 = round bar of diameter W, 2 = custom closed planar Section curve (its plane X = across / Y = surface normal; Upright swaps them)",
-        "default": "0"
-      },
-      {
-        "name": "Section",
-        "nick": "Sc",
-        "type": "Curve",
-        "access": "item",
-        "desc": "Closed planar section curve for Shape = 2 (drawn around the origin of its own plane, any units of the model)",
-        "optional": true
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Laths",
-        "nick": "L",
-        "type": "Mesh",
-        "desc": "Swept lath solids as closed meshes, one per input curve",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Centerlines",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Strip centerline per lath (lifted by the offset and half the depth)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Frames",
-        "nick": "F",
-        "type": "Plane",
-        "desc": "Start frame per lath (X along the lath, Z along the surface normal)",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "LathUnrollComponent.cs",
-    "name": "Lath Unroll",
-    "nick": "Unroll",
-    "desc": "Unrolls lath strips to flat 2D cutting patterns. Each pattern is isometric to the swept strip (exact per triangle), so it is ready for CNC/laser cutting. Patterns are laid out in a row with the given gap; closed laths are opened at their seam. Outputs stay index-aligned with the input curves (null where a curve failed).",
-    "tab": "Fabrication",
-    "icon": "LathUnroll",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF4",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Reference surface the curves lie on",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Curves",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Lath centerlines on the surface",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Width",
-        "nick": "W",
-        "type": "Number",
-        "desc": "Strip width (default 0.1)",
-        "access": "item",
-        "default": "0.1"
-      },
-      {
-        "name": "Upright",
-        "nick": "U",
-        "type": "Boolean",
-        "desc": "Lath orientation, as in Lath Sweep",
-        "access": "item",
-        "default": "false"
-      },
-      {
-        "name": "Gap",
-        "nick": "G",
-        "type": "Number",
-        "desc": "Gap between laid-out patterns (default 0.05)",
-        "access": "item",
-        "default": "0.05"
-      },
-      {
-        "name": "Sampling",
-        "nick": "S",
-        "type": "Number",
-        "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Patterns",
-        "nick": "P",
-        "type": "Curve",
-        "desc": "Closed flat cutting patterns, laid out in a row",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Centerlines",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Flat centerlines (reference/labeling)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Lengths",
-        "nick": "L",
-        "type": "Number",
-        "desc": "3D cutting length per lath",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "FlatMeshes",
-        "nick": "F",
-        "type": "Mesh",
-        "desc": "Triangulated flat pattern per lath (preview / nesting)",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "MeanCurvatureComponent.cs",
-    "name": "Mean Curvature",
-    "nick": "MeanCurv",
-    "desc": "Computes per-vertex mean curvature via the cotangent Laplacian (mixed Voronoi areas, consistent with Gaussian Curvature). Boundary vertices are zero. One value per input mesh vertex.",
-    "tab": "Curvature",
-    "icon": "MeanCurvature",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE3",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      }
-    ],
-    "outputs": [
-      {
-        "name": "H",
-        "nick": "H",
-        "type": "Number",
-        "desc": "Signed mean curvature per vertex",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "HN",
-        "nick": "HN",
-        "type": "Vector",
-        "desc": "Mean curvature normal vector per vertex (length |H|)",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "MeshCleanupComponent.cs",
-    "name": "Mesh Cleanup",
-    "nick": "Cleanup",
-    "desc": "Heals a mesh for analysis: welds coincident vertices (within a tolerance), removes degenerate and duplicate faces, reduces collapsed faces, and unifies face winding. Mite components weld exactly coincident vertices on their own; run this first on meshes with near-coincident vertices, slivers or mixed winding (joins, booleans, imports).",
-    "tab": "Util",
-    "icon": "MeshCleanup",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF0",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Tolerance",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Vertex weld distance (0 = automatic: 1e-6 of the average edge length)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "UnifyWinding",
-        "nick": "U",
-        "type": "Boolean",
-        "desc": "Make face winding consistent",
-        "access": "item",
-        "default": "true"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Cleaned mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Welded",
-        "nick": "W",
-        "type": "Integer",
-        "desc": "Vertices welded away",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Removed",
-        "nick": "R",
-        "type": "Integer",
-        "desc": "Degenerate + duplicate faces removed",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Map",
-        "nick": "I",
-        "type": "Integer",
-        "desc": "Cleaned vertex index for each input vertex",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "MeshColourMapComponent.cs",
-    "name": "Mesh Colour Map",
-    "nick": "ColourMap",
-    "desc": "Colours a mesh by per-vertex values in one step (no Bounds / Remap / Gradient chain). Diverging palettes are centred on zero, which suits signed curvature: blue negative, white zero, red positive.",
-    "tab": "Util",
-    "icon": "MeshColourMap",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFB",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Values",
-        "nick": "V",
-        "type": "Number",
-        "desc": "One value per mesh vertex (e.g. K, H, K1)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Domain",
-        "nick": "D",
-        "type": "Interval",
-        "desc": "Value range to map (empty = automatic, robust 2%..98% percentiles)",
-        "access": "item",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Palette",
-        "nick": "P",
-        "type": "Integer",
-        "desc": "0 = diverging blue-white-red (centred on 0), 1 = viridis-like sequential, 2 = traffic light (green-yellow-red)",
-        "access": "item",
-        "default": "0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Coloured mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Domain",
-        "nick": "D",
-        "type": "Interval",
-        "desc": "Value range that was mapped",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Colours",
-        "nick": "C",
-        "type": "Colour",
-        "desc": "Colour per vertex",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "MeshIsocurvesComponent.cs",
-    "name": "Mesh Isocurves",
-    "nick": "Iso",
-    "desc": "Extracts isocurves of a per-vertex scalar field (curvature, utilization, height, ...) at the given levels. Wire Gaussian Curvature with level 0 to outline the anticlastic regions where asymptotic laths can exist. One branch per level.",
-    "tab": "Analysis",
-    "icon": "MeshIsocurves",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF9",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Values",
-        "nick": "V",
-        "type": "Number",
-        "desc": "One value per input mesh vertex",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Levels",
-        "nick": "L",
-        "type": "Number",
-        "desc": "Iso levels (default 0)",
-        "access": "list",
-        "default": "0.0"
-      },
-      {
-        "name": "Smooth",
-        "nick": "S",
-        "type": "Boolean",
-        "desc": "Output smooth interpolated curves instead of polylines (default false)",
-        "access": "item",
-        "default": "false"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Curves",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Isocurves, one branch per level",
-        "access": "tree",
-        "default": null
-      },
-      {
-        "name": "Lengths",
-        "nick": "L",
-        "type": "Number",
-        "desc": "Length per isocurve",
-        "access": "tree",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "MinimalSurfaceComponent.cs",
-    "name": "Minimal Surface",
-    "nick": "MinSrf",
-    "desc": "Finds a minimal surface with fixed boundaries by iterating exact cotangent Laplace solves (each iteration freezes the weights and solves the sparse linear system). Leave Fixed empty to fix the mesh boundary.",
-    "tab": "Form Finding",
-    "icon": "MinimalSurface",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE6",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Fixed",
-        "nick": "F",
-        "type": "Boolean",
-        "desc": "Fixed vertex flags, one per input mesh vertex (empty = fix the boundary)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Iterations",
-        "nick": "I",
-        "type": "Integer",
-        "desc": "Max weight-update iterations (default 20)",
-        "access": "item",
-        "default": "20"
-      },
-      {
-        "name": "Tolerance",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Convergence: max vertex move per iteration as a fraction of the mesh size (default 1e-8)",
-        "access": "item",
-        "default": "1e-8"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Resulting minimal surface mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Iterations",
-        "nick": "I",
-        "type": "Integer",
-        "desc": "Iterations performed",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Residual",
-        "nick": "R",
-        "type": "Number",
-        "desc": "Max vertex movement in the last iteration",
-        "access": "item",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "NetJointsComponent.cs",
-    "name": "Net Joints",
-    "nick": "Joints",
-    "desc": "Finds the crossings between the two lath families of a gridshell net and builds lap-joint notch solids for each crossing. Boolean-subtract the notches from the swept laths (Mesh Difference) to fabricate the joints.",
-    "tab": "Fabrication",
-    "icon": "NetJoints",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDED",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Reference surface the net lies on",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "CurvesA",
-        "nick": "A",
-        "type": "Curve",
-        "desc": "First lath family",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "CurvesB",
-        "nick": "B",
-        "type": "Curve",
-        "desc": "Second lath family (empty: crossings within family A)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Width",
-        "nick": "W",
-        "type": "Number",
-        "desc": "Lath profile width (default 0.1)",
-        "access": "item",
-        "default": "0.1"
-      },
-      {
-        "name": "Thickness",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Lath profile thickness (default 0.01)",
-        "access": "item",
-        "default": "0.01"
-      },
-      {
-        "name": "Upright",
-        "nick": "U",
-        "type": "Boolean",
-        "desc": "False: laths lie flat (lap notch). True: laths stand upright (egg-crate slot)",
-        "access": "item",
-        "default": "false"
-      },
-      {
-        "name": "Offset",
-        "nick": "O",
-        "type": "Number",
-        "desc": "Gap between the surface and the nearest lath face (default 0)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Lap",
-        "nick": "L",
-        "type": "Number",
-        "desc": "Notched fraction of the profile depth (default 0.5 = half-lap)",
-        "access": "item",
-        "default": "0.5"
-      },
-      {
-        "name": "Clearance",
-        "nick": "Cl",
-        "type": "Number",
-        "desc": "Fit clearance added to each notch side (default 0)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Tolerance",
-        "nick": "X",
-        "type": "Number",
-        "desc": "Maximum gap accepted as a crossing (0 = automatic)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Sampling",
-        "nick": "S",
-        "type": "Number",
-        "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Points",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Crossing points",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Planes",
-        "nick": "F",
-        "type": "Plane",
-        "desc": "Joint frame per crossing (X along family A, Z along the surface normal)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Angles",
-        "nick": "An",
-        "type": "Number",
-        "desc": "Crossing angle between the laths, in degrees",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "NotchesA",
-        "nick": "Na",
-        "type": "Box",
-        "desc": "Notch solids to subtract from family A laths",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "NotchesB",
-        "nick": "Nb",
-        "type": "Box",
-        "desc": "Notch solids to subtract from family B laths",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "IndexA",
-        "nick": "Ia",
-        "type": "Integer",
-        "desc": "Index of the family A curve at each crossing",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "IndexB",
-        "nick": "Ib",
-        "type": "Integer",
-        "desc": "Index of the family B curve at each crossing (a family A index when CurvesB is empty)",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "NetTopologyComponent.cs",
-    "name": "Net Topology",
-    "nick": "NetTopo",
-    "desc": "Turns a two-family lath net into a structural graph: unique nodes at the crossings and one member per lath piece between consecutive crossings (free tails included). Feed Nodes / Members to a structural package (e.g. Karamba) or use the node schedule for fabrication.",
-    "tab": "Fabrication",
-    "icon": "NetTopology",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFD",
-    "inputs": [
-      {
-        "name": "CurvesA",
-        "nick": "A",
-        "type": "Curve",
-        "desc": "First lath family",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "CurvesB",
-        "nick": "B",
-        "type": "Curve",
-        "desc": "Second lath family",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Tolerance",
-        "nick": "X",
-        "type": "Number",
-        "desc": "Maximum gap accepted as a crossing (0 = automatic)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Sampling",
-        "nick": "S",
-        "type": "Number",
-        "desc": "Chord deviation for curve sampling (0 = automatic: 1/500 of the net size)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "MinLength",
-        "nick": "Ml",
-        "type": "Number",
-        "desc": "Drop members (e.g. free tails) shorter than this (default 0)",
-        "access": "item",
-        "default": "0.0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Nodes",
-        "nick": "N",
-        "type": "Point",
-        "desc": "Unique crossing nodes",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Valence",
-        "nick": "V",
-        "type": "Integer",
-        "desc": "Members meeting at each node",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Members",
-        "nick": "M",
-        "type": "Curve",
-        "desc": "Lath pieces between nodes (polylines)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Lines",
-        "nick": "Ln",
-        "type": "Line",
-        "desc": "Straight member axes (node to node)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Start",
-        "nick": "S",
-        "type": "Integer",
-        "desc": "Node index at each member start (-1 = free end)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "End",
-        "nick": "E",
-        "type": "Integer",
-        "desc": "Node index at each member end (-1 = free end)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Lath",
-        "nick": "L",
-        "type": "Integer",
-        "desc": "Input lath of each member: family A indices, then family B continuing",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Lengths",
-        "nick": "Le",
-        "type": "Number",
-        "desc": "Member lengths",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "NodeLaths",
-        "nick": "Nl",
-        "type": "Integer",
-        "desc": "Per node: the two lath indices crossing there",
-        "access": "tree",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "PlanarizationComponent.cs",
-    "name": "Planarize Mesh",
-    "nick": "Planarize",
-    "desc": "Iterative quad planarization by projecting vertices onto per-face best-fit planes. Set Strength to 0 to only measure planarity without moving anything.",
-    "tab": "Form Finding",
-    "icon": "Planarization",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE5",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input quad mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Iterations",
-        "nick": "I",
-        "type": "Integer",
-        "desc": "Max iterations (default 100)",
-        "access": "item",
-        "default": "100"
-      },
-      {
-        "name": "Tolerance",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Convergence tolerance on the max face deviation, model units (default 1e-6)",
-        "access": "item",
-        "default": "1e-6"
-      },
-      {
-        "name": "Fixed",
-        "nick": "F",
-        "type": "Boolean",
-        "desc": "Fixed vertex flags (one per input mesh vertex)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Strength",
-        "nick": "S",
-        "type": "Number",
-        "desc": "Step strength per iteration 0..1 (default 1; 0 = measure only)",
-        "access": "item",
-        "default": "1.0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Planarized mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Deviation",
-        "nick": "D",
-        "type": "Number",
-        "desc": "Planarity deviation per face (max distance of a corner from the best-fit plane)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Iterations",
-        "nick": "I",
-        "type": "Integer",
-        "desc": "Iterations performed",
-        "access": "item",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "PrincipalCurvatureComponent.cs",
-    "name": "Principal Curvature",
-    "nick": "PrinCurv",
-    "desc": "Computes principal curvatures and directions per vertex (Rusinkiewicz per-face second-fundamental-form fit, tensor-smoothed over R vertex rings). Outputs are one item per input mesh vertex, ready for Mesh Colours.",
-    "tab": "Curvature",
-    "icon": "PrincipalCurvature",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE1",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Radius",
-        "nick": "R",
-        "type": "Integer",
-        "desc": "Smoothing radius in vertex rings (1 = none, default 2)",
-        "access": "item",
-        "default": "2"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "K1",
-        "nick": "K1",
-        "type": "Number",
-        "desc": "Maximum principal curvature per vertex",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "K2",
-        "nick": "K2",
-        "type": "Number",
-        "desc": "Minimum principal curvature per vertex",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "D1",
-        "nick": "D1",
-        "type": "Vector",
-        "desc": "Maximum curvature direction per vertex",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "D2",
-        "nick": "D2",
-        "type": "Vector",
-        "desc": "Minimum curvature direction per vertex",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Normals",
-        "nick": "N",
-        "type": "Vector",
-        "desc": "Vertex normals used for the tangent frames ((D1, D2, N) is right-handed)",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "PullToMeshComponent.cs",
-    "name": "Pull To Mesh",
-    "nick": "Pull",
-    "desc": "Projects curves and points onto a mesh by closest point, so hand-drawn or edited lath layouts can feed Lath Analysis, Lath Sweep and Net Joints like traced ones. Optionally fairs the pulled curves on the surface to remove facet kinks.",
-    "tab": "Util",
-    "icon": "PullToMesh",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFA",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Target mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Curves",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Curves to pull (optional)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Points",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Points to pull (optional)",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Sampling",
-        "nick": "S",
-        "type": "Number",
-        "desc": "Curve sampling length along the curve (0 = automatic: half the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "Smoothing",
-        "nick": "Sm",
-        "type": "Integer",
-        "desc": "On-surface fairing passes for the pulled curves (default 0)",
-        "access": "item",
-        "default": "0"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Curves",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Pulled curves (smooth interpolated, on the mesh)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Points",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Pulled points",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Normals",
-        "nick": "N",
-        "type": "Vector",
-        "desc": "Smooth mesh normal at each pulled point",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Distances",
-        "nick": "D",
-        "type": "Number",
-        "desc": "Pull distance per point",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "StreamlinesComponent.cs",
-    "name": "Curvature Streamlines",
-    "nick": "CurvStream",
-    "desc": "Traces lines of curvature along the maximum or minimum principal direction, from seed vertices / points or filling the mesh with evenly spaced lines (AutoSpace).",
-    "tab": "Curvature",
-    "icon": "Streamlines",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE4",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Seeds",
-        "nick": "S",
-        "type": "Integer",
-        "desc": "Seed vertex indices",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "Step",
-        "nick": "St",
-        "type": "Number",
-        "desc": "Integration step (0 = automatic from the mesh edge length)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "MaxSteps",
-        "nick": "N",
-        "type": "Integer",
-        "desc": "Maximum steps per curve half (0 = automatic from the mesh size)",
-        "access": "item",
-        "default": "0"
-      },
-      {
-        "name": "MaxDir",
-        "nick": "Max",
-        "type": "Boolean",
-        "desc": "Use max curvature direction (true) or min (false)",
-        "access": "item",
-        "default": "true"
-      },
-      {
-        "name": "SeedPoints",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Seed points (nearest vertex is used); may be combined with Seeds",
-        "access": "list",
-        "default": null,
-        "optional": true
-      },
-      {
-        "name": "AutoSpace",
-        "nick": "A",
-        "type": "Boolean",
-        "desc": "Fill the mesh with evenly spaced lines grown from the first seed",
-        "access": "item",
-        "default": "false"
-      },
-      {
-        "name": "Spacing",
-        "nick": "Sp",
-        "type": "Number",
-        "desc": "Target distance between adjacent lines (AutoSpace; 0 = automatic)",
-        "access": "item",
-        "default": "0.0"
-      },
-      {
-        "name": "MaxCurves",
-        "nick": "Mx",
-        "type": "Integer",
-        "desc": "Cap on the number of lines (AutoSpace, default 200)",
-        "access": "item",
-        "default": "200"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Streamlines",
-        "nick": "C",
-        "type": "Curve",
-        "desc": "Curvature lines (smooth interpolated curves)",
-        "access": "list",
-        "default": null
-      }
-    ]
-  },
-  {
-    "file": "UmbilicsComponent.cs",
-    "name": "Umbilics",
-    "nick": "Umb",
-    "desc": "Finds umbilical points, where the two principal curvatures are equal and the principal directions are undefined. Curve networks rotate wildly around umbilics — use this to place net seeds deliberately or to mask regions before tracing.",
-    "tab": "Curvature",
-    "icon": "Umbilics",
-    "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF2",
-    "inputs": [
-      {
-        "name": "Mesh",
-        "nick": "M",
-        "type": "Mesh",
-        "desc": "Input mesh",
-        "access": "item",
-        "default": null
-      },
-      {
-        "name": "Tolerance",
-        "nick": "T",
-        "type": "Number",
-        "desc": "Relative |k1-k2| tolerance (default 0.05)",
-        "access": "item",
-        "default": "0.05"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "Points",
-        "nick": "P",
-        "type": "Point",
-        "desc": "Umbilical vertex positions",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Indices",
-        "nick": "I",
-        "type": "Integer",
-        "desc": "Umbilical vertex indices (of the input mesh)",
-        "access": "list",
-        "default": null
-      },
-      {
-        "name": "Mask",
-        "nick": "Mk",
-        "type": "Boolean",
-        "desc": "Per input vertex: true where umbilical",
-        "access": "list",
-        "default": null
-      }
-    ]
-  }
+ {
+  "file": "AsymptoticNetComponent.cs",
+  "name": "Asymptotic Net",
+  "nick": "AsymNet",
+  "desc": "Traces both families of asymptotic curves (zero normal curvature) for gridshell design. Asymptotic curves only exist where Gaussian curvature is negative; with AutoSpace the whole anticlastic region is filled with evenly spaced curves grown from one seed.",
+  "tab": "Gridshells",
+  "icon": "AsymptoticNet",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE8",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Seeds",
+    "nick": "S",
+    "type": "Integer",
+    "desc": "Seed vertex indices (optional with AutoSpace: the first one starts the net)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Step",
+    "nick": "St",
+    "type": "Number",
+    "desc": "Integration step (0 = automatic: Spacing / 10, or from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "MaxSteps",
+    "nick": "N",
+    "type": "Integer",
+    "desc": "Maximum steps per curve half (0 = automatic from the mesh size)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "AutoSpace",
+    "nick": "A",
+    "type": "Boolean",
+    "desc": "Fill the anticlastic region with evenly-spaced curves instead of tracing only from seeds",
+    "access": "item",
+    "default": "true"
+   },
+   {
+    "name": "Spacing",
+    "nick": "Sp",
+    "type": "Number",
+    "desc": "Target distance between adjacent curves (AutoSpace; 0 = automatic, bounding box / 30)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "SeedPoints",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Seed points (nearest vertex is used); may be combined with Seeds",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "MaxCurves",
+    "nick": "Mx",
+    "type": "Integer",
+    "desc": "Cap on curves per family (AutoSpace, default 200)",
+    "access": "item",
+    "default": "200"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "FamilyA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "First asymptotic curve family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "FamilyB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Second asymptotic curve family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Anticlastic",
+    "nick": "K",
+    "type": "Boolean",
+    "desc": "Per input vertex: true where asymptotic directions exist (K < 0)",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "ChebyshevNetComponent.cs",
+  "name": "Chebyshev Net",
+  "nick": "ChebNet",
+  "desc": "Constructs a Chebyshev net: equal edge lengths in both families everywhere. This is the kinematics of an elastic gridshell — a flat lattice of constant-length laths with rotating joints, bent into shape. Axis curves are geodesics from the seed; interior nodes are placed by the compass method.",
+  "tab": "Gridshells",
+  "icon": "ChebyshevNet",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDEB",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Seed",
+    "nick": "S",
+    "type": "Integer",
+    "desc": "Seed vertex index (net origin)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Direction",
+    "nick": "D",
+    "type": "Vector",
+    "desc": "First family direction at the seed",
+    "access": "item",
+    "default": "Vector3d.XAxis"
+   },
+   {
+    "name": "EdgeLength",
+    "nick": "L",
+    "type": "Number",
+    "desc": "Lath segment length between joints",
+    "access": "item",
+    "default": "1.0"
+   },
+   {
+    "name": "CountU",
+    "nick": "U",
+    "type": "Integer",
+    "desc": "Nodes per side of the seed, first family (default 10)",
+    "access": "item",
+    "default": "10"
+   },
+   {
+    "name": "CountV",
+    "nick": "V",
+    "type": "Integer",
+    "desc": "Nodes per side of the seed, second family (default 10)",
+    "access": "item",
+    "default": "10"
+   },
+   {
+    "name": "Angle",
+    "nick": "A",
+    "type": "Angle",
+    "desc": "Angle between families at the seed (default 90 degrees)",
+    "access": "item",
+    "default": "Math.PI / 2"
+   },
+   {
+    "name": "SeedPoint",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Net origin as a point (overrides Seed; nearest vertex is used)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Net nodes, one branch per row",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "UCurves",
+    "nick": "Cu",
+    "type": "Curve",
+    "desc": "Laths of the first family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "VCurves",
+    "nick": "Cv",
+    "type": "Curve",
+    "desc": "Laths of the second family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "NetMesh",
+    "nick": "N",
+    "type": "Mesh",
+    "desc": "Quad mesh over the valid net cells",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Angles",
+    "nick": "An",
+    "type": "Number",
+    "desc": "Shear angle between the families at each node (degrees); locking occurs near 0 / 180",
+    "access": "tree",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "ConjugateNetComponent.cs",
+  "name": "Conjugate Net",
+  "nick": "ConjNet",
+  "desc": "Traces both families of principal curvature lines with even spacing, giving an approximate conjugate net — the curve layout whose quad cells can be planarized into a planar-quad (PQ) panelization of the surface.",
+  "tab": "Gridshells",
+  "icon": "ConjugateNet",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF1",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Spacing",
+    "nick": "Sp",
+    "type": "Number",
+    "desc": "Target distance between adjacent curves (0 = automatic, bounding box / 30)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Step",
+    "nick": "St",
+    "type": "Number",
+    "desc": "Tracing step (0 = automatic: Spacing / 10)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "MaxSteps",
+    "nick": "N",
+    "type": "Integer",
+    "desc": "Maximum steps per curve half (0 = automatic)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Seed",
+    "nick": "S",
+    "type": "Integer",
+    "desc": "First seed vertex (-1 = nearest the mesh centroid)",
+    "access": "item",
+    "default": "-1"
+   },
+   {
+    "name": "SeedPoint",
+    "nick": "P",
+    "type": "Point",
+    "desc": "First seed as a point (overrides Seed)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "MaxCurves",
+    "nick": "Mx",
+    "type": "Integer",
+    "desc": "Cap on curves per family (default 200)",
+    "access": "item",
+    "default": "200"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Max-curvature direction family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Min-curvature direction family",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "DynamicRelaxationComponent.cs",
+  "name": "Dynamic Relaxation",
+  "nick": "DynRelax",
+  "desc": "Form finding by dynamic relaxation with kinetic damping: the mesh edges act as springs, optionally under gravity / point loads, soap-film tension and smoothing, and the system is integrated until it rests in equilibrium. Hanging models, pre-tensioned cable nets and quick minimal-surface-like relaxations of a gridshell mesh.",
+  "tab": "Form Finding",
+  "icon": "DynamicRelaxation",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF8",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh (edges become springs)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Fixed",
+    "nick": "F",
+    "type": "Boolean",
+    "desc": "Fixed vertex flags, one per input mesh vertex (empty = fix the boundary)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Stiffness",
+    "nick": "K",
+    "type": "Number",
+    "desc": "Edge spring stiffness (default 1)",
+    "access": "item",
+    "default": "1.0"
+   },
+   {
+    "name": "RestScale",
+    "nick": "R",
+    "type": "Number",
+    "desc": "Rest length factor: 1 keeps edge lengths, < 1 pre-tensions the net (default 1)",
+    "access": "item",
+    "default": "1.0"
+   },
+   {
+    "name": "Gravity",
+    "nick": "G",
+    "type": "Vector",
+    "desc": "Acceleration applied to every free vertex (default none; e.g. 0,0,-1 for a hanging model)",
+    "access": "item",
+    "default": "Vector3d.Zero"
+   },
+   {
+    "name": "Loads",
+    "nick": "L",
+    "type": "Vector",
+    "desc": "Point load per input mesh vertex (one vector broadcasts)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Tension",
+    "nick": "Te",
+    "type": "Number",
+    "desc": "Soap-film (area minimization) strength (default 0)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Smoothness",
+    "nick": "Sm",
+    "type": "Number",
+    "desc": "Laplacian smoothing strength (default 0)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Iterations",
+    "nick": "I",
+    "type": "Integer",
+    "desc": "Maximum integration steps (default 2000)",
+    "access": "item",
+    "default": "2000"
+   },
+   {
+    "name": "Tolerance",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Convergence: residual force / applied force (default 1e-4)",
+    "access": "item",
+    "default": "1e-4"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Relaxed mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Relaxed vertex positions (one per input mesh vertex)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Edges",
+    "nick": "E",
+    "type": "Line",
+    "desc": "Springs in the order of the Forces output",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Forces",
+    "nick": "N",
+    "type": "Number",
+    "desc": "Axial force per edge (tension positive)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Iterations",
+    "nick": "I",
+    "type": "Integer",
+    "desc": "Steps performed",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Converged",
+    "nick": "C",
+    "type": "Boolean",
+    "desc": "True when the residual dropped below the tolerance",
+    "access": "item",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "ForceDensityComponent.cs",
+  "name": "Force Density Method",
+  "nick": "FDM",
+  "desc": "Solves the equilibrium shape of a cable / strut net with the Force Density Method (linear, exact). Positive force densities give tension nets, negative ones compression shells. The Edges output lists the edge order used for per-edge force densities.",
+  "tab": "Form Finding",
+  "icon": "ForceDensity",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE7",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh (edges define the net)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "ForceDensity",
+    "nick": "Q",
+    "type": "Number",
+    "desc": "Force density per edge (one value broadcasts; per-edge lists follow the Edges output order)",
+    "access": "list",
+    "default": "1.0"
+   },
+   {
+    "name": "Loads",
+    "nick": "L",
+    "type": "Vector",
+    "desc": "Load vector per input mesh vertex (one vector broadcasts; coincident vertices share one load)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Fixed",
+    "nick": "F",
+    "type": "Boolean",
+    "desc": "Fixed vertex flags, one per input mesh vertex (empty = fix the boundary)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Equilibrium mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Equilibrium vertex positions (one per input mesh vertex)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Edges",
+    "nick": "E",
+    "type": "Line",
+    "desc": "Net edges in the order per-edge force densities are applied",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Forces",
+    "nick": "N",
+    "type": "Number",
+    "desc": "Axial force per edge (q * length; tension positive)",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "GaussianCurvatureComponent.cs",
+  "name": "Gaussian Curvature",
+  "nick": "GaussCurv",
+  "desc": "Computes per-vertex Gaussian curvature via angle deficit over mixed Voronoi areas. Positive on domes, negative on saddles, zero on developable and boundary vertices. One value per input mesh vertex.",
+  "tab": "Curvature",
+  "icon": "GaussianCurvature",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE2",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   }
+  ],
+  "outputs": [
+   {
+    "name": "K",
+    "nick": "K",
+    "type": "Number",
+    "desc": "Gaussian curvature per vertex",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "GeodesicNetComponent.cs",
+  "name": "Geodesic Net",
+  "nick": "GeoNet",
+  "desc": "Traces straightest geodesics from seeds along given directions for gridshell design. Geodesics extend both ways from each seed; with AutoSpace one family fills the mesh with evenly spaced geodesics grown from the first seed and direction.",
+  "tab": "Gridshells",
+  "icon": "GeodesicNet",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE9",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Seeds",
+    "nick": "S",
+    "type": "Integer",
+    "desc": "Seed vertex indices",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Directions",
+    "nick": "D",
+    "type": "Vector",
+    "desc": "Initial direction per seed (last reused if fewer)",
+    "access": "list",
+    "default": "Vector3d.XAxis"
+   },
+   {
+    "name": "Step",
+    "nick": "St",
+    "type": "Number",
+    "desc": "Integration step (0 = automatic)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "MaxSteps",
+    "nick": "N",
+    "type": "Integer",
+    "desc": "Maximum steps per curve half (0 = automatic from the mesh size)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "AutoSpace",
+    "nick": "A",
+    "type": "Boolean",
+    "desc": "Fill the surface with evenly-spaced geodesics of one family, grown from the first seed and direction",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Spacing",
+    "nick": "Sp",
+    "type": "Number",
+    "desc": "Target distance between adjacent curves (AutoSpace; 0 = automatic)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "SeedPoints",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Seed points (nearest vertex is used); may be combined with Seeds",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "MaxCurves",
+    "nick": "Mx",
+    "type": "Integer",
+    "desc": "Cap on the number of curves (AutoSpace, default 200)",
+    "access": "item",
+    "default": "200"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Geodesics",
+    "nick": "G",
+    "type": "Curve",
+    "desc": "Geodesic curves (smooth interpolated curves)",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "GeodesicPathComponent.cs",
+  "name": "Geodesic Path",
+  "nick": "GeoPath",
+  "desc": "Shortest path on a mesh between two points: the straight lath you would lay from A to B. Graph search finds the route, curve shortening on the surface straightens it into a geodesic. Points are matched pairwise (the last is reused when lists differ).",
+  "tab": "Gridshells",
+  "icon": "GeodesicPath",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFC",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "From",
+    "nick": "A",
+    "type": "Point",
+    "desc": "Start points",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "To",
+    "nick": "B",
+    "type": "Point",
+    "desc": "End points",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Point spacing of the result (0 = automatic: half the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Iterations",
+    "nick": "I",
+    "type": "Integer",
+    "desc": "Maximum straightening passes per level (default 500)",
+    "access": "item",
+    "default": "500"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Paths",
+    "nick": "G",
+    "type": "Curve",
+    "desc": "Geodesic paths (smooth interpolated curves)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Lengths",
+    "nick": "L",
+    "type": "Number",
+    "desc": "Geodesic length per path",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "GridshellAnalysisComponent.cs",
+  "name": "Gridshell Analysis",
+  "nick": "GridFE",
+  "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the profile's section (rectangle, round bar or custom polygon), coupled at net crossings; supports are fixed points. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. A first-order sanity check, not a full FE package.",
+  "tab": "Analysis",
+  "icon": "GridshellAnalysis",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF3",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Reference surface the net lies on",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Curves",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Lath centerlines (net curves)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Joints",
+    "nick": "J",
+    "type": "Point",
+    "desc": "Crossing points where laths are coupled (from Net Joints)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Supports",
+    "nick": "S",
+    "type": "Point",
+    "desc": "Fixed support points",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Load",
+    "nick": "L",
+    "type": "Vector",
+    "desc": "Force per unit length in N/m applied along every lath (default: 1 kN/m downward)",
+    "access": "item",
+    "default": "new Vector3d(0, 0, -1000"
+   },
+   {
+    "name": "E",
+    "nick": "E",
+    "type": "Number",
+    "desc": "Young's modulus in Pa (default 11 GPa ≈ timber)",
+    "access": "item",
+    "default": "11e9"
+   },
+   {
+    "name": "Allowable",
+    "nick": "Al",
+    "type": "Number",
+    "desc": "Allowable combined stress in Pa (default 20 MPa)",
+    "access": "item",
+    "default": "20e6"
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Lath width in model units (default 0.1)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Thickness",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Lath thickness in model units (default 0.01)",
+    "access": "item",
+    "default": "0.01"
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "Lath orientation, as in Lath Sweep",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Scale",
+    "nick": "Sc",
+    "type": "Number",
+    "desc": "Deformation display scale (default 1)",
+    "access": "item",
+    "default": "1.0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "Sa",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "MaxSegment",
+    "nick": "Ms",
+    "type": "Number",
+    "desc": "Beam element size in model units (0 = automatic: twice the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Shape",
+    "nick": "Sh",
+    "type": "Integer",
+    "desc": "Section shape applied to every curve: 0 = rectangle W × T, 1 = round bar of diameter W, 2 = custom closed planar Section curve (its plane X = across / Y = surface normal; Upright swaps them)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Section",
+    "nick": "Sc",
+    "type": "Curve",
+    "desc": "Closed planar section curve for Shape = 2 (drawn around the origin of its own plane, any units of the model)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Deformed",
+    "nick": "D",
+    "type": "Curve",
+    "desc": "Deformed lath curves at the given display scale (one per input curve)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "MaxDisplacement",
+    "nick": "Dm",
+    "type": "Number",
+    "desc": "Largest node displacement (model units)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Utilization",
+    "nick": "u",
+    "type": "Number",
+    "desc": "Stress utilization per lath element, one branch per lath (>1 fails)",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "MaxUtilization",
+    "nick": "Um",
+    "type": "Number",
+    "desc": "Peak utilization over the network",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "LathUtilization",
+    "nick": "Ul",
+    "type": "Number",
+    "desc": "Peak utilization per lath (one per input curve; wire into Lath Preview)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Nodes",
+    "nick": "N",
+    "type": "Point",
+    "desc": "Frame nodes after merging",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Displacements",
+    "nick": "Dv",
+    "type": "Vector",
+    "desc": "Displacement vector per node (model units)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Axial",
+    "nick": "Nx",
+    "type": "Number",
+    "desc": "Axial force per element in N (tension positive), one branch per lath",
+    "access": "tree",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "LathAnalysisComponent.cs",
+  "name": "Lath Analysis",
+  "nick": "LathA",
+  "desc": "Checks whether gridshell laths can be physically bent along curves on a mesh. Decomposes each curve into geodesic curvature (in-surface bend), normal curvature (out-of-surface bend), and geodesic torsion (twist), then compares the resulting bending strains of a rectangular strip against an allowable material strain.",
+  "tab": "Analysis",
+  "icon": "LathAnalysis",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDEA",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Mesh the laths lie on",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Laths",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Lath curves on the mesh (e.g. from Asymptotic Net or Geodesic Net)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "False: strip lies flat on the surface (geodesic gridshells). True: strip stands upright, perpendicular to the surface (asymptotic gridshells).",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Strip width, across the curve (default 0.1)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Thickness",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Strip thickness (default 0.01)",
+    "access": "item",
+    "default": "0.01"
+   },
+   {
+    "name": "MaxStrain",
+    "nick": "E",
+    "type": "Number",
+    "desc": "Allowable bending strain, e.g. sigma/E (default 0.005 ≈ timber; 0.002 steel, 0.008 GFRP)",
+    "access": "item",
+    "default": "0.005"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Window",
+    "nick": "Wn",
+    "type": "Number",
+    "desc": "Arc length over which curvature is measured (0 = automatic: twice the mesh edge length). Larger windows smooth out facet-scale spikes",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Shape",
+    "nick": "Sh",
+    "type": "Integer",
+    "desc": "Section shape applied to every curve: 0 = rectangle W × T, 1 = round bar of diameter W, 2 = custom closed planar Section curve (its plane X = across / Y = surface normal; Upright swaps them)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Section",
+    "nick": "Sc",
+    "type": "Curve",
+    "desc": "Closed planar section curve for Shape = 2 (drawn around the origin of its own plane, any units of the model)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Buildable",
+    "nick": "B",
+    "type": "Boolean",
+    "desc": "True if the lath stays within the strain limit (one per input curve)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "MaxUtilization",
+    "nick": "U",
+    "type": "Number",
+    "desc": "Peak strain / allowable strain per lath (>1 fails)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Utilization",
+    "nick": "u",
+    "type": "Number",
+    "desc": "Strain utilization per point along each lath",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "GeodesicCurvature",
+    "nick": "Kg",
+    "type": "Number",
+    "desc": "In-surface bending per point",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "NormalCurvature",
+    "nick": "Kn",
+    "type": "Number",
+    "desc": "Out-of-surface bending per point (surface normal curvature along the lath; 0 on asymptotic curves)",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "GeodesicTorsion",
+    "nick": "Tg",
+    "type": "Number",
+    "desc": "Twist rate per point",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Sample points the per-point values refer to",
+    "access": "tree",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "LathLabelsComponent.cs",
+  "name": "Lath Labels",
+  "nick": "Labels",
+  "desc": "Assigns an ID to every lath, places a label point at each midpoint, and builds a CSV bill of materials (id, length, optional strain utilization from Lath Analysis). Wire the points and labels into a Text Tag component for display.",
+  "tab": "Fabrication",
+  "icon": "LathLabels",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF6",
+  "inputs": [
+   {
+    "name": "Curves",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Lath centerlines",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Prefix",
+    "nick": "P",
+    "type": "Text",
+    "desc": "ID prefix (default \\\"L\\\")",
+    "access": "item",
+    "default": "\"L\""
+   },
+   {
+    "name": "Utilization",
+    "nick": "U",
+    "type": "Number",
+    "desc": "Optional per-lath utilization (from Lath Analysis / Gridshell Analysis) for the report",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Start",
+    "nick": "N",
+    "type": "Integer",
+    "desc": "First ID number (default 0; use e.g. 100 for a second family)",
+    "access": "item",
+    "default": "0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Label anchor points (lath midpoints)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Labels",
+    "nick": "L",
+    "type": "Text",
+    "desc": "Lath IDs",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "CSV bill of materials",
+    "access": "item",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "LathPreviewComponent.cs",
+  "name": "Lath Preview",
+  "nick": "Preview",
+  "desc": "Colors swept laths by utilization (e.g. from Lath Analysis or Gridshell Analysis): green within limits, yellow near the limit, red beyond it.",
+  "tab": "Fabrication",
+  "icon": "LathPreview",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF7",
+  "inputs": [
+   {
+    "name": "Laths",
+    "nick": "L",
+    "type": "Mesh",
+    "desc": "Swept lath meshes (from Lath Sweep)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Utilization",
+    "nick": "U",
+    "type": "Number",
+    "desc": "Per-lath utilization values (1.0 = at the limit)",
+    "access": "list",
+    "default": null
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Laths",
+    "nick": "L",
+    "type": "Mesh",
+    "desc": "Colored lath meshes",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "LathSegmentComponent.cs",
+  "name": "Lath Segment",
+  "nick": "Segment",
+  "desc": "Splits laths into pieces that fit stock material length, keeping cuts away from net crossings. Consecutive pieces overlap by the splice length, and half-lap splice notch solids (Ne for the upstream piece, Ns for the downstream one) are built at each cut: subtract them from the swept pieces with Mesh Difference.",
+  "tab": "Fabrication",
+  "icon": "LathSegment",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF5",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Reference surface",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Curves",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Lath centerlines",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "StockLength",
+    "nick": "St",
+    "type": "Number",
+    "desc": "Available material length (default 3)",
+    "access": "item",
+    "default": "3.0"
+   },
+   {
+    "name": "Margin",
+    "nick": "Ma",
+    "type": "Number",
+    "desc": "Minimum distance between a cut and a joint (default 0.05)",
+    "access": "item",
+    "default": "0.05"
+   },
+   {
+    "name": "Joints",
+    "nick": "J",
+    "type": "Point",
+    "desc": "Crossing points to avoid (from Net Joints; only those on each lath are used)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "SpliceLength",
+    "nick": "SL",
+    "type": "Number",
+    "desc": "Half-lap splice overlap length (default 0.15)",
+    "access": "item",
+    "default": "0.15"
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Lath width (default 0.1)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Thickness",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Lath thickness (default 0.01)",
+    "access": "item",
+    "default": "0.01"
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "Lath orientation, as in Lath Sweep",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Clearance",
+    "nick": "Cl",
+    "type": "Number",
+    "desc": "Fit clearance (default 0)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Offset",
+    "nick": "O",
+    "type": "Number",
+    "desc": "Gap between the surface and the nearest lath face, as in Lath Sweep (default 0)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Segments",
+    "nick": "S",
+    "type": "Curve",
+    "desc": "Lath pieces, one branch per input lath",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Cuts",
+    "nick": "Cu",
+    "type": "Point",
+    "desc": "Cut points, one branch per input lath",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "NotchesEnd",
+    "nick": "Ne",
+    "type": "Box",
+    "desc": "Splice notches for the upstream piece at each cut",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "NotchesStart",
+    "nick": "Ns",
+    "type": "Box",
+    "desc": "Splice notches for the downstream piece at each cut",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Lengths",
+    "nick": "L",
+    "type": "Number",
+    "desc": "Piece lengths, one branch per input lath",
+    "access": "tree",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "LathSweepComponent.cs",
+  "name": "Lath Sweep",
+  "nick": "Sweep",
+  "desc": "Extrudes curves lying on a mesh into solid laths with a rectangular profile. The profile rides in the surface frame: flat laths hug the surface (geodesic gridshells), upright laths stand on edge (asymptotic gridshells). Outputs stay index-aligned with the input curves (null where a curve could not be swept).",
+  "tab": "Fabrication",
+  "icon": "LathSweep",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDEC",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Reference surface the curves lie on",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Curves",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Lath centerlines on the surface",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Profile width across the curve (default 0.1)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Thickness",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Profile thickness through the strip (default 0.01)",
+    "access": "item",
+    "default": "0.01"
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "False: strip lies flat on the surface. True: strip stands upright on edge",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Offset",
+    "nick": "O",
+    "type": "Number",
+    "desc": "Gap between the surface and the nearest strip face (default 0)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Shape",
+    "nick": "Sh",
+    "type": "Integer",
+    "access": "item",
+    "desc": "Section shape applied to every curve: 0 = rectangle W × T, 1 = round bar of diameter W, 2 = custom closed planar Section curve (its plane X = across / Y = surface normal; Upright swaps them)",
+    "default": "0"
+   },
+   {
+    "name": "Section",
+    "nick": "Sc",
+    "type": "Curve",
+    "access": "item",
+    "desc": "Closed planar section curve for Shape = 2 (drawn around the origin of its own plane, any units of the model)",
+    "optional": true
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Laths",
+    "nick": "L",
+    "type": "Mesh",
+    "desc": "Swept lath solids as closed meshes, one per input curve",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Centerlines",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Strip centerline per lath (lifted by the offset and half the depth)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Frames",
+    "nick": "F",
+    "type": "Plane",
+    "desc": "Start frame per lath (X along the lath, Z along the surface normal)",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "LathUnrollComponent.cs",
+  "name": "Lath Unroll",
+  "nick": "Unroll",
+  "desc": "Unrolls lath strips to flat 2D cutting patterns. Each pattern is isometric to the swept strip (exact per triangle), so it is ready for CNC/laser cutting. Patterns are laid out in a row with the given gap; closed laths are opened at their seam. Outputs stay index-aligned with the input curves (null where a curve failed).",
+  "tab": "Fabrication",
+  "icon": "LathUnroll",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF4",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Reference surface the curves lie on",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Curves",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Lath centerlines on the surface",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Strip width (default 0.1)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "Lath orientation, as in Lath Sweep",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Gap",
+    "nick": "G",
+    "type": "Number",
+    "desc": "Gap between laid-out patterns (default 0.05)",
+    "access": "item",
+    "default": "0.05"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Patterns",
+    "nick": "P",
+    "type": "Curve",
+    "desc": "Closed flat cutting patterns, laid out in a row",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Centerlines",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Flat centerlines (reference/labeling)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Lengths",
+    "nick": "L",
+    "type": "Number",
+    "desc": "3D cutting length per lath",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "FlatMeshes",
+    "nick": "F",
+    "type": "Mesh",
+    "desc": "Triangulated flat pattern per lath (preview / nesting)",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "MeanCurvatureComponent.cs",
+  "name": "Mean Curvature",
+  "nick": "MeanCurv",
+  "desc": "Computes per-vertex mean curvature via the cotangent Laplacian (mixed Voronoi areas, consistent with Gaussian Curvature). Boundary vertices are zero. One value per input mesh vertex.",
+  "tab": "Curvature",
+  "icon": "MeanCurvature",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE3",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   }
+  ],
+  "outputs": [
+   {
+    "name": "H",
+    "nick": "H",
+    "type": "Number",
+    "desc": "Signed mean curvature per vertex",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "HN",
+    "nick": "HN",
+    "type": "Vector",
+    "desc": "Mean curvature normal vector per vertex (length |H|)",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "MeshCleanupComponent.cs",
+  "name": "Mesh Cleanup",
+  "nick": "Cleanup",
+  "desc": "Heals a mesh for analysis: welds coincident vertices (within a tolerance), removes degenerate and duplicate faces, reduces collapsed faces, and unifies face winding. Mite components weld exactly coincident vertices on their own; run this first on meshes with near-coincident vertices, slivers or mixed winding (joins, booleans, imports).",
+  "tab": "Util",
+  "icon": "MeshCleanup",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF0",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Tolerance",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Vertex weld distance (0 = automatic: 1e-6 of the average edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "UnifyWinding",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "Make face winding consistent",
+    "access": "item",
+    "default": "true"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Cleaned mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Welded",
+    "nick": "W",
+    "type": "Integer",
+    "desc": "Vertices welded away",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Removed",
+    "nick": "R",
+    "type": "Integer",
+    "desc": "Degenerate + duplicate faces removed",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Map",
+    "nick": "I",
+    "type": "Integer",
+    "desc": "Cleaned vertex index for each input vertex",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "MeshColourMapComponent.cs",
+  "name": "Mesh Colour Map",
+  "nick": "ColourMap",
+  "desc": "Colours a mesh by per-vertex values in one step (no Bounds / Remap / Gradient chain). Diverging palettes are centred on zero, which suits signed curvature: blue negative, white zero, red positive.",
+  "tab": "Util",
+  "icon": "MeshColourMap",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFB",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Values",
+    "nick": "V",
+    "type": "Number",
+    "desc": "One value per mesh vertex (e.g. K, H, K1)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Domain",
+    "nick": "D",
+    "type": "Interval",
+    "desc": "Value range to map (empty = automatic, robust 2%..98% percentiles)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Palette",
+    "nick": "P",
+    "type": "Integer",
+    "desc": "0 = diverging blue-white-red (centred on 0), 1 = viridis-like sequential, 2 = traffic light (green-yellow-red)",
+    "access": "item",
+    "default": "0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Coloured mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Domain",
+    "nick": "D",
+    "type": "Interval",
+    "desc": "Value range that was mapped",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Colours",
+    "nick": "C",
+    "type": "Colour",
+    "desc": "Colour per vertex",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "MeshIsocurvesComponent.cs",
+  "name": "Mesh Isocurves",
+  "nick": "Iso",
+  "desc": "Extracts isocurves of a per-vertex scalar field (curvature, utilization, height, ...) at the given levels. Wire Gaussian Curvature with level 0 to outline the anticlastic regions where asymptotic laths can exist. One branch per level.",
+  "tab": "Analysis",
+  "icon": "MeshIsocurves",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF9",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Values",
+    "nick": "V",
+    "type": "Number",
+    "desc": "One value per input mesh vertex",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Levels",
+    "nick": "L",
+    "type": "Number",
+    "desc": "Iso levels (default 0)",
+    "access": "list",
+    "default": "0.0"
+   },
+   {
+    "name": "Smooth",
+    "nick": "S",
+    "type": "Boolean",
+    "desc": "Output smooth interpolated curves instead of polylines (default false)",
+    "access": "item",
+    "default": "false"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Curves",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Isocurves, one branch per level",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Lengths",
+    "nick": "L",
+    "type": "Number",
+    "desc": "Length per isocurve",
+    "access": "tree",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "MinimalSurfaceComponent.cs",
+  "name": "Minimal Surface",
+  "nick": "MinSrf",
+  "desc": "Finds a minimal surface with fixed boundaries by iterating exact cotangent Laplace solves (each iteration freezes the weights and solves the sparse linear system). Leave Fixed empty to fix the mesh boundary.",
+  "tab": "Form Finding",
+  "icon": "MinimalSurface",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE6",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Fixed",
+    "nick": "F",
+    "type": "Boolean",
+    "desc": "Fixed vertex flags, one per input mesh vertex (empty = fix the boundary)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Iterations",
+    "nick": "I",
+    "type": "Integer",
+    "desc": "Max weight-update iterations (default 20)",
+    "access": "item",
+    "default": "20"
+   },
+   {
+    "name": "Tolerance",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Convergence: max vertex move per iteration as a fraction of the mesh size (default 1e-8)",
+    "access": "item",
+    "default": "1e-8"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Resulting minimal surface mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Iterations",
+    "nick": "I",
+    "type": "Integer",
+    "desc": "Iterations performed",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Residual",
+    "nick": "R",
+    "type": "Number",
+    "desc": "Max vertex movement in the last iteration",
+    "access": "item",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "NetJointsComponent.cs",
+  "name": "Net Joints",
+  "nick": "Joints",
+  "desc": "Finds the crossings between the two lath families of a gridshell net and builds lap-joint notch solids for each crossing. Boolean-subtract the notches from the swept laths (Mesh Difference) to fabricate the joints.",
+  "tab": "Fabrication",
+  "icon": "NetJoints",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDED",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Reference surface the net lies on",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "First lath family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Second lath family (empty: crossings within family A)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Lath profile width (default 0.1)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Thickness",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Lath profile thickness (default 0.01)",
+    "access": "item",
+    "default": "0.01"
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "False: laths lie flat (lap notch). True: laths stand upright (egg-crate slot)",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Offset",
+    "nick": "O",
+    "type": "Number",
+    "desc": "Gap between the surface and the nearest lath face (default 0)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Lap",
+    "nick": "L",
+    "type": "Number",
+    "desc": "Notched fraction of the profile depth (default 0.5 = half-lap)",
+    "access": "item",
+    "default": "0.5"
+   },
+   {
+    "name": "Clearance",
+    "nick": "Cl",
+    "type": "Number",
+    "desc": "Fit clearance added to each notch side (default 0)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Tolerance",
+    "nick": "X",
+    "type": "Number",
+    "desc": "Maximum gap accepted as a crossing (0 = automatic)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Crossing points",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Planes",
+    "nick": "F",
+    "type": "Plane",
+    "desc": "Joint frame per crossing (X along family A, Z along the surface normal)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Angles",
+    "nick": "An",
+    "type": "Number",
+    "desc": "Crossing angle between the laths, in degrees",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "NotchesA",
+    "nick": "Na",
+    "type": "Box",
+    "desc": "Notch solids to subtract from family A laths",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "NotchesB",
+    "nick": "Nb",
+    "type": "Box",
+    "desc": "Notch solids to subtract from family B laths",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "IndexA",
+    "nick": "Ia",
+    "type": "Integer",
+    "desc": "Index of the family A curve at each crossing",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "IndexB",
+    "nick": "Ib",
+    "type": "Integer",
+    "desc": "Index of the family B curve at each crossing (a family A index when CurvesB is empty)",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "NetTopologyComponent.cs",
+  "name": "Net Topology",
+  "nick": "NetTopo",
+  "desc": "Turns a two-family lath net into a structural graph: unique nodes at the crossings and one member per lath piece between consecutive crossings (free tails included). Feed Nodes / Members to a structural package (e.g. Karamba) or use the node schedule for fabrication.",
+  "tab": "Fabrication",
+  "icon": "NetTopology",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFD",
+  "inputs": [
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "First lath family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Second lath family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Tolerance",
+    "nick": "X",
+    "type": "Number",
+    "desc": "Maximum gap accepted as a crossing (0 = automatic)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic: 1/500 of the net size)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "MinLength",
+    "nick": "Ml",
+    "type": "Number",
+    "desc": "Drop members (e.g. free tails) shorter than this (default 0)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Nodes",
+    "nick": "N",
+    "type": "Point",
+    "desc": "Unique crossing nodes",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Valence",
+    "nick": "V",
+    "type": "Integer",
+    "desc": "Members meeting at each node",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Members",
+    "nick": "M",
+    "type": "Curve",
+    "desc": "Lath pieces between nodes (polylines)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Lines",
+    "nick": "Ln",
+    "type": "Line",
+    "desc": "Straight member axes (node to node)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Start",
+    "nick": "S",
+    "type": "Integer",
+    "desc": "Node index at each member start (-1 = free end)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "End",
+    "nick": "E",
+    "type": "Integer",
+    "desc": "Node index at each member end (-1 = free end)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Lath",
+    "nick": "L",
+    "type": "Integer",
+    "desc": "Input lath of each member: family A indices, then family B continuing",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Lengths",
+    "nick": "Le",
+    "type": "Number",
+    "desc": "Member lengths",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "NodeLaths",
+    "nick": "Nl",
+    "type": "Integer",
+    "desc": "Per node: the two lath indices crossing there",
+    "access": "tree",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "PlanarizationComponent.cs",
+  "name": "Planarize Mesh",
+  "nick": "Planarize",
+  "desc": "Iterative quad planarization by projecting vertices onto per-face best-fit planes. Set Strength to 0 to only measure planarity without moving anything.",
+  "tab": "Form Finding",
+  "icon": "Planarization",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE5",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input quad mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Iterations",
+    "nick": "I",
+    "type": "Integer",
+    "desc": "Max iterations (default 100)",
+    "access": "item",
+    "default": "100"
+   },
+   {
+    "name": "Tolerance",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Convergence tolerance on the max face deviation, model units (default 1e-6)",
+    "access": "item",
+    "default": "1e-6"
+   },
+   {
+    "name": "Fixed",
+    "nick": "F",
+    "type": "Boolean",
+    "desc": "Fixed vertex flags (one per input mesh vertex)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Strength",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Step strength per iteration 0..1 (default 1; 0 = measure only)",
+    "access": "item",
+    "default": "1.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Planarized mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Deviation",
+    "nick": "D",
+    "type": "Number",
+    "desc": "Planarity deviation per face (max distance of a corner from the best-fit plane)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Iterations",
+    "nick": "I",
+    "type": "Integer",
+    "desc": "Iterations performed",
+    "access": "item",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "PrincipalCurvatureComponent.cs",
+  "name": "Principal Curvature",
+  "nick": "PrinCurv",
+  "desc": "Computes principal curvatures and directions per vertex (Rusinkiewicz per-face second-fundamental-form fit, tensor-smoothed over R vertex rings). Outputs are one item per input mesh vertex, ready for Mesh Colours.",
+  "tab": "Curvature",
+  "icon": "PrincipalCurvature",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE1",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Radius",
+    "nick": "R",
+    "type": "Integer",
+    "desc": "Smoothing radius in vertex rings (1 = none, default 2)",
+    "access": "item",
+    "default": "2"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "K1",
+    "nick": "K1",
+    "type": "Number",
+    "desc": "Maximum principal curvature per vertex",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "K2",
+    "nick": "K2",
+    "type": "Number",
+    "desc": "Minimum principal curvature per vertex",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "D1",
+    "nick": "D1",
+    "type": "Vector",
+    "desc": "Maximum curvature direction per vertex",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "D2",
+    "nick": "D2",
+    "type": "Vector",
+    "desc": "Minimum curvature direction per vertex",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Normals",
+    "nick": "N",
+    "type": "Vector",
+    "desc": "Vertex normals used for the tangent frames ((D1, D2, N) is right-handed)",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "PullToMeshComponent.cs",
+  "name": "Pull To Mesh",
+  "nick": "Pull",
+  "desc": "Projects curves and points onto a mesh by closest point, so hand-drawn or edited lath layouts can feed Lath Analysis, Lath Sweep and Net Joints like traced ones. Optionally fairs the pulled curves on the surface to remove facet kinks.",
+  "tab": "Util",
+  "icon": "PullToMesh",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFA",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Target mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Curves",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Curves to pull (optional)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Points to pull (optional)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Curve sampling length along the curve (0 = automatic: half the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Smoothing",
+    "nick": "Sm",
+    "type": "Integer",
+    "desc": "On-surface fairing passes for the pulled curves (default 0)",
+    "access": "item",
+    "default": "0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Curves",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Pulled curves (smooth interpolated, on the mesh)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Pulled points",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Normals",
+    "nick": "N",
+    "type": "Vector",
+    "desc": "Smooth mesh normal at each pulled point",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Distances",
+    "nick": "D",
+    "type": "Number",
+    "desc": "Pull distance per point",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "StreamlinesComponent.cs",
+  "name": "Curvature Streamlines",
+  "nick": "CurvStream",
+  "desc": "Traces lines of curvature along the maximum or minimum principal direction, from seed vertices / points or filling the mesh with evenly spaced lines (AutoSpace).",
+  "tab": "Curvature",
+  "icon": "Streamlines",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE4",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Seeds",
+    "nick": "S",
+    "type": "Integer",
+    "desc": "Seed vertex indices",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Step",
+    "nick": "St",
+    "type": "Number",
+    "desc": "Integration step (0 = automatic from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "MaxSteps",
+    "nick": "N",
+    "type": "Integer",
+    "desc": "Maximum steps per curve half (0 = automatic from the mesh size)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "MaxDir",
+    "nick": "Max",
+    "type": "Boolean",
+    "desc": "Use max curvature direction (true) or min (false)",
+    "access": "item",
+    "default": "true"
+   },
+   {
+    "name": "SeedPoints",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Seed points (nearest vertex is used); may be combined with Seeds",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "AutoSpace",
+    "nick": "A",
+    "type": "Boolean",
+    "desc": "Fill the mesh with evenly spaced lines grown from the first seed",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Spacing",
+    "nick": "Sp",
+    "type": "Number",
+    "desc": "Target distance between adjacent lines (AutoSpace; 0 = automatic)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "MaxCurves",
+    "nick": "Mx",
+    "type": "Integer",
+    "desc": "Cap on the number of lines (AutoSpace, default 200)",
+    "access": "item",
+    "default": "200"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Streamlines",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Curvature lines (smooth interpolated curves)",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "UmbilicsComponent.cs",
+  "name": "Umbilics",
+  "nick": "Umb",
+  "desc": "Finds umbilical points, where the two principal curvatures are equal and the principal directions are undefined. Curve networks rotate wildly around umbilics — use this to place net seeds deliberately or to mask regions before tracing.",
+  "tab": "Curvature",
+  "icon": "Umbilics",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF2",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Input mesh",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Tolerance",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Relative |k1-k2| tolerance (default 0.05)",
+    "access": "item",
+    "default": "0.05"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Umbilical vertex positions",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Indices",
+    "nick": "I",
+    "type": "Integer",
+    "desc": "Umbilical vertex indices (of the input mesh)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Mask",
+    "nick": "Mk",
+    "type": "Boolean",
+    "desc": "Per input vertex: true where umbilical",
+    "access": "list",
+    "default": null
+   }
+  ]
+ }
 ]

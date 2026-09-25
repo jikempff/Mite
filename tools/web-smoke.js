@@ -8,6 +8,8 @@
 //  2. Mid-trace shape switches still resolve.
 //  3. Component strips name the plugin component of the active mode / net
 //     and no icon fails to load.
+//  4. The section choice reaches the kernel (1.2.5's binding dropped it):
+//     a round bar sweeps as a tube and gets its own utilization.
 //
 // Usage (needs a published site and a static server):
 //   dotnet publish src/Mite.Web -c Release -o /tmp/miteweb -p:RunAOTCompilation=false
@@ -61,6 +63,16 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   await page.click('#modes [data-mode=shaded]');
   await page.waitForTimeout(300);
   check(await page.$eval('#gh-mode', (e) => e.classList.contains('hidden')), 'mode strip hides for plain shading');
+  // 4. the section choice reaches the kernel: a round bar sweeps as a 24-sided tube
+  await page.evaluate(() => { const S = window.__mite; const objs = S.viewer.curveObjects.filter((c) => c.family === 'A'); S.viewer.onPickCurve(objs[Math.floor(objs.length / 2)]); });
+  check(await idle(120000), 'a picked lath is analysed');
+  await page.check('#solid'); await idle(120000);
+  const rectFaces = await page.evaluate(() => window.__mite.lath?.sweepFaces?.length || 0);
+  await page.selectOption('#section', '1'); await idle(120000);
+  const round = await page.evaluate(() => ({ faces: window.__mite.lath?.sweepFaces?.length || 0, util: window.__mite.lath?.maxUtilization }));
+  check(rectFaces > 0 && round.faces > 4 * rectFaces, `round bar sweeps as a tube (${round.faces} vs ${rectFaces} rectangle faces)`);
+  check(Number.isFinite(round.util) && round.util > 0, `round bar utilization computed (${round.util?.toFixed(2)})`);
+
   const broken = await page.$$eval('img', (imgs) => imgs.filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.getAttribute('src')));
   check(broken.length === 0, `all icons load (${broken.join(', ') || 'none broken'})`);
   check(errors.length === 0, `no page errors (${errors.join(' | ') || 'none'})`);

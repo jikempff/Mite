@@ -457,9 +457,12 @@ public static partial class MiteApi
         var sw = Stopwatch.StartNew();
         if (_proj == null) throw new InvalidOperationException("No mesh loaded.");
         var line = Unflat(polyline);
+        // 0 = rectangle width × thickness, 1 = round bar of diameter width — the strain
+        // check and the sweep read the same profile (unroll keeps the rectangle's band)
+        var profile = shape == 1 ? LathProfile.Round(width, 24) : new LathProfile(width, thickness, upright);
         var la = LathAnalysis.Analyze(_proj, line, new LathAnalysis.Options
         {
-            Width = width, Thickness = thickness, Upright = upright, MaxStrain = maxStrain > 0 ? maxStrain : 0.005
+            Profile = profile, MaxStrain = maxStrain > 0 ? maxStrain : 0.005
         });
         var arc = new double[line.Length];
         for (int i = 1; i < line.Length; i++) arc[i] = arc[i - 1] + (line[i] - line[i - 1]).Length;
@@ -469,8 +472,6 @@ public static partial class MiteApi
             Utilization = la.Utilization, MaxUtilization = la.MaxUtilization, Buildable = la.Buildable,
             Length = arc[arc.Length - 1]
         };
-        // 0 = rectangle width × thickness, 1 = round bar of diameter width (unroll keeps the rectangle's band width)
-        var profile = shape == 1 ? LathProfile.Round(width, 24) : new LathProfile(width, thickness, upright);
         var un = StripUnroll.Unroll(_proj, line, new LathProfile(width, thickness, upright));
         if (un.HasValue)
         {
@@ -499,7 +500,7 @@ public static partial class MiteApi
     // ---- Frame analysis of the last net -------------------------------------
 
     [JSExport]
-    public static string Frame(double width, double thickness, bool upright, double loadPerMetre, double modelToMetres, double sampling)
+    public static string Frame(double width, double thickness, bool upright, double loadPerMetre, double modelToMetres, double sampling, int shape)
     {
         var sw = Stopwatch.StartNew();
         var p = new FramePayload();
@@ -521,7 +522,7 @@ public static partial class MiteApi
                     if (_proj.IsOnBoundary(h, 1e-4) || (h.Point - e).Length > 1e-6 * _proj.AverageEdgeLength) sup.Add(e * s);
                 }
             if (sup.Count == 0) { p.Error = "No lath end lies on the mesh border, so there is nothing to support (closed surface?)."; return JsonSerializer.Serialize(p, MiteJson.Default.FramePayload); }
-            var fr = FrameAnalysis.Compute(meshM, laths, joints, sup, new LathProfile(width * s, thickness * s, upright), new Vec3d(0, 0, -loadPerMetre));
+            var fr = FrameAnalysis.Compute(meshM, laths, joints, sup, shape == 1 ? LathProfile.Round(width * s, 24) : new LathProfile(width * s, thickness * s, upright), new Vec3d(0, 0, -loadPerMetre));
             var util = new double[laths.Count];
             for (int e = 0; e < fr.ElementSource.Length; e++) { int c = fr.ElementSource[e].Curve; util[c] = Math.Max(util[c], fr.Utilization[e]); }
             var nodeOf = new Dictionary<(int, int), int>();

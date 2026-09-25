@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Grasshopper;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
+using Mite.Core.Fabrication;
 using Mite.Core.Geometry;
 using Mite.Core.Gridshells;
 
@@ -33,6 +34,7 @@ public class LathAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("MaxStrain", "E", "Allowable bending strain, e.g. sigma/E (default 0.005 ≈ timber; 0.002 steel, 0.008 GFRP)", GH_ParamAccess.item, 0.005);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Window", "Wn", "Arc length over which curvature is measured (0 = automatic: twice the mesh edge length). Larger windows smooth out facet-scale spikes", GH_ParamAccess.item, 0.0);
+        RegisterSectionInputs(pManager); // 8 Shape, 9 Section — the same profile Lath Sweep builds
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -60,16 +62,23 @@ public class LathAnalysisComponent : MiteComponent
         DA.GetData(5, ref maxStrain);
         DA.GetData(6, ref sampling);
         DA.GetData(7, ref window);
+        int shape = 0;
+        DA.GetData(8, ref shape);
+        Curve? section = null;
+        DA.GetData(9, ref section);
 
         if (width <= 0 || thickness <= 0 || maxStrain <= 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness, and MaxStrain must be positive.");
             return;
         }
+        if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, 1.0, curves.Count, out LathProfile profile)) return;
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
-        var opts = new LathAnalysis.Options { Upright = upright, Width = width, Thickness = thickness, MaxStrain = maxStrain, Window = window };
+        // The strain check reads the section's extents and twist length (round
+        // bar: d/2 for every mode; strip: t/2, w/2 and the Saint-Venant twist)
+        var opts = new LathAnalysis.Options { Profile = profile, MaxStrain = maxStrain, Window = window };
 
         var buildable = new List<bool>();
         var maxUtil = new List<double>();

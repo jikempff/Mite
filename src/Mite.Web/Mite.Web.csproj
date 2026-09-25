@@ -17,6 +17,8 @@
     <RunAOTCompilation>true</RunAOTCompilation>
     <WasmStripILAfterAOT>true</WasmStripILAfterAOT>
     <WasmEmitSymbolMap>false</WasmEmitSymbolMap>
+    <!-- CA1416: the JSExport attributes are browser-only by design; the analyzer does not know the target is the browser -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
     <StaticWebAssetsEnabled>true</StaticWebAssetsEnabled>
   </PropertyGroup>
   <ItemGroup>

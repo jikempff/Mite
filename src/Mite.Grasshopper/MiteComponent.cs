@@ -40,6 +40,17 @@ public abstract class MiteComponent : GH_Component
     protected static bool Cancelled() => GH_Document.IsEscapeKeyDown();
 
     /// <summary>
+    /// Appends the shared Shape / Section inputs (see <see cref="SectionInput"/>)
+    /// — always last, so existing definitions keep their wiring.
+    /// </summary>
+    protected static void RegisterSectionInputs(GH_InputParamManager pManager)
+    {
+        pManager.AddIntegerParameter("Shape", "Sh", SectionInput.ShapeDescription, GH_ParamAccess.item, 0);
+        pManager.AddCurveParameter("Section", "Sc", SectionInput.SectionDescription, GH_ParamAccess.item);
+        pManager[pManager.ParamCount - 1].Optional = true;
+    }
+
+    /// <summary>
     /// Reads and welds the mesh at the given input; reports empty meshes as
     /// errors and welded seams as a remark. Returns null when unusable.
     /// </summary>

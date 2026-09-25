@@ -28,9 +28,7 @@ public class LathSweepComponent : MiteComponent
         pManager.AddBooleanParameter("Upright", "U", "False: strip lies flat on the surface. True: strip stands upright on edge", GH_ParamAccess.item, false);
         pManager.AddNumberParameter("Offset", "O", "Gap between the surface and the nearest strip face (default 0)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
-        pManager.AddIntegerParameter("Shape", "Sh", "Section shape applied to every curve: 0 = rectangle W × T, 1 = round bar of diameter W, 2 = custom closed planar Section curve (its plane X = across / Y = surface normal; Upright swaps them)", GH_ParamAccess.item, 0);
-        pManager.AddCurveParameter("Section", "Sc", "Closed planar section curve for Shape = 2 (drawn around the origin of its own plane, any units of the model)", GH_ParamAccess.item);
-        pManager[8].Optional = true;
+        RegisterSectionInputs(pManager); // 7 Shape, 8 Section
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -66,39 +64,7 @@ public class LathSweepComponent : MiteComponent
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
-        LathProfile profile;
-        switch (shape)
-        {
-            case 1:
-                profile = LathProfile.Round(width, 24, offset);
-                if (upright) AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Round sections have no upright/flat distinction; Upright is ignored.");
-                break;
-            case 2:
-                if (section == null || !section.IsClosed || !section.TryGetPlane(out Plane sectionPlane))
-                {
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Shape 2 needs a closed planar Section curve.");
-                    return;
-                }
-                var poly = section.ToPolyline(0, 0, 0.05, 0.0, 0.0, Math.Max(1e-6, 0.01 * section.GetLength()), 0.0, 0.0, true)?.ToPolyline();
-                if (poly == null || poly.Count < 4)
-                {
-                    AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Section curve could not be converted to a polygon.");
-                    return;
-                }
-                var pts2d = new List<(double, double)>();
-                foreach (var pt in poly)
-                {
-                    sectionPlane.ClosestParameter(pt, out double sx, out double sy);
-                    pts2d.Add((sx, sy));
-                }
-                try { profile = LathProfile.Custom(pts2d, upright, offset); }
-                catch (ArgumentException ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); return; }
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Custom section {profile.Width:G4} × {profile.Thickness:G4} (plane X × plane Y) applied to all {curves.Count} curves.");
-                break;
-            default:
-                profile = new LathProfile(width, thickness, upright, offset);
-                break;
-        }
+        if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, offset, 1.0, curves.Count, out LathProfile profile)) return;
 
         var laths = new List<Mesh?>();
         var centerlines = new List<Curve?>();

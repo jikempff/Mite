@@ -37,6 +37,7 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("Scale", "Sc", "Deformation display scale (default 1)", GH_ParamAccess.item, 1.0);
         pManager.AddNumberParameter("Sampling", "Sa", "Chord deviation for curve sampling (0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("MaxSegment", "Ms", "Beam element size in model units (0 = automatic: twice the mesh edge length)", GH_ParamAccess.item, 0.0);
+        RegisterSectionInputs(pManager); // 13 Shape, 14 Section — beam section properties follow the profile
         pManager[2].Optional = true;
     }
 
@@ -74,6 +75,10 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.GetData(10, ref scale);
         DA.GetData(11, ref sampling);
         DA.GetData(12, ref maxSegment);
+        int shape = 0;
+        DA.GetData(13, ref shape);
+        Curve? section = null;
+        DA.GetData(14, ref section);
 
         if (supports.Count == 0)
         {
@@ -95,6 +100,9 @@ public class GridshellAnalysisComponent : MiteComponent
         if (Math.Abs(s - 1.0) > 1e-12)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Model units converted to metres (×{s:G4}) for the analysis.");
         var meshM = Scale(input.Data, s);
+        // Section in metres too: A, I and J come from the profile (rectangle,
+        // round bar or custom polygon — LathProfile.SectionProperties)
+        if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, s, curves.Count, out LathProfile profile)) return;
 
         var laths = new List<Vec3d[]>();
         var lathIndex = new List<int>();
@@ -131,7 +139,7 @@ public class GridshellAnalysisComponent : MiteComponent
         try
         {
             result = FrameAnalysis.Compute(meshM, laths, jointPts, supportPts,
-                new LathProfile(width * s, thickness * s, upright),
+                profile,
                 MeshConvert.ToVec3d(load),
                 new FrameAnalysis.Options { E = e, AllowableStress = allowable });
         }

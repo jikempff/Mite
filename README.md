@@ -135,7 +135,9 @@ plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
 
-### 1.2.6 (unreleased)
+### 1.2.6
+- One profile everywhere: Lath Analysis and Gridshell Analysis gain the `Shape` / `Section` inputs of Lath Sweep (appended, existing wiring untouched). The strain check reads the section's fibre distances and Saint-Venant twist length (round bar: d/2 in every direction, so `Upright` no longer matters; rectangle: γ = k·τ·t with k = 0.675 for a square → 1 for a thin strip after Timoshenko & Goodier), and the beam frame takes A, I and J from the section (circle formulas for bars, Green's-theorem moments and Roark's J ≈ A⁴/40 I_p for custom polygons, the full Saint-Venant J for rectangles instead of the thin-strip b t³/3). `LathProfile.Kind` / `SectionProperties()` and `LathAnalysis.Options.Profile` in the core; thin strips give the same numbers as before.
+- Web app: the round-bar choice now really reaches the kernel (the JS binding dropped the argument, so 1.2.5 silently analysed and swept a rectangle); the beam frame follows the section too; "colour all laths by utilization" shows progress.
 - Web app: each block names the plugin component it runs, with its Grasshopper icon (Analysis and Net strips follow the active chip; Lath and Structure list theirs), the knot mark in the header and the tab icon on the recipe button — the 48 px icons come from `tools/generate_icons.py`. Chips stay text-only for legibility.
 - Web app: `tools/build-web.ps1` deploys from PowerShell (the bash script needs Git Bash or a Mac); `.gitattributes` keeps `*.sh` at LF on Windows checkouts.
 - Web app: fixed a boot race — changing the shape while the first one was still loading traced the default net with the placeholder size (spacing 0.04 instead of 4 % of the mesh) and left the page on "tracing…" for minutes. `traceNet` now waits for the load, which traces the net itself. `tools/web-smoke.js` (Playwright) reproduces it and checks the component strips.

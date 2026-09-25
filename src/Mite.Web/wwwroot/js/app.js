@@ -470,11 +470,14 @@ async function colourByUtilization() {
   const o = lathOpts();
   const gen = S.gen, data = S.netData;
   const utils = [];
-  for (const pts of [...data.a, ...data.b]) {
-    const r = await K('lath', pts.flat(), o.width, o.thickness, o.upright, o.maxStrain, false, o.section);
-    if (gen !== S.gen || S.netData !== data) return;
-    utils.push(r.maxUtilization);
-  }
+  await withBusy('checking every lath…', async () => {
+    for (const pts of [...data.a, ...data.b]) {
+      const r = await K('lath', pts.flat(), o.width, o.thickness, o.upright, o.maxStrain, false, o.section);
+      if (gen !== S.gen || S.netData !== data) return;
+      utils.push(r.maxUtilization);
+    }
+  });
+  if (gen !== S.gen || S.netData !== data) return;
   S.lathUtil = utils;
   const na = data.a.length;
   S.viewer.colorCurves(utils.slice(0, na).map(utilizationColor), utils.slice(na).map(utilizationColor));
@@ -492,7 +495,7 @@ async function runFrame() {
     const o = lathOpts();
     const metres = +$('scale').value / S.size;
     const gen = S.gen;
-    const r = await K('frame', o.width, o.thickness, o.upright, +$('load').value * 1000, metres, 0);
+    const r = await K('frame', o.width, o.thickness, o.upright, +$('load').value * 1000, metres, 0, o.section);
     if (gen !== S.gen) return;
     S.frame = r;
     if (r.error) { $('frame-stats').innerHTML = `<span class="bad">${r.error}</span>`; return; }

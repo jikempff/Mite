@@ -62,6 +62,15 @@ public static class LathAnalysis
         /// curvature's noise.
         /// </summary>
         public double Window { get; set; } = 0.0;
+
+        /// <summary>
+        /// Optional section (round bar, custom polygon, or a rectangle with
+        /// its own orientation). When set it overrides Width, Thickness and
+        /// Upright: fibre distances come from the section's extents and the
+        /// twist shear from its Saint-Venant twist length, so one profile is
+        /// applied to every curve exactly as Lath Sweep builds it.
+        /// </summary>
+        public Fabrication.LathProfile? Profile { get; set; }
     }
 
     public readonly struct Result
@@ -193,18 +202,22 @@ public static class LathAnalysis
 
         // Strain per mode. Flat strip: kn bends about the width axis (fiber
         // distance t/2), kg about the surface normal (fiber distance w/2).
-        // Upright strip: the two swap. Twist of a thin rectangle gives a
-        // surface shear strain γ ≈ τ·t, compared against the (normal) strain
-        // limit through the von Mises equivalence ε_eq = γ / √3.
-        double easyHalf = 0.5 * options.Thickness;
-        double hardHalf = 0.5 * options.Width;
-        double twistFactor = options.Thickness / Math.Sqrt(3.0);
+        // Upright strip: the two swap. Twist gives a surface shear strain
+        // γ = τ · TwistLength (t for a thin rectangle, d/2 for a round bar —
+        // LathProfile.SectionProperties), compared against the (normal)
+        // strain limit through the von Mises equivalence ε_eq = γ / √3.
+        var profile = options.Profile ?? new Fabrication.LathProfile(options.Width, options.Thickness, options.Upright);
+        var sp = profile.SectionProperties();
+        bool upright = profile.Upright;
+        double easyHalf = sp.ExtentB; // second axis: the surface normal in Flat mode
+        double hardHalf = sp.ExtentA; // first axis: across the curve in Flat mode
+        double twistFactor = sp.TwistLength / Math.Sqrt(3.0);
 
         double maxUtil = 0.0;
         for (int i = 0; i < n; i++)
         {
-            double easyK = options.Upright ? kg[i] : kn[i];
-            double hardK = options.Upright ? kn[i] : kg[i];
+            double easyK = upright ? kg[i] : kn[i];
+            double hardK = upright ? kn[i] : kg[i];
 
             double strain = Math.Max(
                 Math.Abs(easyK) * easyHalf,

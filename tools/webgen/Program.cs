@@ -104,6 +104,11 @@ var sw = Stopwatch.StartNew();
     var la = LathAnalysis.Analyze(proj, sl1[0], new LathAnalysis.Options { Width = 0.1, Thickness = 0.01, MaxStrain = 0.005, Upright = false });
     numbers["lathAnalysis"] = new { kn = la.NormalCurvature.Skip(5).Take(la.NormalCurvature.Length - 10).Select(Math.Abs).Average(), kg = la.GeodesicCurvature.Skip(5).Take(la.GeodesicCurvature.Length - 10).Select(Math.Abs).Average(), tg = la.GeodesicTorsion.Select(Math.Abs).Max(), util = R3(la.MaxUtilization), buildable = la.Buildable, theoryUtil = R3(1.0 * 0.005 / 0.005) };
     scenes["lathUtil"] = new { util = la.Utilization.Where((u, i) => i % 3 == 0).Select(R3).ToArray() };
+    // the same meridian as a round bar Ø 10 mm: bending strain kn·d/2 = 1·0.005, whichever way it is "oriented"
+    var laRound = LathAnalysis.Analyze(proj, sl1[0], new LathAnalysis.Options { Profile = LathProfile.Round(0.01), MaxStrain = 0.005 });
+    var laRoundUp = LathAnalysis.Analyze(proj, sl1[0], new LathAnalysis.Options { Profile = LathProfile.Round(0.01), MaxStrain = 0.005, Upright = true });
+    var sq = new LathProfile(0.02, 0.02).SectionProperties();
+    numbers["lathRound"] = new { util = R3(laRound.MaxUtilization), utilUpright = R3(laRoundUp.MaxUtilization), theoryUtil = 1.0, squareJ = R3(sq.J / Math.Pow(0.02, 4) * 1000) / 1000, squareTwist = R3(sq.TwistLength / 0.02) };
 }
 
 // ---------- Sphere: principal curvature accuracy, umbilics, geodesics, geodesic path, chebyshev ----------
