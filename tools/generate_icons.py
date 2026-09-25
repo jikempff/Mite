@@ -11,7 +11,7 @@ lattice on a light patch for grids, and a soft drop shadow (+1, +1, blur 2,
 outline #6E0000), Meshes/form finding orange-red (#FF9E05-#D72000, #8E1500),
 Math/analysis green (#00C860, #024F00), Parameters/util greys (#C5C5C5-#454545),
 fabrication in a timber brown of the same warm range. The tab icon is the
-Mite logo (icon.png) reduced to 24 px.
+small-scale Mite mark (tools/mite_knot.png) reduced to 24 px.
 
 Drawn at 8x and downsampled with Lanczos. Run: python3 tools/generate_icons.py
 """
@@ -502,20 +502,16 @@ def icon_mesh_colour_map():
 
 
 def icon_tab():
-    """Tab icon: the Mite logo (black hexagon tile with the white asymptotic knot,
-    ../icon.png) reduced to 24 px. The knot's strokes are dilated first so they
-    still read at this size instead of blurring into grey."""
-    src = Image.open(os.path.join(os.path.dirname(__file__), "..", "icon.png")).convert("RGBA")
+    """Tab icon: the small-scale Mite mark (tools/mite_knot.png — the knot
+    alone, black on transparent, from mite_logo_small.eps) reduced to 24 px.
+    The strokes are thickened first so the six lobes still read at this size;
+    the full hexagon-tile logo stays the package icon (icon.png)."""
+    src = Image.open(os.path.join(os.path.dirname(__file__), "mite_knot.png")).convert("RGBA")
     src = src.crop(src.getchannel("A").getbbox())
-    r, g, b, a = src.split()
-    solid = a.point(lambda v: 255 if v > 128 else 0)
-    white = Image.composite(r.point(lambda v: 255 if v > 128 else 0), Image.new("L", src.size, 0), solid)
-    white = Image.composite(white.filter(ImageFilter.MaxFilter(9)), Image.new("L", src.size, 0), solid)
+    mask = src.getchannel("A").filter(ImageFilter.MaxFilter(9))
     tile = Image.new("RGBA", src.size, (0, 0, 0, 0))
-    tile.paste(Image.new("RGBA", src.size, (15, 15, 15, 255)), (0, 0), solid)
-    tile.paste(Image.new("RGBA", src.size, (255, 255, 255, 255)), (0, 0), white)
-    inner = SIZE - 1
-    sc = inner / max(src.size)
+    tile.paste(Image.new("RGBA", src.size, (15, 15, 15, 255)), (0, 0), mask)
+    sc = SIZE / max(src.size)
     im = tile.resize((max(1, round(src.width * sc)), max(1, round(src.height * sc))), Image.LANCZOS)
     out = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     out.paste(im, ((SIZE - im.width) // 2, (SIZE - im.height) // 2), im)
