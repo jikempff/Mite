@@ -71,6 +71,10 @@ spaced fill) keeps the spacing instead, by inserting curves where it opens and
 stopping them where it closes — those ends are T-junctions, which Net Joints
 and Gridshell Analysis handle, but the laths are shorter. Use the web for the
 structure you will build and the fill when you want a uniform density preview.
+A web fills whatever its seed line cannot reach (behind a K = 0 line, a band a
+single cross misses) with further seed crosses one spacing from the nearest
+curve, and only ends a curve early where it would touch a curve of its own
+family — the orange end squares in the web app.
 
 ## 3. Check buildability (2 minutes)
 

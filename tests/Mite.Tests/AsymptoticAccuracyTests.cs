@@ -273,17 +273,16 @@ public class WebLayoutTests
             }
             Assert.True(worst < 0.01, $"web geodesic is not a 45° helix, rise error {worst:F4}");
         }
-        // perpendicular spacing between neighbours: on a helix web of pitch angle 45° the
-        // perpendicular distance equals the separation measured along the perpendicular helix = s
-        var mids = g.Select(c => c[c.Length / 2]).ToList();
-        int close = 0;
-        foreach (var c in g)
-        {
-            double best = double.MaxValue;
-            foreach (var o in g) { if (ReferenceEquals(o, c)) continue; foreach (var q in o) best = Math.Min(best, (q - c[c.Length / 2]).Length); }
-            if (Math.Abs(best - s) < 0.06 * s) close++;
-        }
-        Assert.True(close >= g.Count - 2, $"only {close} of {g.Count} helices have a neighbour at {s} ± 6 %");
+        // perpendicular spacing: helix phases θ − z·tan α around the cylinder; neighbours
+        // differ by Δ, perpendicular distance Δ·sin α. The cross seeds and the gap
+        // fill both lay curves exactly s apart; the one gap that closes the ring
+        // takes the remainder (2π sin α / s is not an integer)
+        var phases = g.Select(c => { var m = c.OrderBy(q => Math.Abs(q.Z)).First(); double th = Math.Atan2(m.Y, m.X) - m.Z * Math.Tan(alpha); return (th % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI); }).OrderBy(x => x).ToList();
+        var gaps = phases.Select((k, i) => ((i + 1 < phases.Count ? phases[i + 1] : phases[0] + 2 * Math.PI) - k) * Math.Sin(alpha)).ToList();
+        _out.WriteLine("perpendicular gaps: " + string.Join(" ", gaps.Select(x => x.ToString("F3"))));
+        int exact = gaps.Count(x => Math.Abs(x - s) < 0.01 * s);
+        Assert.True(exact >= gaps.Count - 1, $"{exact} of {gaps.Count} gaps are s ± 1 %: {string.Join(" ", gaps.Select(x => x.ToString("F3")))}");
+        Assert.True(gaps.All(x => x > 0.7 * s && x < 1.02 * s), "the closing gap lies between 0.7 s and s");
     }
 
     [Fact]

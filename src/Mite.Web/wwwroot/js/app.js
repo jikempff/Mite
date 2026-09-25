@@ -80,7 +80,7 @@ const NET_NOTES = {
 const END_CLASS = [
   { name: 'on the border', color: null, what: 'the curve reached the mesh border — no marker' },
   { name: 'at the K = 0 line', color: [0.26, 0.45, 0.80], what: 'the curve stopped where the asymptotic directions cease to exist (K ≥ 0 or the families cross below the minimum angle): there is no asymptotic curve beyond' },
-  { name: 'on a neighbour (T-junction)', color: [0.96, 0.62, 0.05], what: 'the curve stopped on a neighbouring curve because the two had come within the merge distance — only the evenly spaced fill does this; a web never merges' },
+  { name: 'on a neighbour (T-junction)', color: [0.96, 0.62, 0.05], what: 'the curve stopped on a neighbouring curve of its own family: the evenly spaced fill does this wherever the spacing closes; a web only where the family converges until two laths would touch' },
   { name: 'step limit', color: [0.80, 0.15, 0.15], what: 'the curve hit the step budget without reaching a border (closed or very long surface)' },
 ];
 const SEED_COLOR = [0.96, 0.62, 0.05];

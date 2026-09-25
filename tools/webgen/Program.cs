@@ -394,6 +394,38 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         scenes["asymCat_catenoidWeb"] = new { label = "catenoid, web from the rims", wire = Edges(mesh, 6), a = A.Select(l => Line(l, 3)).ToArray(), b = B.Select(l => Line(l, 3)).ToArray() };
         numbers["asymWeb"] = new { a = A.Count, b = B.Count, ends = e.ends, boundaryEnds = e.boundary, tEnds = e.onCurve, floatingEnds = e.floating, worstOffset = R3(worstOff * 1000) / 1000, edge = R3(proj.AverageEdgeLength), worstDirDeg = R3(worstDir), meanDirDeg = R3(sumDir / Math.Max(1, nDir)), ms = tt.ElapsedMilliseconds };
     }
+
+    // Web coverage with gap filling: the part of the usable region farther than
+    // 0.75 Spacing from any curve, for the fill and both webs, on surfaces where
+    // the border alone cannot reach everything (K = 0 lines, flat points, no border)
+    {
+        var covRows = new List<object>();
+        foreach (var name in new[] { "monkey", "wave", "torus", "schwarzd" })
+        {
+            var mesh = AnalyticShapes.Build(name, 0, 0, 0, 40);
+            var pc = PrincipalCurvature.Compute(mesh);
+            var field = AsymptoticCurves.ComputeDirections(pc, mesh, 15.0);
+            double sp = mesh.BoundingBoxDiagonal() / 25.0;
+            var row = new Dictionary<string, object> { ["name"] = name };
+            foreach (var (lay, key) in new[] { (NetLayout.Fill, "fill"), (NetLayout.WebBorder, "border"), (NetLayout.WebCross, "cross") })
+            {
+                var A = EvenlySpacedNet.TraceField(mesh, field.Family1, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = sp, Layout = lay }, field.Family2);
+                var all = A.SelectMany(c => c).ToArray();
+                int n = 0, un = 0;
+                for (int i = 0; i < mesh.VertexCount; i++)
+                {
+                    if (!field.Exists[i]) continue; n++;
+                    var v = mesh.Vertices[i]; double best = double.MaxValue;
+                    foreach (var q in all) { double d = (q - v).LengthSquared; if (d < best) best = d; }
+                    if (Math.Sqrt(best) > 0.75 * sp) un++;
+                }
+                var e = Ends(A, new MeshProjection(mesh));
+                row[key] = new { curves = A.Count, uncovered = R3(100.0 * un / Math.Max(1, n)), tEnds = e.onCurve };
+            }
+            covRows.Add(row);
+        }
+        numbers["webCoverage"] = covRows;
+    }
 }
 
 // ---------- Form finding on a 24x24 grid ----------

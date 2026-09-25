@@ -190,12 +190,16 @@ remains the self-test review page.
       app: every curve border to border, no T-junctions, seeds exactly
       Spacing apart; verified on the catenoid against u ∓ v = const and on
       the cylinder (parallel helices) — 2026-09-25.
-- [ ] Interior field accuracy: tensor (not vector) interpolation inside the
-      faces and RK4 stepping would take the remaining 0.1° / 0.01-edge
-      interior error down another order; only worth it on coarse meshes.
-- [ ] Web coverage: seeds along a user curve (Schling's guide curve) and
-      automatic extra seed lines where a cross web leaves gaps (the catenoid's
-      band).
+- [ ] Interior field accuracy: the remaining 0.01–0.1° / 0.01-edge interior
+      error is below the mesh's own faceting (the traced polyline lies on the
+      facets, whose sagitta is edge²κ/8); tracing on a smooth limit surface
+      (Loop / jet) would be the next step, only worth it on coarse meshes.
+- [x] Web coverage: gap filling by further seed crosses one Spacing from
+      the nearest curve (≤ 0.5 % uncovered on ten surfaces; was up to 94 %
+      for a single cross); same-family contact cut (0.15 Spacing, 30°) —
+      2026-09-25.
+- [ ] Web from a user guide curve (Schling's layout: seeds along a drawn
+      curve instead of the border or the other family).
 - [x] Profile applied to every curve *and every check*: Lath Analysis and
       Gridshell Analysis take Shape / Section; `LathProfile.SectionProperties`
       (rectangle, round, custom polygon) feeds strain fibres, twist length,
