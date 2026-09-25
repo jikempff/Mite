@@ -40,7 +40,7 @@ export function drawLathPlot(canvas, lath) {
   // axes
   ctx.strokeStyle = css('--line') || '#ddd'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(pad.l, Y(0)); ctx.lineTo(w - pad.r, Y(0)); ctx.stroke();
-  ctx.fillStyle = css('--muted') || '#6b7280'; ctx.font = '10px ui-monospace, Menlo, monospace'; ctx.textAlign = 'right';
+  ctx.fillStyle = css('--muted') || '#6b7280'; ctx.font = '10px Sohne, Helvetica, Arial, sans-serif'; ctx.textAlign = 'right';
   ctx.fillText((+amax.toPrecision(2)).toString(), pad.l - 4, pad.t + 8);
   ctx.fillText('0', pad.l - 4, Y(0) + 3);
   ctx.fillText((-amax).toPrecision(2), pad.l - 4, pad.t + ph);
@@ -58,7 +58,7 @@ export function drawLathPlot(canvas, lath) {
     ctx.stroke();
   }
   // legend
-  ctx.font = '11px ui-monospace, Menlo, monospace'; ctx.textAlign = 'left';
+  ctx.font = '11px Sohne, Helvetica, Arial, sans-serif'; ctx.textAlign = 'left';
   let lx = pad.l + 4;
   for (const s of series) { ctx.fillStyle = s.color; ctx.fillRect(lx, pad.t, 12, 3); ctx.fillStyle = css('--muted') || '#6b7280'; ctx.fillText(s.label, lx + 16, pad.t + 5); lx += 44; }
 }
@@ -83,6 +83,6 @@ export function drawUnroll(canvas, lath) {
   ctx.strokeStyle = css('--muted') || '#6b7280'; ctx.setLineDash([4, 3]); ctx.beginPath();
   lath.unrollCenter.forEach((p, i) => { const q = P(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
   ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = css('--muted') || '#6b7280'; ctx.font = '10px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = css('--muted') || '#6b7280'; ctx.font = '10px Sohne, Helvetica, Arial, sans-serif';
   ctx.fillText(`flat ${lath.flatLength.toFixed(3)} × bow ${lath.bow.toFixed(3)}`, pad, h - 4);
 }
