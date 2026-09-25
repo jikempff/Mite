@@ -30,6 +30,7 @@ public class AsymptoticNetComponent : MiteComponent
         pManager.AddPointParameter("SeedPoints", "P", "Seed points (nearest vertex is used); may be combined with Seeds", GH_ParamAccess.list);
         pManager.AddIntegerParameter("MaxCurves", "Mx", "Cap on curves per family (AutoSpace, default 200)", GH_ParamAccess.item, 200);
         pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
+        pManager.AddNumberParameter("MinAngle", "An", "Minimum crossing angle between the two families (degrees). Near the K = 0 line the families collapse onto each other; vertices below this angle are left out of the net and of the Anticlastic mask (default 15, 0 = raw K < 0 region)", GH_ParamAccess.item, 15.0);
         pManager[1].Optional = true;
         pManager[6].Optional = true;
     }
@@ -57,12 +58,14 @@ public class AsymptoticNetComponent : MiteComponent
         DA.GetDataList(6, seedPts);
         DA.GetData(7, ref maxCurves);
         DA.GetData(8, ref continuous);
+        double minAngle = 15.0;
+        DA.GetData(9, ref minAngle);
 
         var data = input.Data;
         var proj = new MeshProjection(data);
         var seeds = ResolveSeeds(input, proj, seedIdx, seedPts);
         var curvature = PrincipalCurvature.Compute(data);
-        var field = AsymptoticCurves.ComputeDirections(curvature);
+        var field = AsymptoticCurves.ComputeDirections(curvature, data, minAngle);
 
         int anticlastic = 0;
         foreach (bool e in field.Exists) if (e) anticlastic++;
@@ -112,7 +115,7 @@ public class AsymptoticNetComponent : MiteComponent
                     $"{seeds.Count} seeds = up to {2 * seeds.Count} traced curves - this can take a long time. " +
                     "Press Esc to cancel. For a full, evenly spaced net use AutoSpace with a single seed instead.");
 
-            var opts = new AsymptoticCurves.Options { StepSize = stepSize, MaxSteps = maxSteps, ShouldCancel = Cancelled };
+            var opts = new AsymptoticCurves.Options { StepSize = stepSize, MaxSteps = maxSteps, ShouldCancel = Cancelled, MinCrossingAngle = minAngle };
             familyA = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, false, opts);
             familyB = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, true, opts);
             if (Cancelled())

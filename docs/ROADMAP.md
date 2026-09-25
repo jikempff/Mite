@@ -98,9 +98,18 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       vertices of valence 3, dense border rows).
 - [ ] Dirty meshes for Mesh Cleanup: unwelded seams, duplicate faces,
       flipped faces, slivers, millimetre scale, far from origin.
+- [x] Analytic typologies as code for the web app: `Geometry/AnalyticShapes.cs`
+      (saddle, sphere, dome, ellipsoid, torus, hyperboloid, monkey saddle,
+      catenoid, Enneper, vault, cone, annulus, wave) — 1.2.2. Open: unify
+      with `tests/Mite.Tests/TestMeshes.cs` (cylinder, hyperboloid, catenoid,
+      Enneper n-fold, bilinear patch, Schwarz D carry closed-form K, rulings
+      and asymptotic directions there) so one generator serves the app, the
+      bench and the tests, and write the analytic-curvature tests for the
+      AnalyticShapes members that have none yet (dome, ellipsoid, monkey
+      saddle, vault, cone, annulus, wave).
 - [ ] Bench: a typology switcher on every demo (done on Asymptotic Net and
       Geodesic Net), with the analytic truth and the measured error side by
-      side.
+      side; reuse the unified shape generator.
 
 ## B. Plugin UX (Grasshopper)
 
@@ -146,7 +155,23 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 - [ ] Ribbon order reviewed against the workflow order
       (mesh → curvature → net → analysis → fabrication → kinetics).
 
-## C. Web bench UX
+## C. Web app and bench UX
+
+The interactive app (`src/Mite.Web`, Mite.Core on WebAssembly, deployed at
+kempffsele.me/mite) carries the typology switcher, live parameters, a
+draggable loft, OBJ/STL drop, all analysis modes and nets, lath plots with
+unrolled patterns, frame analysis and exports. The bench (`tools/webgen`)
+remains the self-test review page.
+
+- [x] App: kernel in a Web Worker (stop = restart), seed/direction handle,
+      quality card, end markers, family toggles, hover, camera presets
+      (1.2.2).
+- [ ] App: lath segmentation, joints and nesting sheet (material %).
+- [ ] App: planarization and Chebyshev angle map; isocurve labels.
+- [ ] App: the kinetic "fold" slider of E, and the Lath Sweep section shapes
+      (rectangle / round / custom) in the lath views.
+- [ ] Bench to reuse the app's typologies once the shape generators are
+      unified (A).
 
 - [x] Favicon: the K mark of kempffsele.me (`tools/webgen/favicon.svg`,
       inlined by build.py) — 2026-09-25.
@@ -171,6 +196,12 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 
 ## D. Algorithms to research and improve (with literature)
 
+- [x] Geodesic families: Jacobi-field start angles after Pottmann et al. 2010
+      (§4 evolution), border seeding; regions unreachable by sideways growth
+      get their own seed (field nets) — 1.2.2. Asymptotic families are combed
+      over the mesh and a MinAngle input keeps nets out of the near-parabolic
+      band — 1.2.2. Still open: farthest-point seeding (next item) and a check
+      that combing handles the 3-fold Enneper flat point (A).
 - [ ] Evenly spaced curve families on surfaces: Jobard & Lefer 1997
       (Creating evenly-spaced streamlines of arbitrary density); Mebarki,
       Alliez & Devillers 2005 (Farthest point seeding for efficient
@@ -355,6 +386,9 @@ Plan
       hyperboloid) with analytic tests and bench shape switches; Lath
       Analysis kn from the normal's rotation; geodesic tracer parallel
       transport (see A and D).
+- [x] 1.2.2: combed asymptotic families, MinAngle, Jacobi geodesic seeding,
+      border seeding, Mite.Web (WebAssembly app at kempffsele.me/mite),
+      AnalyticShapes.
 - [x] 1.2.0 review release (27 components).
 - [x] Continuous nets, clean border exits, T-junction contacts and coupling
       (ec293c3); windowed lath curvature; drift-tolerant loop closure;

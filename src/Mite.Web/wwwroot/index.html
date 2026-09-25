@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mite — interactive</title>
+<meta name="description" content="Mite in the browser: curvature analysis, asymptotic, geodesic and conjugate nets, lath buildability and gridshell checks on analytic shapes, a free-form loft or your own mesh. Same code as the Grasshopper plugin.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="../" title="kempff/seleme">kempff/seleme</a>
+  <span class="sep">/</span>
+  <span class="title">mite <em>interactive</em></span>
+  <span id="version" class="pill">loading…</span>
+  <nav class="links">
+    <a href="https://www.food4rhino.com/en/app/mite" target="_blank" rel="noopener">Grasshopper plugin</a>
+    <a href="https://github.com/jikempff/Mite" target="_blank" rel="noopener">Source</a>
+    <button id="theme" class="ghost" title="Toggle dark mode" aria-label="Toggle dark mode">◐</button>
+  </nav>
+</header>
+
+<main class="app">
+  <section class="stage" id="stage">
+    <canvas id="gl"></canvas>
+    <div class="hud hud-tl" id="hud-shape"></div>
+    <div class="hud hud-hover" id="hud-hover"></div>
+    <div class="hud hud-bl">
+      <div id="legend" class="legend hidden"><span id="legend-min"></span><i id="legend-bar"></i><span id="legend-max"></span><b id="legend-title"></b></div>
+      <div class="hint">drag orbit · right-drag pan · scroll zoom · hover / click a curve · shift-click the surface to move the seed · drag the orange knob to turn the seed direction</div>
+    </div>
+    <div class="hud hud-tr" id="hud-net"></div>
+    <div class="cam"><button data-view="iso" title="Isometric (f)">iso</button><button data-view="top" title="Top">top</button><button data-view="front" title="Front">front</button><button data-view="side" title="Side">side</button></div>
+    <div id="drop" class="drop hidden">Drop an .obj / .stl / .ply</div>
+    <div id="busy" class="busy hidden"><span></span><em id="busy-text">computing…</em><button id="cancel" class="ghost small" title="Stop and restart the kernel">stop</button></div>
+    <div id="boot" class="boot"><div class="boot-card"><h1>Mite</h1><p>Loading the geometry kernel (≈2 MB, once)…</p><div class="bar"><i id="boot-bar"></i></div><small id="boot-text"></small></div></div>
+  </section>
+
+  <aside class="panel" id="panel">
+    <section class="block">
+      <h2>Shape</h2>
+      <div class="row"><select id="shape" aria-label="Shape"></select></div>
+      <div id="shape-params"></div>
+      <div class="row slider"><label for="res">resolution</label><input id="res" type="range" min="12" max="96" step="4" value="40"><output for="res">40</output></div>
+      <div id="file-row" class="row hidden"><label class="btn file">Choose file… <input id="file" type="file" accept=".obj,.stl,.ply"></label><label class="chk"><input id="weld" type="checkbox" checked> weld vertices</label></div>
+      <p id="shape-note" class="note"></p>
+      <p id="mesh-stats" class="stats"></p>
+    </section>
+
+    <section class="block">
+      <h2>Analysis <small>per vertex</small></h2>
+      <div class="chips" id="modes" role="radiogroup">
+        <button data-mode="shaded" class="on">Shaded</button>
+        <button data-mode="K">Gaussian K</button>
+        <button data-mode="H">Mean H</button>
+        <button data-mode="k1">k1</button>
+        <button data-mode="k2">k2</button>
+        <button data-mode="radius">Min radius</button>
+        <button data-mode="zebra">Zebra</button>
+        <button data-mode="anticlastic">K &lt; 0 mask</button>
+      </div>
+      <div class="row slider"><label for="smooth">smoothing rings</label><input id="smooth" type="range" min="1" max="4" step="1" value="2"><output for="smooth">2</output></div>
+      <div class="row toggles">
+        <label class="chk"><input id="dirs" type="checkbox"> principal directions</label>
+        <label class="chk"><input id="umb" type="checkbox"> umbilics</label>
+        <label class="chk"><input id="wire" type="checkbox"> wireframe</label>
+      </div>
+      <p id="mode-note" class="note"></p>
+      <p id="curv-stats" class="stats"></p>
+    </section>
+
+    <section class="block">
+      <h2>Net <small>curve families</small></h2>
+      <div class="chips" id="nets" role="radiogroup">
+        <button data-net="none" class="on">None</button>
+        <button data-net="asymptotic">Asymptotic</button>
+        <button data-net="conjugate">Curvature lines</button>
+        <button data-net="geodesic">Geodesics</button>
+        <button data-net="geodesicBoth">Geodesic net</button>
+        <button data-net="streamMax">Stream k1</button>
+        <button data-net="streamMin">Stream k2</button>
+        <button data-net="chebyshev">Chebyshev</button>
+        <button data-net="isocurves">Isocurves</button>
+      </div>
+      <div id="net-params">
+        <div class="row slider" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin"><label for="spacing">spacing</label><input id="spacing" type="range" min="1" max="15" step="0.25" value="4"><output for="spacing" id="spacing-out">–</output></div>
+        <div class="row presets" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin"><span class="unit">presets</span><button class="ghost small" data-sp="8">coarse</button><button class="ghost small" data-sp="4">medium</button><button class="ghost small" data-sp="2">fine</button><span id="spacing-count" class="unit"></span></div>
+        <div class="row slider" data-for="chebyshev"><label for="edge">edge length</label><input id="edge" type="range" min="2" max="20" step="0.5" value="6"><output for="edge" id="edge-out">–</output></div>
+        <div class="row slider" data-for="chebyshev"><label for="count">nodes per side</label><input id="count" type="range" min="2" max="24" step="1" value="8"><output for="count">8</output></div>
+        <div class="row slider" data-for="geodesicBoth chebyshev"><label for="famangle">family angle <span class="unit">°</span></label><input id="famangle" type="range" min="30" max="150" step="5" value="90"><output for="famangle">90</output></div>
+        <div class="row slider" data-for="asymptotic"><label for="minangle">min crossing <span class="unit">°</span></label><input id="minangle" type="range" min="0" max="45" step="1" value="15"><output for="minangle">15</output></div>
+        <div class="row slider" data-for="isocurves"><label for="levels">levels</label><input id="levels" type="range" min="3" max="40" step="1" value="12"><output for="levels">12</output></div>
+        <div class="row" data-for="isocurves"><label for="isofield">field</label><select id="isofield"><option value="K">Gaussian K</option><option value="H">Mean H</option><option value="k1">k1</option><option value="k2">k2</option><option value="z">height z</option></select></div>
+        <div class="row toggles" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin">
+          <label class="chk"><input id="continuous" type="checkbox" checked> continuous <span class="unit">run to the border</span></label>
+          <label class="chk"><input id="crossings" type="checkbox"> crossing dots</label>
+        </div>
+        <div class="row toggles" data-for="geodesic geodesicBoth">
+          <label class="chk"><input id="jacobi" type="checkbox" checked> Jacobi start angles <span class="unit">even strips</span></label>
+          <label class="chk"><input id="fromborder" type="checkbox"> from the border</label>
+        </div>
+        <div class="row slider" data-for="geodesic geodesicBoth" id="borderangle-row"><label for="borderangle">border angle <span class="unit">° from normal</span></label><input id="borderangle" type="range" min="-60" max="60" step="5" value="0"><output for="borderangle">0</output></div>
+        <div class="row" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin chebyshev"><label>seed</label><span id="seed-label" class="mono">auto</span><button id="seed-clear" class="ghost small">reset</button><span class="unit">shift-click the surface to move it</span></div>
+        <div class="row toggles"><label class="chk"><input id="famA" type="checkbox" checked> <i class="sw swA"></i> family A</label><label class="chk" id="famB-row"><input id="famB" type="checkbox" checked> <i class="sw swB"></i> family B</label></div>
+      </div>
+      <p id="net-note" class="note"></p>
+      <p id="net-stats" class="stats"></p>
+      <p id="net-warn" class="warn hidden"></p>
+      <div id="quality" class="quality hidden">
+        <div class="q"><div class="q-h">strip width <span id="q-width-txt"></span></div><canvas id="q-width" class="mini"></canvas><div class="caption">distance to the neighbouring curve, 0 … 2 × spacing</div></div>
+        <div class="q"><div class="q-h">crossing angle <span id="q-angle-txt"></span></div><canvas id="q-angle" class="mini"></canvas><div class="caption">0 … 90°, 10° bins</div></div>
+        <div class="q"><div class="q-h">ends</div><div id="q-ends" class="ends"></div></div>
+        <div class="q"><div class="q-h">buildable laths <span id="q-build-txt"></span></div><div id="q-build" class="buildbar"></div><div class="caption">with the section in the Lath block; colour all laths to see which</div></div>
+      </div>
+    </section>
+
+    <section class="block" id="lath-block">
+      <h2>Lath <small>click a curve</small></h2>
+      <div class="grid2">
+        <div class="row slider"><label for="width">width <span class="unit">% of size</span></label><input id="width" type="range" min="0.5" max="6" step="0.25" value="2"><output for="width">2</output></div>
+        <div class="row slider"><label for="thick">thickness <span class="unit">% of size</span></label><input id="thick" type="range" min="0.05" max="1.5" step="0.05" value="0.4"><output for="thick">0.4</output></div>
+      </div>
+      <div class="row toggles">
+        <label class="chk"><input id="upright" type="checkbox" checked> upright (asymptotic)</label>
+        <label class="chk"><input id="solid" type="checkbox"> show solid</label>
+        <label class="chk"><input id="colorutil" type="checkbox"> colour all laths by utilization</label>
+      </div>
+      <div class="row slider"><label for="strain">allowable strain <span class="unit">%</span></label><input id="strain" type="range" min="0.1" max="2" step="0.05" value="0.5"><output for="strain">0.5</output></div>
+      <div id="lath-result" class="hidden">
+        <p id="lath-stats" class="stats"></p>
+        <canvas id="plot" class="plot" height="150"></canvas>
+        <div class="caption">kn out of surface · kg in surface · tg twist · bar = utilization along the lath</div>
+        <canvas id="unroll" class="plot" height="90"></canvas>
+        <div class="caption">unrolled cutting pattern (exact per triangle)</div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Structure <small>beam frame of the net</small></h2>
+      <div class="grid2">
+        <div class="row slider"><label for="load">load <span class="unit">kN/m</span></label><input id="load" type="range" min="0.1" max="5" step="0.1" value="0.5"><output for="load">0.5</output></div>
+        <div class="row slider"><label for="scale">model size <span class="unit">m across</span></label><input id="scale" type="range" min="2" max="40" step="1" value="10"><output for="scale">10</output></div>
+      </div>
+      <div class="row"><button id="frame" class="btn">Analyse</button><label class="chk"><input id="deformed" type="checkbox" checked> show deformed ×</label><input id="defscale" type="number" min="1" max="1000" value="50" class="num"></div>
+      <p class="note">Laths become beams with the section above (timber: E = 11 GPa, allowable 20 MPa), coupled at crossings and T-junctions, fixed where they meet the border, loaded vertically.</p>
+      <p id="frame-stats" class="stats"></p>
+    </section>
+
+    <section class="block">
+      <h2>Export</h2>
+      <div class="row wrap">
+        <button class="btn" id="dl-mesh">mesh .obj</button>
+        <button class="btn" id="dl-curves">curves .obj</button>
+        <button class="btn" id="dl-pattern">pattern .svg</button>
+        <button class="btn" id="dl-png">view .png</button>
+        <button class="btn" id="dl-recipe">Grasshopper recipe</button>
+      </div>
+      <pre id="recipe" class="recipe hidden"></pre>
+    </section>
+
+    <footer class="foot">Everything here runs in your browser on the same Mite.Core library the Grasshopper plugin ships — no upload, no server. <a href="https://github.com/jikempff/Mite/blob/main/docs/ROADMAP.md" target="_blank" rel="noopener">Roadmap</a></footer>
+  </aside>
+</main>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

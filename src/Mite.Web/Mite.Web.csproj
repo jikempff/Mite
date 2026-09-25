@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <!--
+    Mite in the browser: Mite.Core compiled to WebAssembly with a small
+    JS-callable API (see Api.cs) behind the interactive page in wwwroot/.
+    Build:  dotnet workload install wasm-tools
+            dotnet publish -c Release  (AOT; ~5 min)   -> bin/Release/net10.0/publish/wwwroot
+    Not part of the solution build; the Grasshopper plugin does not depend on it.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishTrimmed>true</PublishTrimmed>
+    <WasmEnableSIMD>true</WasmEnableSIMD>
+    <RunAOTCompilation>true</RunAOTCompilation>
+    <WasmStripILAfterAOT>true</WasmStripILAfterAOT>
+    <WasmEmitSymbolMap>false</WasmEmitSymbolMap>
+    <StaticWebAssetsEnabled>true</StaticWebAssetsEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Mite.Core/Mite.Core.csproj" />
+  </ItemGroup>
+</Project>

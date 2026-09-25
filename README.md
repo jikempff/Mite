@@ -2,6 +2,10 @@
 
 Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net design and lath fabrication. Pure .NET with zero dependencies — runs on Windows, macOS, and Linux.
 
+## Try it in the browser
+
+[kempffsele.me/mite](https://kempffsele.me/mite) runs Mite.Core compiled to WebAssembly: analytic shapes, a free-form loft or your own OBJ/STL, every curvature mode, all the nets, lath buildability with cutting patterns and a beam-frame check — the same code as the plugin, nothing uploaded. Source in `src/Mite.Web`.
+
 ## Features
 
 ### Curvature Analysis
@@ -22,8 +26,8 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - All linear systems run on a built-in sparse envelope LDLᵀ solver (reverse Cuthill–McKee ordering): tens of thousands of unknowns solve in seconds
 
 ### Gridshells
-- **Asymptotic Net** — both families of asymptotic curves (zero normal curvature) for asymptotic gridshells, with optional evenly-spaced auto-seeding
-- **Geodesic Net** — straightest geodesics traced on the mesh for geodesic (lath) gridshells, with optional evenly-spaced auto-seeding
+- **Asymptotic Net** — both families of asymptotic curves (zero normal curvature) for asymptotic gridshells, with combed family labels, a minimum crossing angle and evenly-spaced auto-seeding
+- **Geodesic Net** — straightest geodesics for geodesic (lath) gridshells; families grow with Jacobi-field start angles for even strips, from a seed or from a border edge
 - **Chebyshev Net** — equal-edge-length nets by the compass method: the kinematics of elastic gridshells bent from flat lattices
 - **Conjugate Net** — both principal families evenly spaced: an approximate conjugate net, the layout for planar-quad (PQ) panelization
 - **Geodesic Path** — shortest geodesic between two points (graph search + on-surface curve shortening)
@@ -138,6 +142,11 @@ plus IDs and a BOM from **Lath Labels**.
 - Geodesic Net, Geodesic Path seeding and Chebyshev Net: the straightest-geodesic tracer parallel-transports its direction between tangent planes instead of re-deriving it from the projected step. On a 64-sided cylinder a 45° helix used to drift to 44.65° (step 0.02) and 42.2° (step 0.005); it now stays within 0.01°, and refining the step improves the result instead of worsening it.
 - Lath Analysis: normal curvature `Kn` is read from the rotation of the surface normal along the lath (Darboux frame), like the torsion, instead of from the polyline's facet kinks. Straight rulings of a hyperboloid now report `Kn` ≤ 0.006 instead of up to 0.18 (which put an upright lath at utilization 1.8 where the truth is 0); circles and helices on a cylinder match theory to 1%.
 - Analytic test typologies: cylinder (K = 0, helices, no asymptotic net) and hyperboloid of one sheet (asymptotic net = straight rulings, τg = √−K) in `tests/Mite.Tests/RuledSurfaceTests.cs` and as shape switches in the Mite Bench (Asymptotic Net, Geodesic Net, Lath Analysis, curvature cards).
+
+### 1.2.2
+- Asymptotic Net: family labels are combed over the mesh (A and B are consistent everywhere, no more mixed families on general surfaces); new `MinAngle` input keeps the net out of the near-parabolic band where the two families collapse onto each other; flat points no longer pass as anticlastic; regions the first seed cannot reach get their own seed.
+- Geodesic Net: each new geodesic starts at the Jacobi-field angle that keeps its strip closest to constant width (Pottmann et al. 2010, "Geodesic patterns") instead of parallel to its neighbour — dome and saddle families lose their fans and merges; new `FromBorder` / `BorderAngle` inputs grow the family from a border edge (vault helices).
+- Web app (kempffsele.me/mite): kernel in a Web Worker with stop button, seed direction handle in the viewport, real-unit spacing with presets, net quality card (strip width, crossing angles, end classes, buildable share), end markers, family toggles, hover, camera presets.
 
 ### 1.2.1
 - Continuous curves (new `Continuous` input on Asymptotic Net, Geodesic Net, Conjugate Net, Curvature Streamlines): laths run border to border; merged traces end on their neighbour as T-junctions, never floating.

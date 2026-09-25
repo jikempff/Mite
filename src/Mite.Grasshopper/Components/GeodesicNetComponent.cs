@@ -13,7 +13,9 @@ public class GeodesicNetComponent : MiteComponent
         : base("Geodesic Net", "GeoNet",
             "Traces straightest geodesics from seeds along given directions for gridshell design. " +
             "Geodesics extend both ways from each seed; with AutoSpace one family fills the mesh " +
-            "with evenly spaced geodesics grown from the first seed and direction.",
+            "with evenly spaced geodesics grown from the first seed and direction. Each new geodesic " +
+            "starts at the angle that keeps the strip to its neighbour closest to constant width " +
+            "(Jacobi field, Pottmann et al. 2010), or the family leaves a border edge (FromBorder).",
             "Gridshells", "GeodesicNet") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDE9");
@@ -30,6 +32,8 @@ public class GeodesicNetComponent : MiteComponent
         pManager.AddPointParameter("SeedPoints", "P", "Seed points (nearest vertex is used); may be combined with Seeds", GH_ParamAccess.list);
         pManager.AddIntegerParameter("MaxCurves", "Mx", "Cap on the number of curves (AutoSpace, default 200)", GH_ParamAccess.item, 200);
         pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
+        pManager.AddBooleanParameter("FromBorder", "Bd", "AutoSpace: start the family on the border edge nearest the first seed (geodesics leave it every Spacing at BorderAngle from the inward normal) instead of growing sideways from the seed alone. Good on vaults and long patches; ignored on closed meshes", GH_ParamAccess.item, false);
+        pManager.AddNumberParameter("BorderAngle", "Ba", "FromBorder: angle in degrees between the border geodesics and the inward normal of the border (0 = perpendicular to the edge)", GH_ParamAccess.item, 0.0);
         pManager[1].Optional = true;
         pManager[7].Optional = true;
     }
@@ -57,6 +61,9 @@ public class GeodesicNetComponent : MiteComponent
         DA.GetDataList(7, seedPts);
         DA.GetData(8, ref maxCurves);
         DA.GetData(9, ref continuous);
+        bool fromBorder = false; double borderAngle = 0;
+        DA.GetData(10, ref fromBorder);
+        DA.GetData(11, ref borderAngle);
 
         var data = input.Data;
         var proj = new MeshProjection(data);
@@ -96,7 +103,8 @@ public class GeodesicNetComponent : MiteComponent
             var opts = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
-                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous
+                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous,
+                FromBorder = fromBorder, BorderAngle = borderAngle
             };
             lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], opts);
             ReportTracing(opts, "Geodesics");

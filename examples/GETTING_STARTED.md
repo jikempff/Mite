@@ -33,6 +33,8 @@ Use a doubly-curved mesh. For asymptotic nets it must have anticlastic
 - `A` (AutoSpace) — `True` (the default)
 - `Sp` (Spacing) — roughly mesh size / 15, or leave `0` for an automatic value
 - `St` (Step) — leave `0`: it is derived from the spacing and mesh
+- `An` (MinAngle) — 15°: leave out the band near K = 0 where the two families
+  collapse onto each other (unbuildable crossings, family swaps)
 - `Ct` (Continuous) — `True` (the default): every curve runs border to border,
   and a curve that merges into its neighbour ends on it (a T-junction) instead
   of floating in mid-surface. Set `False` for classic evenly spaced streamlines
@@ -45,7 +47,11 @@ flat strips held upright. Seeds can be vertex indices (`S`) or points (`P`);
 with AutoSpace only the first one matters.
 
 **Geodesic Net** works everywhere (no curvature restriction): give it one seed
-(index or point), one direction vector, AutoSpace `True`, and a Spacing.
+(index or point), one direction vector, AutoSpace `True`, and a Spacing. New
+geodesics start at the angle that keeps the strip to their neighbour closest
+to constant width (Jacobi field), so families stay even on domes and saddles.
+`Bd` (FromBorder) grows the family from the border edge nearest the seed
+instead — with `Ba` (BorderAngle) that gives the helix layout of a vault.
 **Geodesic Path** gives the single shortest lath between two points.
 
 **Chebyshev Net**: seed vertex + direction + `L` (lath joint spacing, try mesh
