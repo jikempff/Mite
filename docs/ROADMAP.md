@@ -20,13 +20,28 @@ Rules for every session
 Analytic shapes with known answers, so every algorithm is checked where the
 truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 
-- [ ] Cylinder / barrel vault (K = 0, developable): curvature lines are
+- [x] Cylinder / barrel vault (K = 0, developable): curvature lines are
       rulings and circles; geodesics are helices; asymptotic directions are
       the rulings only (degenerate family) — Asymptotic Net must not invent a
-      second family.
-- [ ] Hyperboloid of one sheet (ruled, K < 0): asymptotic curves are exactly
+      second family. (2026-09-25, `TestMeshes.CreateCylinder`,
+      `RuledSurfaceTests`, bench shape switch.) Findings: k1 within 0.55% of
+      1/R, k2 and K exactly 0, no vertex flagged anticlastic, net empty;
+      curvature lines exact. The geodesic helix exposed a drift in the
+      straightest-geodesic tracer (below) that is now fixed.
+- [x] Hyperboloid of one sheet (ruled, K < 0): asymptotic curves are exactly
       the two families of straight rulings — the sharpest test for the
       asymptotic tracer and for Lath Analysis (kn = 0, tg ≠ 0).
+      (2026-09-25, `TestMeshes.CreateHyperboloid` with the closed-form K and
+      ruling directions.) Findings: asymptotic directions within 0.73° (mean
+      0.17°) of the rulings on a 64 × 32 revolve; every net curve is straight
+      to 0.009 over length 2.83 and runs rim to rim, no family mixing; K by
+      angle deficit within 0.003 of −1/(1+2z²)², but k1·k2 from the
+      Rusinkiewicz tensor is up to 6% off near the rims (r = √2, coarser
+      facets) — a data point for the curvature-estimation item in D. Lath
+      Analysis reported kn up to 0.18 on the straight rulings (facet noise in
+      the polyline second differences); kn is now read from the surface
+      normal's rotation, giving ≤ 0.006, and τg matches √−K to 0.007 with
+      opposite signs per family (Beltrami–Enneper).
 - [ ] Monkey saddle z = x³ − 3xy² (flat umbilic with three asymptotic
       directions at the origin): stress test for family continuity and the
       umbilic mask.
@@ -105,6 +120,18 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       geodesic paths in triangle meshes by just flipping edges) — the
       FlipOut algorithm would replace the Dijkstra + straightening in
       Geodesic Path with an exact geodesic.
+      Partly done 2026-09-25: the tracer's direction update was biased. It
+      flattened the projected travel into the next tangent plane, which
+      shortens the component along the tilt between facet and smooth surface
+      at every step and turns the trace toward the tilt axis; the drift grew
+      with the number of steps (45° helix on a 64-gon cylinder: 44.65° at
+      step 0.02, 42.2° at step 0.005). The direction is now parallel-
+      transported by the minimal rotation between the smooth normals
+      (discrete Levi-Civita transport, the "straightest" continuation of
+      Polthier–Schmies): 45.011° / 45.002°, converging with the step.
+      Still open: a true polyhedral straightest geodesic (walk each facet
+      exactly, unfold at edges — exact on developable meshes, no step size)
+      and FlipOut for Geodesic Path.
 - [ ] Curvature estimation: Rusinkiewicz 2004 (Estimating curvatures and
       their derivatives on triangle meshes); Meyer, Desbrun, Schröder, Barr
       2003 (Discrete differential-geometry operators); Cohen-Steiner &
@@ -132,11 +159,25 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       Pottmann 2016 (Analysis and design of curved support structures);
       Schling's lath torsion/curvature limits for timber (kn, kg, tg strain
       formulas) — check the Lath Analysis strain model against them.
+      2026-09-25: kn and τg now both come from the Darboux relation
+      N' = −kn T − τg g using the smooth mesh normal (Schling, Hitrec &
+      Barthel 2017 give τg = ½(k2 − k1) sin 2α, consistent with τg² = −K on
+      asymptotic curves, verified on the hyperboloid). Open: kg is still the
+      polyline's in-surface turning and carries facet noise (up to 0.23 on
+      the equator of a 24-division sphere where the truth is 0) — consider a
+      least-squares circle/parabola fit over the window, or the geodesic
+      curvature from the tangent's rotation about the normal transported
+      along the curve; and the strain model itself (τ·t/√3 twist strain,
+      w/2 and t/2 fiber distances) against Schling's timber limits.
 - [ ] Mesh repair and welding: Attene 2010 (A lightweight approach to
       repairing digitized polygon meshes); Botsch et al. 2010 (Polygon Mesh
       Processing, ch. 8) — for Mesh Cleanup.
 
 ## Done
+
+- [x] 2026-09-25: ruled-surface typologies (cylinder, hyperboloid) with
+      analytic tests and bench shape switches; Lath Analysis kn from the
+      normal's rotation; geodesic tracer parallel transport (see A and D).
 
 - [x] 1.2.0 review release (27 components).
 - [x] Continuous nets, clean border exits, T-junction contacts and coupling

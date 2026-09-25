@@ -63,6 +63,10 @@ for tab in TAB_ORDER:
             controls = ""
             if note.get("before_after"):
                 controls = '<div class="demo-ctl"><label><input type="radio" name="ba-' + slug(n) + '" value="before"> input</label><label><input type="radio" name="ba-' + slug(n) + '" value="after" checked> result</label><label><input type="radio" name="ba-' + slug(n) + '" value="both"> both</label></div>'
+            if note.get("shapes"):
+                controls = '<div class="demo-ctl"><span class="ctl-l">shape</span>' + "".join(
+                    f'<label><input type="radio" name="sh-{slug(n)}" value="{key}" {"checked" if k == 0 else ""}> {lbl}</label>'
+                    for k, (key, lbl) in enumerate(note["shapes"])) + '</div>'
             if demo == "torusK":
                 mode = note.get("demoMode", "K")
                 controls = '<div class="demo-ctl"><span class="ctl-l">show</span>' + "".join(

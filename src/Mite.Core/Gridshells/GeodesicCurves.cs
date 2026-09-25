@@ -6,12 +6,21 @@ namespace Mite.Core.Gridshells;
 
 /// <summary>
 /// Straightest-geodesic tracing on meshes: step in the tangent direction with a
-/// midpoint scheme, project back onto the surface, and keep the in-surface
-/// component of the travel direction. The smooth (barycentric-interpolated)
-/// normal is used for all tangent projections so the direction varies
-/// continuously across facet boundaries instead of jumping with face normals.
-/// Geodesics minimize bending about the strong axis, making them the natural
-/// layout for geodesic (lath) gridshells.
+/// midpoint scheme, project back onto the surface, and carry the direction
+/// into the next tangent plane by parallel transport (the minimal rotation
+/// between the smooth normals at the two points), which is the discrete form
+/// of "keep going straight" that defines a straightest geodesic (Polthier &amp;
+/// Schmies 1998, Straightest geodesics on polyhedral surfaces; do Carmo 1976
+/// §4-4, geodesics as curves with zero geodesic curvature). The smooth
+/// (barycentric-interpolated) normal is used for all tangent operations so
+/// the direction varies continuously across facet boundaries instead of
+/// jumping with face normals. Re-deriving the direction from the projected
+/// travel (as before) is biased by the tilt between facet and smooth surface
+/// and drifts more the smaller the step; on a 64-gon cylinder a 45° helix
+/// came out at 44.65° (step 0.02) and 42.2° (step 0.005), against 44.985° and
+/// 44.995° with transport (RuledSurfaceTests). Geodesics minimize bending
+/// about the strong axis, making them the natural layout for geodesic (lath)
+/// gridshells.
 /// </summary>
 public static class GeodesicCurves
 {
@@ -141,12 +150,13 @@ public static class GeodesicCurves
         double pathLength = 0.0;
 
         int vert = start.NearestVertex;
+        Vec3d normal = start.SmoothNormal;
         for (int step = 0; step < maxSteps; step++)
         {
             // Midpoint scheme: transport the direction to the half-step point
             // before taking the full step
             var midHit = proj.ClosestPoint(pos + 0.5 * stepSize * dir, vert);
-            Vec3d dMid = TangentComponent(dir, midHit.SmoothNormal);
+            Vec3d dMid = Transport(dir, normal, midHit.SmoothNormal);
             if (dMid.LengthSquared < 1e-20) break;
             dMid = dMid.Normalized();
 
@@ -173,6 +183,7 @@ public static class GeodesicCurves
             pathLength += travel.Length;
             pos = newPos;
             vert = hit.NearestVertex;
+            normal = hit.SmoothNormal;
             points.Add(pos);
 
             maxStartDist = Math.Max(maxStartDist, (pos - points[0]).Length);
@@ -187,8 +198,15 @@ public static class GeodesicCurves
                 break;
             }
 
-            // Continue straight: the travel direction flattened into the new tangent plane
-            Vec3d t = TangentComponent(travel, hit.SmoothNormal);
+            // Continue straight: parallel-transport the direction from the
+            // previous tangent plane into the new one by the minimal rotation
+            // taking the old smooth normal to the new one (the discrete
+            // Levi-Civita transport). Flattening the realized travel into the
+            // new tangent plane instead shortens the component along the tilt
+            // between the facet and the smooth surface at every step, which
+            // turns the trace toward the tilt axis (on a 64-gon cylinder a 45°
+            // helix drifted to 44.65° at step 0.02 and 42.2° at step 0.005).
+            Vec3d t = Transport(dMid, midHit.SmoothNormal, hit.SmoothNormal);
             if (t.LengthSquared < 1e-20) break;
             dir = t.Normalized();
         }
@@ -216,4 +234,28 @@ public static class GeodesicCurves
 
     private static Vec3d TangentComponent(Vec3d v, Vec3d normal) =>
         v - Vec3d.Dot(v, normal) * normal;
+
+    /// <summary>
+    /// Rotates a tangent vector from the plane with unit normal n0 into the
+    /// plane with unit normal n1 by the minimal rotation taking n0 to n1
+    /// (Rodrigues' formula), then removes any residual normal component.
+    /// </summary>
+    internal static Vec3d Transport(Vec3d v, Vec3d n0, Vec3d n1)
+    {
+        Vec3d axis = Vec3d.Cross(n0, n1);
+        double s = axis.Length;
+        double c = Vec3d.Dot(n0, n1);
+        Vec3d r;
+        if (s < 1e-12)
+        {
+            r = c > 0 ? v : TangentComponent(v, n1);
+        }
+        else
+        {
+            axis = axis / s;
+            // v cos θ + (axis × v) sin θ + axis (axis · v)(1 − cos θ)
+            r = c * v + s * Vec3d.Cross(axis, v) + (1.0 - c) * Vec3d.Dot(axis, v) * axis;
+        }
+        return TangentComponent(r, n1);
+    }
 }

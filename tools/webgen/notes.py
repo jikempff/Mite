@@ -7,13 +7,15 @@ NOTES = {
     "D1, D2 and N form a right-handed frame at every vertex; D1 and D2 are tangent to the surface. Signs of D1/D2 are still arbitrary per vertex (they are lines, not arrows), so do not expect them to point 'the same way' along a row.",
     "Radius 1 gives the raw per-face fit (noisy on coarse or irregular meshes); radius 2 (default) averages the curvature tensor over one ring; higher radii blur real features."],
     checks=[("Sphere K1, K2 within 2% of 1", "[Math.abs(N.sphere.k1-1)<0.02 && Math.abs(N.sphere.k2-1)<0.02, 'k1 = '+N.sphere.k1+', k2 = '+N.sphere.k2+' on a 24-division unit sphere']"),
-            ("Torus k1 = 1/r along the meridian", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.k1-1)));return [e<0.05,'max |k1 − 1| = '+e.toFixed(3)+' over 16 samples'];})()")]),
+            ("Torus k1 = 1/r along the meridian", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.k1-1)));return [e<0.05,'max |k1 − 1| = '+e.toFixed(3)+' over 16 samples'];})()"),
+            ("Cylinder (R = 1): k1 = 1, k2 = 0 exactly", "[N.cylinder.k1Err<0.01&&N.cylinder.k2Max<1e-9,'max |k1 − 1| = '+N.cylinder.k1Err+', max |k2| = '+N.cylinder.k2Max.toExponential(1)+' on a 64 × 32 cylinder']")]),
 "Gaussian Curvature": dict(demo="torusK", demoMode="K", expect=[
     "Positive on domes, negative on saddles, zero on cylinders and planes. Boundary vertices report 0 (there is no angle deficit on an open fan), which is intentional.",
     "Signed and area-normalized: values scale with 1/length², so a millimetre model shows numbers a million times smaller than the same shape in metres.",
     "On the torus demo the sign flips exactly at the top and bottom circles (φ = ±90°)."],
     checks=[("Sphere K within 1% of 1", "[Math.abs(N.sphere.K-1)<0.01,'mean K = '+N.sphere.K]"),
-            ("Torus K matches cos φ / (r (R + r cos φ))", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.K-r.Kt)));return [e<0.03,'max |K − theory| = '+e.toFixed(4)];})()")]),
+            ("Torus K matches cos φ / (r (R + r cos φ))", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.K-r.Kt)));return [e<0.03,'max |K − theory| = '+e.toFixed(4)];})()"),
+            ("Cylinder K = 0 exactly, hyperboloid K = −1/(1 + 2z²)²", "[N.cylinder.KMax<1e-9&&N.asymHyp.KErr<0.005,'cylinder max |K| = '+N.cylinder.KMax.toExponential(1)+'; hyperboloid max |K − theory| = '+N.asymHyp.KErr+' (K runs from −1 at the throat to −1/9 at the rims)']")]),
 "Mean Curvature": dict(demo="torusK", demoMode="H", expect=[
     "H = (k1 + k2)/2, signed against the vertex normal; HN is the mean curvature normal (length |H|).",
     "Uses the same mixed Voronoi areas as Gaussian Curvature, so H² − K ≥ 0 holds numerically away from the boundary.",
@@ -55,7 +57,8 @@ NOTES = {
     "Stiffness and Gravity only set the ratio of sag to span; RestScale < 1 pre-tensions the net."],
     checks=[("Converges", "[N.dynrelax.converged,N.dynrelax.iterations+' steps, residual '+N.dynrelax.residual.toExponential(2)+', '+N.dynrelax.ms+' ms']"),
             ("All edges in tension", "[N.dynrelax.minForce>=0,'edge forces '+N.dynrelax.minForce+' … '+N.dynrelax.maxForce]")]),
-"Asymptotic Net": dict(demo="asym", expect=[
+"Asymptotic Net": dict(demo="asym", shapes=[("asym", "saddle"), ("asymHyp", "hyperboloid")], expect=[
+    "Ruled-surface truth: on the hyperboloid of one sheet x² + y² − z² = 1 the two asymptotic families are exactly its two families of straight rulings (do Carmo 1976, §3-2), crossing at 90° on the throat; every traced curve must be a straight line rim to rim. On a cylinder K = 0 everywhere and the only asymptotic direction is the ruling (a double root): the component must report no anticlastic region and produce no curves rather than invent a second family from curvature noise.",
     "Two families of continuous curves that only exist where K < 0. On the saddle z = x² − y² they are the straight lines x = ±y + c, so every curve runs edge to edge with no stubs, no family mixing and no floating ends.",
     "Continuous (default on): a curve runs to the mesh border even where it drifts closer than Spacing to its neighbour; only a curve that has practically merged with a neighbour (within 0.15 × Spacing) stops, and then it ends exactly on that neighbour as a T-junction. Continuous off restores classic evenly-spaced streamlines: more even spacing, but laths end mid-surface (on a neighbour, never floating).",
     "Curves meet the border along their own direction: the last segment carries no hook and the trace never crawls along the edge, also on staircase borders of trimmed quad meshes (Weaverbird-style).",
@@ -65,8 +68,12 @@ NOTES = {
             ("Every curve end is on the mesh border (continuous mode)", "[N.asym.floatingEnds===0&&N.asym.boundaryEnds===N.asym.ends,N.asym.boundaryEnds+' of '+N.asym.ends+' ends on the border, '+N.asym.tEnds+' on a neighbour, '+N.asym.floatingEnds+' floating']"),
             ("Classic mode ends on a neighbour, never floating", "[N.asymClassic.floatingEnds===0,N.asymClassic.boundaryEnds+' border ends + '+N.asymClassic.tEnds+' T-junction ends, '+N.asymClassic.floatingEnds+' floating (was 8 floating before)']"),
             ("No hook at the border", "[N.asym.maxEndTurn<5,'largest turn in the last segment '+N.asym.maxEndTurn+'° (was 35° before); largest turn anywhere '+N.asym.maxTurn+'°']"),
-            ("Balanced families", "[Math.abs(N.asym.a-N.asym.b)<=2,N.asym.a+' + '+N.asym.b+' curves in '+N.asym.ms+' ms']")]),
-"Geodesic Net": dict(demo="sphereGeo", expect=[
+            ("Balanced families", "[Math.abs(N.asym.a-N.asym.b)<=2,N.asym.a+' + '+N.asym.b+' curves in '+N.asym.ms+' ms']"),
+            ("Hyperboloid: asymptotic directions are the rulings", "[N.asymHyp.dirWorst<1.5,'worst deviation from the analytic ruling '+N.asymHyp.dirWorst+'°, mean '+N.asymHyp.dirMean+'° over 1856 interior vertices']"),
+            ("Hyperboloid: every net curve is a straight ruling, rim to rim", "[N.asymHyp.wrongFamily===0&&N.asymHyp.rimEnds===N.asymHyp.ends&&N.asymHyp.maxChordDev<0.02&&N.asymHyp.maxRulingAngle<0.5,N.asymHyp.a+' + '+N.asymHyp.b+' rulings, max bow '+N.asymHyp.maxChordDev+' over length 2.83, direction within '+N.asymHyp.maxRulingAngle+'° of the analytic ruling, '+N.asymHyp.rimEnds+' of '+N.asymHyp.ends+' ends on the rims, '+N.asymHyp.wrongFamily+' family-mixing samples, '+N.asymHyp.ms+' ms']"),
+            ("Cylinder (K = 0): no second family invented", "[N.asymHyp&&N.cylinder.asymVertices===0&&N.cylinder.asymCurves===0,N.cylinder.asymVertices+' of '+N.cylinder.vertices+' vertices flagged anticlastic, '+N.cylinder.asymCurves+' curves']")]),
+"Geodesic Net": dict(demo="sphereGeo", shapes=[("sphereGeo", "saddle"), ("cylGeo", "cylinder")], expect=[
+    "Cylinder truth: geodesics are helices (plus the rulings and the circles); a helix seeded at angle α from the axis keeps that angle and rises R cot α per unit of unwrapped angle. The tracer now parallel-transports its direction between tangent planes; flattening the projected travel instead drifted the 45° helix to 44.65° at step 0.02 and 42.2° at step 0.005 (the finer the step, the worse), which also bent every geodesic net slightly toward the facet tilt axis.",
     "Straightest geodesics from one seed, grown sideways at Spacing. On the saddle every geodesic runs border to border; where two geodesics converge the later one ends on the earlier one as a T-junction (visible near the centre), never in mid-air.",
     "On a closed surface the seed geodesic closes (sphere: a great circle of length 2π, checked below) and the family cannot stay evenly spaced — great circles all cross each other — so a sphere is not a useful test shape for a net; a saddle, vault or dome patch is.",
     "Directions are paired with seeds by position (the last direction is reused). A direction parallel to the normal is replaced by an arbitrary tangent.",
@@ -74,7 +81,9 @@ NOTES = {
     checks=[("Sphere seed geodesic is a great circle (length 2π)", "[Math.abs(N.sphereGeoClosed.firstLen-2*Math.PI)<0.05,'length '+N.sphereGeoClosed.firstLen+', closed']"),
             ("Saddle: no floating ends", "[N.sphereGeo.floatingEnds===0,N.sphereGeo.boundaryEnds+' border ends, '+N.sphereGeo.tEnds+' T-junction ends, '+N.sphereGeo.floatingEnds+' floating']"),
             ("No hook at the border", "[N.sphereGeo.maxEndTurn<6,'largest turn in the last segment '+N.sphereGeo.maxEndTurn+'°']"),
-            ("Family fills the saddle", "[N.sphereGeo.count>15,N.sphereGeo.count+' geodesics at spacing 0.2, shortest '+N.sphereGeo.minLen]")]),
+            ("Family fills the saddle", "[N.sphereGeo.count>15,N.sphereGeo.count+' geodesics at spacing 0.2, shortest '+N.sphereGeo.minLen]"),
+            ("Cylinder: geodesics are helices at the seeded angle", "(()=>{const r=N.cylGeo.filter(x=>x.angle<89);const e=Math.max(...r.map(x=>Math.abs(x.measured-x.angle)));const rise=Math.max(...r.map(x=>x.riseErr));return [e<0.2&&rise<0.02,r.map(x=>x.angle+'° → '+x.measured.toFixed(2)+'°').join(', ')+'; worst rise error '+rise+' (was 0.024 at 45° and 0.053 at 60° before parallel transport)'];})()"),
+            ("Cylinder: the 90° geodesic closes into the circle", "(()=>{const c=N.cylGeo.find(x=>x.angle===90);return [c.closed&&Math.abs(c.len-6.2796)<0.02,'length '+c.len+' vs 64-gon perimeter 6.2796'];})()")]),
 "Chebyshev Net": dict(demo="cheb", expect=[
     "All edges have length L: this is a flat lattice of constant-length laths pinned at the seed and bent onto the surface. The net shears away from the seed; the Angles output shows where cells collapse (locking near 0° or 180°). On the sphere the corners of an 11 × 11 patch already shear to 45°, which is why the patch looks folded there — that is the real kinematics, not a tracing error.",
     "Choose L a few times larger than the mesh edge; the compass construction is noisy below that.",
@@ -94,9 +103,12 @@ NOTES = {
     checks=[("Length matches the great-circle arc", "[Math.abs(N.geoPath.length-N.geoPath.theory)<0.02,N.geoPath.length+' vs '+N.geoPath.theory+' (edge path was '+N.geoPath.dijkstraLen+')']")]),
 "Lath Analysis": dict(demo="lathUtil", expect=[
     "Splits each curve's bending into normal curvature (out of the surface), geodesic curvature (in the surface) and geodesic torsion (twist), then converts to strains for a flat or upright strip. For a flat 10 × 1 cm timber lath (limit 0.5%), a bend radius of 1 m is exactly the limit: utilization 1.",
-    "Curvature is measured over a window of two mesh edges, so facet kinks do not spike the result; expect ±10% scatter on coarse meshes. Raise Window to smooth more.",
+    "Normal curvature and geodesic torsion are read from the rotation of the surface normal along the lath (Darboux: N' = −kn T − τg g), not from the polyline's kinks, so a straight ruling on a faceted hyperboloid reports kn ≈ 0 instead of the 0.18 facet noise it used to (which put an upright lath at utilization 1.8 where the truth is 0). Geodesic curvature still comes from the polyline's in-surface turning over a window of two mesh edges; raise Window to smooth it more.",
+    "Asymptotic laths twist by √−K (Beltrami–Enneper: τg² = −K on an asymptotic curve), so on the hyperboloid throat (K = −1) an upright 100 × 10 mm lath at 0.5% strain sits at utilization 0.01/√3/0.005 = 1.15 from twist alone.",
     "Upright = True swaps the easy and hard axes (asymptotic laths). Closed curves are handled across the seam."],
-    checks=[("Torus meridian (r = 1) → utilization ≈ 1", "[N.lathAnalysis.util<1.25&&N.lathAnalysis.util>0.85,'peak '+N.lathAnalysis.util+', mean kn '+N.lathAnalysis.kn.toFixed(3)+', kg '+N.lathAnalysis.kg.toFixed(3)+', τg max '+N.lathAnalysis.tg.toFixed(3)]")]),
+    checks=[("Torus meridian (r = 1) → utilization ≈ 1", "[N.lathAnalysis.util<1.25&&N.lathAnalysis.util>0.85,'peak '+N.lathAnalysis.util+', mean kn '+N.lathAnalysis.kn.toFixed(3)+', kg '+N.lathAnalysis.kg.toFixed(3)+', τg max '+N.lathAnalysis.tg.toFixed(3)]"),
+            ("Hyperboloid rulings: kn = 0, |τg| = √−K, opposite twist per family", "(()=>{const r=N.hypLath;const ok=r.every(x=>x.knMax<0.02&&x.tgErr<0.02&&Math.abs(x.utilThroat-x.utilTheory)<0.05)&&r[0].tgThroat*r[1].tgThroat<0;return [ok,r.map(x=>'family '+x.family+': max |kn| '+x.knMax+', max |kg| '+x.kgMax+', τg at throat '+x.tgThroat+' (theory ±1), max |τg − √−K| '+x.tgErr+', throat utilization '+x.utilThroat+' (theory '+x.utilTheory+')').join('; ')];})()"),
+            ("Cylinder helices: kn = sin²α, |τg| = sin α cos α, kg = 0", "(()=>{const r=N.cylGeo;const ok=r.every(x=>Math.abs(x.kn-x.knTheory)<0.02&&Math.abs(x.tg-x.tgTheory)<0.02&&x.kgMax<0.02);return [ok,r.map(x=>x.angle+'°: kn '+x.kn+'/'+x.knTheory+', τg '+x.tg+'/'+x.tgTheory+', |kg| ≤ '+x.kgMax).join('; ')];})()")]),
 "Gridshell Analysis": dict(demo="frame", expect=[
     "A linear beam-frame model of the whole net: laths become beams, crossings become shared nodes, supports are fixed. The deformed curves are exaggerated by Scale (100× in the demo). Peak utilization above 1 means the section or the spacing is not enough for the load.",
     "Units: geometry is converted to metres internally, so E and Allowable are always Pa and Load is N/m — 11 GPa / 20 MPa / 1 kN/m are timber-ish defaults.",

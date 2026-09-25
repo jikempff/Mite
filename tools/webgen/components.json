@@ -1014,7 +1014,7 @@
     "name": "NormalCurvature",
     "nick": "Kn",
     "type": "Number",
-    "desc": "Out-of-surface bending per point",
+    "desc": "Out-of-surface bending per point (surface normal curvature along the lath; 0 on asymptotic curves)",
     "access": "tree",
     "default": null
    },

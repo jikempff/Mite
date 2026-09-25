@@ -11,6 +11,23 @@ namespace Mite.Core.Gridshells;
 /// These map directly onto the bending modes of a rectangular strip, so the
 /// analysis reports whether a lath of given width, thickness, and material
 /// strain limit can physically be bent along the curve.
+///
+/// Darboux frame (T, g = N × T, N) along a surface curve (do Carmo 1976,
+/// Differential Geometry of Curves and Surfaces, §3-2; Schling, Hitrec &amp;
+/// Barthel 2017, Designing Grid Structures Using Asymptotic Curve Networks):
+///   T' = kg g + kn N,   N' = −kn T − τg g.
+/// Normal curvature and geodesic torsion are therefore both read from the
+/// rotation of the surface normal along the curve (kn = −N'·T, τg = −N'·g),
+/// using the smooth interpolated normal of the mesh; only the geodesic
+/// curvature needs the turning of the polyline itself. Reading kn from the
+/// polyline's second differences instead is dominated by facet noise: on a
+/// 64-gon hyperboloid the straight rulings (kn = 0 exactly) came out with
+/// |kn| up to 0.18 while √−K = 0.87, i.e. an upright lath was reported at
+/// utilization 1.8 where the truth is 0; the normal-rotation form gives
+/// |kn| ≤ 0.004 on the same curve and is 10–100× closer to the analytic value
+/// on cylinder, torus and sphere test curves as well (see RuledSurfaceTests).
+/// On an asymptotic curve τg² = −K (Beltrami–Enneper), so the twist of a
+/// straight asymptotic lath is set by the Gaussian curvature alone.
 /// </summary>
 public static class LathAnalysis
 {
@@ -39,7 +56,10 @@ public static class LathAnalysis
         /// on a faceted mesh turns by the dihedral angle at every facet edge,
         /// so vertex-to-vertex curvature spikes at the facet scale even on a
         /// perfect circle; measuring across a window the size of a few facets
-        /// recovers the curvature of the underlying surface curve.
+        /// recovers the curvature of the underlying surface curve. Normal
+        /// curvature and geodesic torsion are read from the smooth normal over
+        /// the same window, so the window mainly governs the geodesic
+        /// curvature's noise.
         /// </summary>
         public double Window { get; set; } = 0.0;
     }
@@ -145,8 +165,8 @@ public static class LathAnalysis
             if (lPrev < 1e-15 || lNext < 1e-15) continue;
             Vec3d tPrev = ePrev / lPrev, tNext = eNext / lNext;
 
-            // Curvature: turning angle over the window, decomposed in the
-            // Darboux frame of the mid tangent
+            // Geodesic curvature: in-surface part of the polyline's turning
+            // angle over the window, in the Darboux frame of the mid tangent
             double dot = Math.Max(-1.0, Math.Min(1.0, Vec3d.Dot(tPrev, tNext)));
             double kappa = Math.Acos(dot) / (0.5 * (lPrev + lNext));
             Vec3d t = (tPrev + tNext);
@@ -159,14 +179,16 @@ public static class LathAnalysis
             if (bend.LengthSquared > 1e-20)
             {
                 bend = bend.Normalized();
-                kn[i] = kappa * Vec3d.Dot(bend, nrm);
                 kg[i] = kappa * Vec3d.Dot(bend, g);
             }
 
-            // Geodesic torsion: rate of the surface normal's rotation about the
-            // tangent, tau_g = -(dN/ds) . g, over the same window
+            // Normal curvature and geodesic torsion from the rotation of the
+            // surface normal over the window (N' = -kn T - tau_g g): both read
+            // the smooth normal, so facet kinks in the polyline do not leak in
             double ds = lPrev + lNext;
-            tg[i] = -Vec3d.Dot((nf - nb) / ds, g);
+            Vec3d dN = (nf - nb) / ds;
+            kn[i] = -Vec3d.Dot(dN, t);
+            tg[i] = -Vec3d.Dot(dN, g);
         }
 
         // Strain per mode. Flat strip: kn bends about the width axis (fiber

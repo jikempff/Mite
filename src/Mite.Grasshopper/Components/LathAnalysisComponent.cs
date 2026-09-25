@@ -41,7 +41,7 @@ public class LathAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("MaxUtilization", "U", "Peak strain / allowable strain per lath (>1 fails)", GH_ParamAccess.list);
         pManager.AddNumberParameter("Utilization", "u", "Strain utilization per point along each lath", GH_ParamAccess.tree);
         pManager.AddNumberParameter("GeodesicCurvature", "Kg", "In-surface bending per point", GH_ParamAccess.tree);
-        pManager.AddNumberParameter("NormalCurvature", "Kn", "Out-of-surface bending per point", GH_ParamAccess.tree);
+        pManager.AddNumberParameter("NormalCurvature", "Kn", "Out-of-surface bending per point (surface normal curvature along the lath; 0 on asymptotic curves)", GH_ParamAccess.tree);
         pManager.AddNumberParameter("GeodesicTorsion", "Tg", "Twist rate per point", GH_ParamAccess.tree);
         pManager.AddPointParameter("Points", "P", "Sample points the per-point values refer to", GH_ParamAccess.tree);
     }

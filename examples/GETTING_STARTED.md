@@ -65,6 +65,11 @@ Wire any net's curves into **Lath Analysis** together with the same mesh:
 peak strain utilization (over 1 fails). Graft the per-point `u` tree into a
 gradient on the curves to color-code where laths are overstressed.
 
+Sanity values: on an asymptotic lath `Kn` should sit near 0 (it is measured from
+the surface normal, so mesh facets do not spike it) and `Tg` near √−K of the
+surface — on a hyperboloid throat with K = −1 an upright 100 × 10 mm timber lath
+reaches utilization 1.15 from twist alone.
+
 ## 4. Extrude laths and cut the joints (3 minutes)
 
 Wire the net curves into **Lath Sweep** (Mite > Fabrication) with the same mesh:

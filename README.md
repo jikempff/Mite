@@ -131,6 +131,11 @@ plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
 
+### Unreleased
+- Geodesic Net, Geodesic Path seeding and Chebyshev Net: the straightest-geodesic tracer parallel-transports its direction between tangent planes instead of re-deriving it from the projected step. On a 64-sided cylinder a 45° helix used to drift to 44.65° (step 0.02) and 42.2° (step 0.005); it now stays within 0.01°, and refining the step improves the result instead of worsening it.
+- Lath Analysis: normal curvature `Kn` is read from the rotation of the surface normal along the lath (Darboux frame), like the torsion, instead of from the polyline's facet kinks. Straight rulings of a hyperboloid now report `Kn` ≤ 0.006 instead of up to 0.18 (which put an upright lath at utilization 1.8 where the truth is 0); circles and helices on a cylinder match theory to 1%.
+- Analytic test typologies: cylinder (K = 0, helices, no asymptotic net) and hyperboloid of one sheet (asymptotic net = straight rulings, τg = √−K) in `tests/Mite.Tests/RuledSurfaceTests.cs` and as shape switches in the Mite Bench (Asymptotic Net, Geodesic Net, Lath Analysis, curvature cards).
+
 ### 1.2.1
 - Continuous curves (new `Continuous` input on Asymptotic Net, Geodesic Net, Conjugate Net, Curvature Streamlines): laths run border to border; merged traces end on their neighbour as T-junctions, never floating.
 - Curves meet the mesh border along their own direction — no hooks, no crawling along the edge, also on staircase borders of trimmed or subdivided quad meshes.

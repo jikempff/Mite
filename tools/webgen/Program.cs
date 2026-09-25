@@ -53,6 +53,17 @@ double[][][] SphereWire(int n)
     return o.ToArray();
 }
 
+double[][][] RevolveWire(Func<double, double> radiusAt, double zMin, double zMax, int rings, int meridians)
+{
+    // parallels and meridians of a surface of revolution r = radiusAt(z)
+    var o = new List<double[][]>();
+    for (int k = 0; k <= rings; k++) { double z = zMin + (zMax - zMin) * k / rings, r = radiusAt(z); var l = new List<double[]>(); for (int i = 0; i <= 64; i++) { double th = 2 * Math.PI * i / 64; l.Add(new[] { R3(r * Math.Cos(th)), R3(r * Math.Sin(th)), R3(z) }); } o.Add(l.ToArray()); }
+    for (int k = 0; k < meridians; k++) { double th = 2 * Math.PI * k / meridians; var l = new List<double[]>(); for (int i = 0; i <= 24; i++) { double z = zMin + (zMax - zMin) * i / 24, r = radiusAt(z); l.Add(new[] { R3(r * Math.Cos(th)), R3(r * Math.Sin(th)), R3(z) }); } o.Add(l.ToArray()); }
+    return o.ToArray();
+}
+double ChordDev(Vec3d[] l) { var a = l[0]; var d = l[^1] - l[0]; double L = d.Length; if (L < 1e-15) return 0; d = d / L; double w = 0; foreach (var p in l) { var v = p - a; w = Math.Max(w, (v - Vec3d.Dot(v, d) * d).Length); } return w; }
+double AngleDeg(Vec3d a, Vec3d b) => Math.Acos(Math.Min(1.0, Math.Abs(Vec3d.Dot(a.Normalized(), b.Normalized())))) * 180 / Math.PI;
+
 string OutDir = args.Length > 0 ? args[0] : Directory.GetCurrentDirectory();
 var sw = Stopwatch.StartNew();
 
@@ -227,6 +238,74 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         }
     }
     return (ends, onBoundary, onCurve, floating, maxEndTurn, maxTurn);
+}
+
+// ---------- Ruled surfaces: cylinder (K = 0) and hyperboloid of one sheet (asymptotic curves = rulings) ----------
+{
+    int seg = 64, rows = 32;
+    // Cylinder R = 1, height 2: k1 = 1, k2 = 0, K = 0, H = 0.5; no asymptotic directions; geodesics are helices
+    var cyl = TestMeshes.CreateCylinder(1.0, 2.0, seg, rows);
+    var pcC = PrincipalCurvature.Compute(cyl);
+    var KC = GaussianCurvature.Compute(cyl); var HC = MeanCurvature.Compute(cyl).Values;
+    var interior = Enumerable.Range(2, rows - 3).SelectMany(j => Enumerable.Range(0, seg).Select(i => j * seg + i)).ToArray();
+    var fieldC = AsymptoticCurves.ComputeDirections(pcC);
+    var asymC = EvenlySpacedNet.TraceField(cyl, fieldC.Family1, fieldC.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.3 }, fieldC.Family2);
+    numbers["cylinder"] = new { k1Err = R3(interior.Max(v => Math.Abs(pcC.K1[v] - 1))), k2Max = interior.Max(v => Math.Abs(pcC.K2[v])), KMax = interior.Max(v => Math.Abs(KC[v])), HErr = interior.Max(v => Math.Abs(HC[v] - 0.5)), asymVertices = fieldC.Exists.Count(e => e), asymCurves = asymC.Count, vertices = cyl.VertexCount };
+    // geodesic helices from one seed at 30°, 45°, 60° from the axis, plus the circle
+    var projC = new MeshProjection(cyl);
+    int seedC = (rows / 2) * seg;
+    var helixLines = new List<double[][]>(); var helixRows = new List<object>();
+    foreach (double deg in new[] { 30.0, 45.0, 60.0, 90.0 })
+    {
+        double al = deg * Math.PI / 180;
+        var g = GeodesicCurves.Trace(cyl, new[] { seedC }, new[] { new Vec3d(0, Math.Sin(al), Math.Cos(al)) }, new GeodesicCurves.Options { StepSize = 0.02, MaxSteps = 2000 })[0];
+        double th = Math.Atan2(g[0].Y, g[0].X), acc = 0, rise = 0;
+        for (int i = 0; i < g.Length; i++) { double t = Math.Atan2(g[i].Y, g[i].X), d = t - th; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; acc += d; th = t; if (deg < 89) rise = Math.Max(rise, Math.Abs(g[i].Z - (g[0].Z + acc / Math.Tan(al)))); }
+        double measuredDeg = deg < 89 ? Math.Atan(Math.Abs(acc) / Math.Abs(g[^1].Z - g[0].Z)) * 180 / Math.PI : 90;
+        var la = LathAnalysis.Analyze(projC, g);
+        int n = g.Length; var mid = Enumerable.Range(n / 4, n / 2).ToArray();
+        helixLines.Add(Line(g, 2));
+        helixRows.Add(new { angle = deg, measured = R3(measuredDeg), riseErr = R3(rise), len = R3(ArcLen(g)), lenTheory = R3(deg < 89 ? 2 / Math.Cos(al) : 2 * Math.PI), closed = (g[0] - g[^1]).Length < 1e-9, kn = R3(mid.Average(i => Math.Abs(la.NormalCurvature[i]))), knTheory = R3(Math.Sin(al) * Math.Sin(al)), tg = R3(mid.Average(i => Math.Abs(la.GeodesicTorsion[i]))), tgTheory = R3(Math.Sin(al) * Math.Cos(al)), kgMax = R3(mid.Max(i => Math.Abs(la.GeodesicCurvature[i]))) });
+    }
+    scenes["cylGeo"] = new { wire = RevolveWire(z => 1.0, -1, 1, 8, 16), curves = helixLines.ToArray() };
+    numbers["cylGeo"] = helixRows;
+
+    // Hyperboloid x² + y² − z² = 1, z in [−1, 1]: K = −1/(1 + 2z²)², asymptotic curves are the straight rulings
+    var hyp = TestMeshes.CreateHyperboloid(1.0, 1.0, 1.0, seg, rows);
+    var pcH = PrincipalCurvature.Compute(hyp);
+    var KH = GaussianCurvature.Compute(hyp);
+    var fieldH = AsymptoticCurves.ComputeDirections(pcH);
+    var projH = new MeshProjection(hyp);
+    double kErr = interior.Max(v => Math.Abs(KH[v] - TestMeshes.HyperboloidGaussianCurvature(hyp.Vertices[v].Z)));
+    double dirWorst = 0, dirSum = 0;
+    foreach (int v in interior) { var (dp, dm) = TestMeshes.HyperboloidRulings(hyp.Vertices[v]); double a = Math.Max(Math.Min(AngleDeg(fieldH.Family1[v], dp), AngleDeg(fieldH.Family1[v], dm)), Math.Min(AngleDeg(fieldH.Family2[v], dp), AngleDeg(fieldH.Family2[v], dm))); dirWorst = Math.Max(dirWorst, a); dirSum += a; }
+    var tH = Stopwatch.StartNew();
+    var hypA = EvenlySpacedNet.TraceField(hyp, fieldH.Family1, fieldH.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.25 }, fieldH.Family2);
+    var hypB = EvenlySpacedNet.TraceField(hyp, fieldH.Family2, fieldH.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.25 }, fieldH.Family1);
+    tH.Stop();
+    int wrongH = 0, totalH = 0, rimEnds = 0, endsH = 0; double devMax = 0, rulingAngle = 0;
+    foreach (var (fam, self, other) in new[] { (hypA, fieldH.Family1, fieldH.Family2), (hypB, fieldH.Family2, fieldH.Family1) })
+        foreach (var c in fam)
+        {
+            devMax = Math.Max(devMax, ChordDev(c));
+            var (dp, dm) = TestMeshes.HyperboloidRulings(projH.ClosestPoint(c[c.Length / 2], -1).Point);
+            rulingAngle = Math.Max(rulingAngle, Math.Min(AngleDeg(c[^1] - c[0], dp), AngleDeg(c[^1] - c[0], dm)));
+            for (int i = 1; i < c.Length; i += 5) { var tg = (c[i] - c[i - 1]).Normalized(); int vi = projH.NearestVertexGlobal(c[i]); if (!fieldH.Exists[vi]) continue; totalH++; if (Math.Abs(Vec3d.Dot(tg, other[vi])) > Math.Abs(Vec3d.Dot(tg, self[vi])) + 0.2) wrongH++; }
+            foreach (var e in new[] { c[0], c[^1] }) { endsH++; if (Math.Abs(Math.Abs(e.Z) - 1) < 1e-3) rimEnds++; }
+        }
+    scenes["asymHyp"] = new { wire = RevolveWire(z => Math.Sqrt(1 + z * z), -1, 1, 8, 16), a = hypA.Select(l => Line(l, 3)).ToArray(), b = hypB.Select(l => Line(l, 3)).ToArray() };
+    numbers["asymHyp"] = new { a = hypA.Count, b = hypB.Count, wrongFamily = wrongH, samples = totalH, ends = endsH, rimEnds, maxChordDev = R3(devMax), maxRulingAngle = R3(rulingAngle), dirWorst = R3(dirWorst), dirMean = R3(dirSum / interior.Length), KErr = R3(kErr), ms = tH.ElapsedMilliseconds, spacing = 0.25 };
+    // Lath Analysis on one ruling of each family (upright 100 x 10 mm lath, limit 0.5%): kn = 0, |τg| = √−K, opposite signs
+    var lathRows = new List<object>();
+    foreach (bool fam in new[] { false, true })
+    {
+        var r = AsymptoticCurves.Trace(hyp, new[] { (rows / 2) * seg }, pcH, fam, new AsymptoticCurves.Options { StepSize = 0.02 })[0];
+        var la = LathAnalysis.Analyze(projH, r, new LathAnalysis.Options { Upright = true, Width = 0.1, Thickness = 0.01, MaxStrain = 0.005 });
+        int n = r.Length; var mid = Enumerable.Range(n / 4, n / 2).ToArray();
+        int throat = Enumerable.Range(0, n).OrderBy(i => Math.Abs(r[i].Z)).First();
+        lathRows.Add(new { family = fam ? "B" : "A", chordDev = R3(ChordDev(r)), knMax = R3(mid.Max(i => Math.Abs(la.NormalCurvature[i]))), kgMax = R3(mid.Max(i => Math.Abs(la.GeodesicCurvature[i]))), tgThroat = R3(la.GeodesicTorsion[throat]), tgErr = R3(mid.Max(i => Math.Abs(Math.Abs(la.GeodesicTorsion[i]) - Math.Sqrt(-TestMeshes.HyperboloidGaussianCurvature(r[i].Z))))), utilThroat = R3(la.Utilization[throat]), utilTheory = R3(0.01 / Math.Sqrt(3.0) / 0.005) });
+    }
+    numbers["hypLath"] = lathRows;
 }
 
 // ---------- Form finding on a 24x24 grid ----------
