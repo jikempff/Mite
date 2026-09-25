@@ -2,6 +2,10 @@
 
 Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net design and lath fabrication. Pure .NET with zero dependencies — runs on Windows, macOS, and Linux.
 
+## Try it in the browser
+
+[kempffsele.me/mite](https://kempffsele.me/mite) runs Mite.Core compiled to WebAssembly: analytic shapes, a free-form loft or your own OBJ/STL, every curvature mode, all the nets, lath buildability with cutting patterns and a beam-frame check — the same code as the plugin, nothing uploaded. Source in `src/Mite.Web`.
+
 ## Features
 
 ### Curvature Analysis

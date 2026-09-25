@@ -44,9 +44,12 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       vertices of valence 3, dense border rows).
 - [ ] Dirty meshes for Mesh Cleanup: unwelded seams, duplicate faces,
       flipped faces, slivers, millimetre scale, far from origin.
-- [ ] Bench: a typology switcher per demo (sphere / saddle / torus /
-      cylinder / hyperboloid / monkey saddle / ellipsoid / annulus), with
-      the analytic truth and the measured error shown side by side.
+- [x] Analytic typologies as code: `Geometry/AnalyticShapes.cs` (saddle,
+      sphere, dome, ellipsoid, torus, hyperboloid, monkey saddle, catenoid,
+      Enneper, vault, cone, annulus, wave) — used by the web app; tests
+      against their analytic curvature still to be written.
+- [ ] Bench: a typology switcher per demo with the analytic truth and the
+      measured error side by side (reuse AnalyticShapes).
 
 ## B. Plugin UX (Grasshopper)
 
@@ -70,7 +73,18 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 - [ ] Ribbon order and icons reviewed against the workflow order
       (mesh → curvature → net → analysis → fabrication).
 
-## C. Web bench UX
+## C. Web app and bench UX
+
+The interactive app (`src/Mite.Web`, deployed at kempffsele.me/mite) now
+carries the typology switcher, live parameters, a draggable loft, OBJ/STL
+drop, all analysis modes and nets, lath plots with unrolled patterns, frame
+analysis and exports. Remaining and new items:
+
+- [ ] Run the kernel in a Web Worker so long traces never block the page.
+- [ ] Lath segmentation, joints and nesting sheet (material %) in the app.
+- [ ] Planarization and Chebyshev angle map in the app; isocurve labels.
+- [ ] Bench (`tools/webgen`) to reuse the app's typologies (AnalyticShapes).
+
 
 - [ ] Typology switcher (see A) and a "classic vs continuous" toggle on the
       net demos.
