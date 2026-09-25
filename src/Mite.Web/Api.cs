@@ -59,6 +59,8 @@ public class NetOptions
     public bool FromBorder { get; set; } = false;
     public double BorderAngle { get; set; } = 0;
     public bool Jacobi { get; set; } = true;
+    /// <summary>0 = evenly spaced fill (T-junctions), 1 = web from the border, 2 = web from the seed cross.</summary>
+    public int Layout { get; set; } = 0;
 }
 
 public class WidthStats
@@ -294,7 +296,8 @@ public static partial class MiteApi
         EvenlySpacedNet.Options Opts() => new EvenlySpacedNet.Options
         {
             Spacing = o.Spacing, StepSize = o.Step, Continuous = o.Continuous, MaxCurves = Math.Max(1, o.MaxCurves),
-            JacobiSeeding = o.Jacobi, FromBorder = o.FromBorder, BorderAngle = o.BorderAngle
+            JacobiSeeding = o.Jacobi, FromBorder = o.FromBorder, BorderAngle = o.BorderAngle,
+            Layout = o.Layout == 1 ? NetLayout.WebBorder : o.Layout == 2 ? NetLayout.WebCross : NetLayout.Fill
         };
         int seed = o.Seed >= 0 && o.Seed < _mesh.VertexCount ? o.Seed : -1;
         var dir = new Vec3d(o.Direction[0], o.Direction[1], o.Direction[2]);
@@ -345,6 +348,9 @@ public static partial class MiteApi
                 d1 = d1.Normalized();
                 double ang = o.AngleDeg * Math.PI / 180.0;
                 var d2 = (Math.Cos(ang) * d1 + Math.Sin(ang) * Vec3d.Cross(hit.SmoothNormal, d1).Normalized()).Normalized();
+                // seeded on the border, the two families leave it symmetrically about
+                // the border angle, ± half the family angle, so they cross instead of coinciding
+                if (o.FromBorder || oa.Layout == NetLayout.WebBorder) { oa.BorderAngle = o.BorderAngle + 0.5 * o.AngleDeg; ob.BorderAngle = o.BorderAngle - 0.5 * o.AngleDeg; }
                 a = EvenlySpacedNet.TraceGeodesics(_mesh, s, d1, oa);
                 b = EvenlySpacedNet.TraceGeodesics(_mesh, s, d2, ob);
                 resolvedSpacing = oa.ResolvedSpacing; resolvedStep = oa.ResolvedStepSize;

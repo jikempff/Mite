@@ -100,8 +100,12 @@ internal static class FieldTracer
             // Left the mesh: end exactly where the step crosses the border
             if (LeftMesh(proj, pos, intended, newHit, stepSize, out Vec3d exit))
             {
+                // Only an exit that lies ahead, within 37° of the travel
+                // direction, ends the curve; a start on the border whose
+                // outward step "exits" at a point along the border edge would
+                // otherwise add a crawl along the border as the first segment
                 Vec3d travel = exit - pos;
-                if (Vec3d.Dot(travel, d1) > 0 && travel.LengthSquared > 1e-6 * stepSize * stepSize)
+                if (travel.LengthSquared > 1e-6 * stepSize * stepSize && Vec3d.Dot(travel.Normalized(), d1) > 0.8)
                     points.Add(exit);
                 break;
             }
@@ -158,8 +162,11 @@ internal static class FieldTracer
         }
         if (!fellOff && !oblique) return false;
 
+        // A start on the border exits at the start itself (exit ≈ pos): keep
+        // that rather than falling back to the clamped point, which lies a
+        // step along the border
         if (!proj.TryBoundaryExit(pos, intended, newHit, out exit) ||
-            Vec3d.Dot(exit - pos, intended - pos) < 0)
+            Vec3d.Dot(exit - pos, intended - pos) < -1e-9 * stepSize * stepSize)
             exit = newHit.Point;
         return true;
     }

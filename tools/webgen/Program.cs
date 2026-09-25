@@ -351,6 +351,49 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         rows.Add(new { key, label, a = A.Count, b = B.Count, ends = e.ends, boundaryEnds = e.boundary, tEnds = e.onCurve, floatingEnds = e.floating, maxTurn = R3(e.turn), meanAbsH = R3(interior.Average(v => Math.Abs(H[v]))), meanK1 = R3(interior.Average(v => Math.Abs(pc.K1[v]))), positiveK = interior.Count(v => K[v] > 1e-6), meanOrthDev = R3(cnt > 0 ? orth / cnt : 0), ms = tt.ElapsedMilliseconds, vertices = mesh.VertexCount, spacing });
     }
     numbers["asymCatalogue"] = rows;
+
+    // Web layout on the catenoid: every curve rim to rim, no T-junctions, and the
+    // closed-form check u ∓ v = const (isothermal coordinates, II = −du² + dv²)
+    {
+        var mesh = TestMeshes.CreateCatenoid(1, 2, 96, 48);
+        var proj = new MeshProjection(mesh);
+        var pc = PrincipalCurvature.Compute(mesh);
+        var field = AsymptoticCurves.ComputeDirections(pc, mesh, 15.0);
+        var tt = Stopwatch.StartNew();
+        var A = EvenlySpacedNet.TraceField(mesh, field.Family1, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.3, Layout = NetLayout.WebBorder }, field.Family2);
+        var B = EvenlySpacedNet.TraceField(mesh, field.Family2, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.3, Layout = NetLayout.WebBorder }, field.Family1);
+        tt.Stop();
+        var e = Ends(A.Concat(B).ToList(), proj);
+        double worstOff = 0, worstDir = 0; int nDir = 0; double sumDir = 0;
+        foreach (var c in A.Concat(B))
+        {
+            double u0 = Math.Atan2(c[0].Y, c[0].X), v0 = c[0].Z;
+            Vec3d t0 = (c[Math.Min(3, c.Length - 1)] - c[0]).Normalized();
+            double ch0 = Math.Cosh(v0), sh0 = Math.Sinh(v0);
+            var ru0 = new Vec3d(-ch0 * Math.Sin(u0), ch0 * Math.Cos(u0), 0); var rv0 = new Vec3d(sh0 * Math.Cos(u0), sh0 * Math.Sin(u0), 1);
+            bool famA = Math.Abs(Vec3d.Dot(t0, (ru0 + rv0).Normalized())) >= Math.Abs(Vec3d.Dot(t0, (ru0 - rv0).Normalized()));
+            double k = famA ? u0 - v0 : u0 + v0;
+            foreach (var q in c)
+            {
+                double u = Math.Atan2(q.Y, q.X), v = q.Z;
+                double d = (famA ? u - v : u + v) - k;
+                while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+                worstOff = Math.Max(worstOff, Math.Abs(d) * Math.Cosh(v) / Math.Sqrt(2.0));
+            }
+        }
+        for (int i = 0; i < mesh.VertexCount; i++)
+        {
+            if (!field.Exists[i]) continue;
+            var q = mesh.Vertices[i];
+            double u = Math.Atan2(q.Y, q.X), v = q.Z, ch = Math.Cosh(v), sh = Math.Sinh(v);
+            var ru = new Vec3d(-ch * Math.Sin(u), ch * Math.Cos(u), 0); var rv = new Vec3d(sh * Math.Cos(u), sh * Math.Sin(u), 1);
+            double best = Math.Max(Math.Abs(Vec3d.Dot(field.Family1[i], (ru + rv).Normalized())), Math.Abs(Vec3d.Dot(field.Family1[i], (ru - rv).Normalized())));
+            double ang = Math.Acos(Math.Min(1.0, best)) * 180 / Math.PI;
+            worstDir = Math.Max(worstDir, ang); sumDir += ang; nDir++;
+        }
+        scenes["asymCat_catenoidWeb"] = new { label = "catenoid, web from the rims", wire = Edges(mesh, 6), a = A.Select(l => Line(l, 3)).ToArray(), b = B.Select(l => Line(l, 3)).ToArray() };
+        numbers["asymWeb"] = new { a = A.Count, b = B.Count, ends = e.ends, boundaryEnds = e.boundary, tEnds = e.onCurve, floatingEnds = e.floating, worstOffset = R3(worstOff * 1000) / 1000, edge = R3(proj.AverageEdgeLength), worstDirDeg = R3(worstDir), meanDirDeg = R3(sumDir / Math.Max(1, nDir)), ms = tt.ElapsedMilliseconds };
+    }
 }
 
 // ---------- Form finding on a 24x24 grid ----------

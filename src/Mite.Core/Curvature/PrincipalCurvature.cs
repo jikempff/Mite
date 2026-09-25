@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Mite.Core.Geometry;
 
 namespace Mite.Core.Curvature;
@@ -58,76 +59,18 @@ public static class PrincipalCurvature
 
         for (int fi = 0; fi < nf; fi++)
         {
+            if (!FaceTensor(triMesh, fi, vertexNormals, out Vec3d t, out Vec3d b, out Vec3d faceNormal, out double fa, out double fm, out double fc, out Vec3d[] edges)) continue;
             var f = triMesh.Faces[fi];
-            Vec3d p0 = triMesh.Vertices[f[0]];
-            Vec3d p1 = triMesh.Vertices[f[1]];
-            Vec3d p2 = triMesh.Vertices[f[2]];
-
-            // Edge j is opposite vertex j
-            Vec3d[] edges = { p2 - p1, p0 - p2, p1 - p0 };
-
-            Vec3d faceNormal = Vec3d.Cross(edges[2], -edges[1]);
-            if (faceNormal.LengthSquared < 1e-30) continue;
-            faceNormal = faceNormal.Normalized();
-
-            // Face tangent frame
-            Vec3d t = edges[2].Normalized();
-            Vec3d b = Vec3d.Cross(faceNormal, t).Normalized();
-
-            // Least-squares fit of II = [[a, m], [m, c]] in the face frame from
-            // II * e_uv ≈ dn_uv along the three edges (6 equations, 3 unknowns).
-            double m00 = 0, m01 = 0, m11 = 0, m12 = 0, m22 = 0;
-            double r0 = 0, r1 = 0, r2 = 0;
-
-            for (int j = 0; j < 3; j++)
-            {
-                // Edge j runs between the two vertices other than j
-                Vec3d dn = vertexNormals[f[(j + 2) % 3]] - vertexNormals[f[(j + 1) % 3]];
-
-                double u = Vec3d.Dot(edges[j], t);
-                double v = Vec3d.Dot(edges[j], b);
-                double dnU = Vec3d.Dot(dn, t);
-                double dnV = Vec3d.Dot(dn, b);
-
-                // Row [u, v, 0] -> dnU
-                m00 += u * u;
-                m01 += u * v;
-                r0 += u * dnU;
-                // Row [0, u, v] -> dnV
-                m11 += u * u;
-                m12 += u * v;
-                r2 += v * dnV;
-                // Shared terms
-                m11 += v * v;
-                m22 += v * v;
-                r1 += v * dnU + u * dnV;
-            }
-
-            Solve3x3Symmetric(m00, m01, 0, m11, m12, m22, r0, r1, r2,
-                out double fa, out double fm, out double fc);
-
-            // Distribute to the face's vertices: rotate the face-frame tensor into
-            // each vertex's tangent frame, weight by the corner angle
-            for (int j = 0; j < 3; j++)
-            {
-                int vi = f[j];
-
-                // The two face edges emanating from vertex j
-                Vec3d cornerE1 = -edges[(j + 1) % 3];
-                Vec3d cornerE2 = edges[(j + 2) % 3];
-                double w = CornerAngle(cornerE1, cornerE2);
-                if (w < 1e-12) continue;
-
-                ProjectCurvatureTensor(t, b, faceNormal, fa, fm, fc,
-                    e1Basis[vi], e2Basis[vi], vertexNormals[vi],
-                    out double pa, out double pm, out double pc);
-
-                accA[vi] += w * pa;
-                accB[vi] += w * pm;
-                accC[vi] += w * pc;
-                accW[vi] += w;
-            }
+            AccumulateFace(f, edges, t, b, faceNormal, fa, fm, fc, e1Basis, e2Basis, vertexNormals, accA, accB, accC, accW, null);
         }
+
+        // Border repair: the finite-difference tensors are one-sided at the
+        // mesh border (biased vertex normals, half a 1-ring), which on a
+        // catenoid puts the asymptotic directions 8° off on the border row and
+        // 4° on the next — the traced curves then kink in the last rows and
+        // every curve that starts at the border inherits the offset. Vertices
+        // within two rings of the border are refitted with an osculating jet.
+        RepairBorder(triMesh, vertexNormals, e1Basis, e2Basis, accA, accB, accC, accW);
 
         var k1 = new double[nv];
         var k2 = new double[nv];
@@ -175,6 +118,299 @@ public static class PrincipalCurvature
         }
 
         return new Result(k1, k2, d1, d2, vertexNormals);
+    }
+
+    /// <summary>
+    /// Least-squares fit of the second fundamental form of one face from the
+    /// finite normal differences along its three edges (Rusinkiewicz 2004):
+    /// II · e ≈ Δn for each edge, 6 equations for the 3 unknowns of the
+    /// symmetric tensor in the face frame (t, b).
+    /// </summary>
+    private static bool FaceTensor(MeshData triMesh, int fi, Vec3d[] vertexNormals,
+        out Vec3d t, out Vec3d b, out Vec3d faceNormal, out double fa, out double fm, out double fc, out Vec3d[] edges)
+    {
+        var f = triMesh.Faces[fi];
+        Vec3d p0 = triMesh.Vertices[f[0]];
+        Vec3d p1 = triMesh.Vertices[f[1]];
+        Vec3d p2 = triMesh.Vertices[f[2]];
+        // Edge j is opposite vertex j
+        edges = new[] { p2 - p1, p0 - p2, p1 - p0 };
+        t = default; b = default; fa = fm = fc = 0;
+        faceNormal = Vec3d.Cross(edges[2], -edges[1]);
+        if (faceNormal.LengthSquared < 1e-30) return false;
+        faceNormal = faceNormal.Normalized();
+        t = edges[2].Normalized();
+        b = Vec3d.Cross(faceNormal, t).Normalized();
+
+        double m00 = 0, m01 = 0, m11 = 0, m12 = 0, m22 = 0;
+        double r0 = 0, r1 = 0, r2 = 0;
+        for (int j = 0; j < 3; j++)
+        {
+            Vec3d dn = vertexNormals[f[(j + 2) % 3]] - vertexNormals[f[(j + 1) % 3]];
+            double u = Vec3d.Dot(edges[j], t);
+            double v = Vec3d.Dot(edges[j], b);
+            double dnU = Vec3d.Dot(dn, t);
+            double dnV = Vec3d.Dot(dn, b);
+            m00 += u * u; m01 += u * v; r0 += u * dnU;
+            m11 += u * u; m12 += u * v; r2 += v * dnV;
+            m11 += v * v; m22 += v * v; r1 += v * dnU + u * dnV;
+        }
+        Solve3x3Symmetric(m00, m01, 0, m11, m12, m22, r0, r1, r2, out fa, out fm, out fc);
+        return true;
+    }
+
+    /// <summary>Distributes a face tensor to its corners (rotated into each vertex frame, corner-angle weighted); onlyVertex restricts it to one corner.</summary>
+    private static void AccumulateFace(int[] f, Vec3d[] edges, Vec3d t, Vec3d b, Vec3d faceNormal, double fa, double fm, double fc,
+        Vec3d[] e1Basis, Vec3d[] e2Basis, Vec3d[] vertexNormals, double[] accA, double[] accB, double[] accC, double[] accW, int? onlyVertex)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            int vi = f[j];
+            if (onlyVertex.HasValue && vi != onlyVertex.Value) continue;
+            Vec3d cornerE1 = -edges[(j + 1) % 3];
+            Vec3d cornerE2 = edges[(j + 2) % 3];
+            double w = CornerAngle(cornerE1, cornerE2);
+            if (w < 1e-12) continue;
+            ProjectCurvatureTensor(t, b, faceNormal, fa, fm, fc, e1Basis[vi], e2Basis[vi], vertexNormals[vi],
+                out double pa, out double pm, out double pc);
+            accA[vi] += w * pa; accB[vi] += w * pm; accC[vi] += w * pc; accW[vi] += w;
+        }
+    }
+
+    /// <summary>
+    /// Replaces the tensor, normal and tangent frame of every vertex within
+    /// two rings of a border by an osculating-jet fit (Cazals &amp; Pouget 2005,
+    /// "Estimating differential quantities using polynomial fitting of
+    /// osculating jets", CAGD 22): a degree-2 Monge patch z = ½(A x² + 2B xy +
+    /// C y²) + D x + E y + F least-squares fitted to the vertex's 2- or 3-ring
+    /// in a frame that is re-aligned with the fitted normal and refitted, so
+    /// the residual slope D, E is negligible and (A, B, C) is the second
+    /// fundamental form in an orthonormal tangent frame. The fit is unbiased on
+    /// a half-disc neighbourhood, which the normal-difference scheme is not.
+    /// </summary>
+    private static void RepairBorder(MeshData mesh, Vec3d[] normals, Vec3d[] e1, Vec3d[] e2,
+        double[] accA, double[] accB, double[] accC, double[] accW)
+    {
+        var onBorder = mesh.BuildBoundaryVertexFlags();
+        bool any = false;
+        foreach (bool b in onBorder) if (b) { any = true; break; }
+        if (!any) return;
+
+        var nbrs = mesh.BuildVertexNeighbors();
+        int nv = mesh.VertexCount;
+        // graph distance to the border, up to 2
+        var dist = new int[nv];
+        for (int i = 0; i < nv; i++) dist[i] = onBorder[i] ? 0 : int.MaxValue;
+        for (int ring = 1; ring <= 2; ring++)
+            for (int i = 0; i < nv; i++)
+                if (dist[i] == int.MaxValue)
+                    foreach (int j in nbrs[i]) if (dist[j] == ring - 1) { dist[i] = ring; break; }
+
+        // Rings 1 and 2: jet fits (their neighbourhoods reach two rings into
+        // the interior, enough for a well-conditioned fit)
+        var fitted = new bool[nv];
+        for (int i = 0; i < nv; i++)
+        {
+            if (dist[i] != 1 && dist[i] != 2) continue;
+            if (FitJet(mesh, nbrs, i, normals[i], out Vec3d n, out Vec3d t1, out Vec3d t2, out double a, out double b, out double c))
+            {
+                normals[i] = n; e1[i] = t1; e2[i] = t2;
+                accA[i] = a; accB[i] = b; accC[i] = c; accW[i] = 1.0;
+                fitted[i] = true;
+            }
+        }
+
+        // The border row itself: a polynomial fitted to a strictly one-sided
+        // neighbourhood is ill-conditioned in the inward direction (a quartic
+        // put k2 = −0.37 on a cylinder), so the border row is extrapolated
+        // instead: each component of the world-frame shape operator S =
+        // k1 d1d1ᵀ + k2 d2d2ᵀ (and of the normal) of the fitted vertices in
+        // the 2-ring is fitted with a plane over the tangent coordinates and
+        // read off at the border vertex, then projected into the tangent plane
+        // of the extrapolated normal. Linear extrapolation over one ring is
+        // second-order accurate, the same order as the interior estimate.
+        var world = new Matrix3d[nv];
+        for (int i = 0; i < nv; i++)
+        {
+            if (!fitted[i]) continue;
+            double w = accW[i] > 1e-15 ? accW[i] : 1.0;
+            DiagonalizeShapeOperator(accA[i] / w, accB[i] / w, accC[i] / w, out double ka, out double kb, out double th);
+            Vec3d da = Math.Cos(th) * e1[i] + Math.Sin(th) * e2[i];
+            Vec3d db = -Math.Sin(th) * e1[i] + Math.Cos(th) * e2[i];
+            world[i] = ka * Matrix3d.OuterProduct(da, da) + kb * Matrix3d.OuterProduct(db, db);
+        }
+        for (int i = 0; i < nv; i++)
+        {
+            if (dist[i] != 0) continue;
+            // fitted vertices of the 2-ring, with local tangent coordinates in
+            // the frame of their mean normal
+            var ring = KRing(nbrs, i, 2);
+            var pts = new List<int>();
+            Vec3d nMean = Vec3d.Zero;
+            foreach (int j in ring) if (fitted[j]) { pts.Add(j); nMean = nMean + normals[j]; }
+            if (pts.Count == 0) continue;
+            nMean = nMean.Normalized();
+            ComputeTangentBasis(nMean, out Vec3d u, out Vec3d v);
+            Vec3d p = mesh.Vertices[i];
+            // least-squares plane f(x, y) = f0 + fx x + fy y per component; f0 is
+            // the value extrapolated to the border vertex (x = y = 0)
+            double sxx = 0, sxy = 0, syy = 0, sx = 0, sy = 0, s0 = pts.Count;
+            var comps = new double[pts.Count, 9]; // 6 tensor + 3 normal components
+            for (int q = 0; q < pts.Count; q++)
+            {
+                int j = pts[q];
+                Vec3d d = mesh.Vertices[j] - p;
+                double x = Vec3d.Dot(d, u), y = Vec3d.Dot(d, v);
+                sxx += x * x; sxy += x * y; syy += y * y; sx += x; sy += y;
+                var W = world[j];
+                comps[q, 0] = W[0, 0]; comps[q, 1] = W[0, 1]; comps[q, 2] = W[0, 2]; comps[q, 3] = W[1, 1]; comps[q, 4] = W[1, 2]; comps[q, 5] = W[2, 2];
+                comps[q, 6] = normals[j].X; comps[q, 7] = normals[j].Y; comps[q, 8] = normals[j].Z;
+            }
+            var f0 = new double[9];
+            bool planar = pts.Count >= 4;
+            if (planar)
+            {
+                var M = new double[3, 3] { { s0, sx, sy }, { sx, sxx, sxy }, { sy, sxy, syy } };
+                for (int comp = 0; comp < 9; comp++)
+                {
+                    var r = new double[3];
+                    for (int q = 0; q < pts.Count; q++)
+                    {
+                        Vec3d d = mesh.Vertices[pts[q]] - p;
+                        double x = Vec3d.Dot(d, u), y = Vec3d.Dot(d, v), val = comps[q, comp];
+                        r[0] += val; r[1] += val * x; r[2] += val * y;
+                    }
+                    if (!SolveDense(M, r, 3, out double[] sol)) { planar = false; break; }
+                    f0[comp] = sol[0];
+                }
+            }
+            if (!planar)
+                for (int comp = 0; comp < 9; comp++) { double m = 0; for (int q = 0; q < pts.Count; q++) m += comps[q, comp]; f0[comp] = m / pts.Count; }
+
+            var S = new Matrix3d(f0[0], f0[1], f0[2], f0[1], f0[3], f0[4], f0[2], f0[4], f0[5]);
+            Vec3d n = new Vec3d(f0[6], f0[7], f0[8]);
+            if (n.LengthSquared < 1e-20) continue;
+            n = n.Normalized();
+            ComputeTangentBasis(n, out Vec3d t1, out Vec3d t2);
+            Vec3d st1 = S * t1, st2 = S * t2;
+            normals[i] = n; e1[i] = t1; e2[i] = t2;
+            accA[i] = Vec3d.Dot(t1, st1); accB[i] = Vec3d.Dot(t1, st2); accC[i] = Vec3d.Dot(t2, st2); accW[i] = 1.0;
+        }
+
+    }
+
+    /// <summary>
+    /// Osculating-jet fit at one vertex over its k-ring (k = 2, or 3 when the
+    /// 2-ring is too small). Returns the fitted unit normal, an orthonormal
+    /// tangent frame and the second fundamental form (a = II(t1,t1), b =
+    /// II(t1,t2), c = II(t2,t2)) with the sign convention of the finite-
+    /// difference scheme (positive where the surface bends towards −n, i.e.
+    /// a sphere with outward normals has positive curvature).
+    /// </summary>
+    internal static bool FitJet(MeshData mesh, int[][] nbrs, int vertex, Vec3d normalGuess,
+        out Vec3d normal, out Vec3d t1, out Vec3d t2, out double a, out double b, out double c)
+    {
+        normal = normalGuess; t1 = default; t2 = default; a = b = c = 0;
+        // Degree-4 jet: the higher terms absorb the truncation of a plain
+        // quadric so the second-order coefficients converge at O(h³)
+        // (Cazals & Pouget 2005, Thm. 2) — a cubic still leaked ~1e-3 into
+        // the zero curvature of a cylinder on a one-sided neighbourhood.
+        const int NC = 15;
+        var ring = KRing(nbrs, vertex, 3);
+        if (ring.Count < 20) ring = KRing(nbrs, vertex, 4);
+        if (ring.Count < 18) return false;
+        // Gaussian weights centred on the vertex: the far points carry the
+        // truncation error of the polynomial, the near ones the curvature
+        double h = 0; foreach (int j in nbrs[vertex]) h += (mesh.Vertices[j] - mesh.Vertices[vertex]).Length;
+        h = nbrs[vertex].Length > 0 ? h / nbrs[vertex].Length : 1.0;
+        double sigma2 = 2.0 * (1.5 * h) * (1.5 * h);
+
+        Vec3d p = mesh.Vertices[vertex];
+        Vec3d n = normalGuess.LengthSquared > 1e-20 ? normalGuess.Normalized() : new Vec3d(0, 0, 1);
+        double A = 0, B = 0, C = 0;
+        for (int pass = 0; pass < 3; pass++)
+        {
+            ComputeTangentBasis(n, out t1, out t2);
+            // normal equations of z ≈ ½A x² + B xy + ½C y² + D x + E y + F
+            var M = new double[NC, NC];
+            var r = new double[NC];
+            var row = new double[NC];
+            foreach (int j in ring)
+            {
+                Vec3d q = mesh.Vertices[j] - p;
+                double x = Vec3d.Dot(q, t1), y = Vec3d.Dot(q, t2), z = Vec3d.Dot(q, n);
+                row[0] = 0.5 * x * x; row[1] = x * y; row[2] = 0.5 * y * y; row[3] = x; row[4] = y; row[5] = 1;
+                row[6] = x * x * x; row[7] = x * x * y; row[8] = x * y * y; row[9] = y * y * y;
+                row[10] = x * x * x * x; row[11] = x * x * x * y; row[12] = x * x * y * y; row[13] = x * y * y * y; row[14] = y * y * y * y;
+                double wgt = Math.Exp(-(x * x + y * y) / sigma2);
+                for (int u = 0; u < NC; u++) { r[u] += wgt * row[u] * z; for (int v = 0; v < NC; v++) M[u, v] += wgt * row[u] * row[v]; }
+            }
+            if (!SolveDense(M, r, NC, out double[] x6)) return false;
+            A = x6[0]; B = x6[1]; C = x6[2];
+            double D = x6[3], E = x6[4];
+            // re-align the frame with the fitted normal and refit
+            Vec3d nFit = (-D * t1 - E * t2 + n).Normalized();
+            double tilt = 1.0 - Vec3d.Dot(nFit, n);
+            n = nFit;
+            if (tilt < 1e-12) break;
+        }
+        ComputeTangentBasis(n, out t1, out t2);
+        normal = n;
+        // In the Monge frame the surface z = ½(A x² + …) bends towards +n where
+        // A > 0; the finite-difference scheme counts that as negative curvature
+        // (a sphere with outward normals: the surface bends away from n → positive).
+        a = -A; b = -B; c = -C;
+        return true;
+    }
+
+    private static List<int> KRing(int[][] nbrs, int vertex, int k)
+    {
+        var seen = new HashSet<int> { vertex };
+        var frontier = new List<int> { vertex };
+        var ring = new List<int> { vertex };
+        for (int d = 0; d < k; d++)
+        {
+            var next = new List<int>();
+            foreach (int v in frontier)
+                foreach (int w in nbrs[v])
+                    if (seen.Add(w)) { next.Add(w); ring.Add(w); }
+            frontier = next;
+        }
+        return ring;
+    }
+
+    /// <summary>Gaussian elimination with partial pivoting for a small dense system.</summary>
+    private static bool SolveDense(double[,] M, double[] r, int n, out double[] x)
+    {
+        x = new double[n];
+        var a = (double[,])M.Clone();
+        var b = (double[])r.Clone();
+        for (int col = 0; col < n; col++)
+        {
+            int piv = col;
+            for (int i = col + 1; i < n; i++) if (Math.Abs(a[i, col]) > Math.Abs(a[piv, col])) piv = i;
+            if (Math.Abs(a[piv, col]) < 1e-300) return false;
+            if (piv != col)
+            {
+                for (int k = 0; k < n; k++) { double t = a[col, k]; a[col, k] = a[piv, k]; a[piv, k] = t; }
+                double tb = b[col]; b[col] = b[piv]; b[piv] = tb;
+            }
+            for (int i = col + 1; i < n; i++)
+            {
+                double f = a[i, col] / a[col, col];
+                if (f == 0) continue;
+                for (int k = col; k < n; k++) a[i, k] -= f * a[col, k];
+                b[i] -= f * b[col];
+            }
+        }
+        for (int i = n - 1; i >= 0; i--)
+        {
+            double sum = b[i];
+            for (int k = i + 1; k < n; k++) sum -= a[i, k] * x[k];
+            if (Math.Abs(a[i, i]) < 1e-300) return false;
+            x[i] = sum / a[i, i];
+        }
+        return true;
     }
 
     /// <summary>

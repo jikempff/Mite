@@ -10,6 +10,8 @@
 //     and no icon fails to load.
 //  4. The section choice reaches the kernel (1.2.5's binding dropped it):
 //     a round bar sweeps as a tube and gets its own utilization.
+//  5. Layouts: the border web ends every curve on the border (no T-junctions),
+//     the fill still traces, the legend explains the viewport markers.
 //
 // Usage (needs a published site and a static server):
 //   dotnet publish src/Mite.Web -c Release -o /tmp/miteweb -p:RunAOTCompilation=false
@@ -63,6 +65,18 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   await page.click('#modes [data-mode=shaded]');
   await page.waitForTimeout(300);
   check(await page.$eval('#gh-mode', (e) => e.classList.contains('hidden')), 'mode strip hides for plain shading');
+  // 5. layouts: the default border web has every end on the border and no
+  //    T-junction; the evenly spaced fill still traces; the legend explains markers
+  await page.selectOption('#shape', 'catenoid'); await idle(180000);
+  await page.click('#nets [data-net=asymptotic]'); await idle(180000);
+  const web = await page.evaluate(() => ({ layout: window.__mite.layout, ends: window.__mite.netData?.endClasses || [], n: (window.__mite.netData?.countA || 0) + (window.__mite.netData?.countB || 0) }));
+  check(web.layout === 1 && web.n > 20 && web.ends.every((c) => c === 0), `border web: ${web.n} curves, every end on the border (${web.ends.filter((c) => c !== 0).length} not)`);
+  await page.click("#layouts [data-layout='0']"); await idle(180000);
+  const fill = await page.evaluate(() => ({ layout: window.__mite.layout, n: (window.__mite.netData?.countA || 0) + (window.__mite.netData?.countB || 0), legend: document.getElementById('end-legend').textContent }));
+  check(fill.layout === 0 && fill.n > 20, `evenly spaced fill traces (${fill.n} curves)`);
+  check(/seed/.test(fill.legend), 'marker legend names the seed square');
+  await page.click("#layouts [data-layout='1']"); await idle(180000);
+
   // 4. the section choice reaches the kernel: a round bar sweeps as a 24-sided tube
   await page.evaluate(() => { const S = window.__mite; const objs = S.viewer.curveObjects.filter((c) => c.family === 'A'); S.viewer.onPickCurve(objs[Math.floor(objs.length / 2)]); });
   check(await idle(120000), 'a picked lath is analysed');

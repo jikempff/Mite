@@ -67,9 +67,9 @@ const MODE_NOTES = {
 
 const NET_NOTES = {
   none: '',
-  asymptotic: 'Both families of asymptotic curves (zero normal curvature): laths bend only about their weak axis and twist — stand them upright. Only where K < 0 and the families cross widely enough (min crossing).',
+  asymptotic: 'Both families of asymptotic curves (zero normal curvature): laths bend only about their weak axis and twist — stand them upright. Only where K < 0 and the families cross widely enough (min crossing). Web: seeds exactly one spacing apart along the border (or the seed cross), every curve border to border; their distance elsewhere is what the surface dictates — asymptotic curves are never equidistant except on special surfaces (on a catenoid they separate as cosh z). Fill: the evenly spaced layout keeps the spacing by inserting and stopping curves, at the price of T-junctions.',
   conjugate: 'The two principal curvature line families: an approximate conjugate net, the layout for planar-quad panels. Undefined at umbilics.',
-  geodesic: 'One family of straightest geodesics grown sideways from the seed. Each new geodesic starts at the angle that keeps its strip closest to constant width (Jacobi field); flat laths follow geodesics without in-plane bending.',
+  geodesic: 'One family of straightest geodesics. Web: seeded every spacing along the border (or along the perpendicular geodesic through the seed), each run until it leaves the mesh — neighbours converge where K > 0 and diverge where K < 0 (Jacobi), so the strips are only even where the surface allows. Fill: grown sideways from the seed, each new geodesic starting at the angle that keeps its strip closest to constant width (Jacobi field), stopped where strips close. Flat laths follow geodesics without in-plane bending.',
   geodesicBoth: 'Two geodesic families crossing at the family angle at the seed, each grown with Jacobi start angles.',
   streamMax: 'Lines of maximum principal curvature, evenly spaced.',
   streamMin: 'Lines of minimum principal curvature, evenly spaced.',
@@ -78,11 +78,12 @@ const NET_NOTES = {
 };
 
 const END_CLASS = [
-  { name: 'on the border', color: null },
-  { name: 'at the K = 0 line', color: [0.26, 0.45, 0.80] },
-  { name: 'on a neighbour (T-junction)', color: [0.96, 0.62, 0.05] },
-  { name: 'step limit (closed surface)', color: [0.80, 0.15, 0.15] },
+  { name: 'on the border', color: null, what: 'the curve reached the mesh border — no marker' },
+  { name: 'at the K = 0 line', color: [0.26, 0.45, 0.80], what: 'the curve stopped where the asymptotic directions cease to exist (K ≥ 0 or the families cross below the minimum angle): there is no asymptotic curve beyond' },
+  { name: 'on a neighbour (T-junction)', color: [0.96, 0.62, 0.05], what: 'the curve stopped on a neighbouring curve because the two had come within the merge distance — only the evenly spaced fill does this; a web never merges' },
+  { name: 'step limit', color: [0.80, 0.15, 0.15], what: 'the curve hit the step budget without reaching a border (closed or very long surface)' },
 ];
+const SEED_COLOR = [0.96, 0.62, 0.05];
 
 // ---------------------------------------------------------------------------
 // State
@@ -97,7 +98,7 @@ const S = {
   loft: null, file: null,
   lath: null, selected: null, lathUtil: null,
   frame: null,
-  busy: 0, gen: 0, loading: false,
+  busy: 0, gen: 0, loading: false, layout: 1,
 };
 
 function busy(on, text) {
@@ -306,8 +307,9 @@ async function applyMode() {
 // Seed and direction
 // ---------------------------------------------------------------------------
 
-function seedRelevant() { return ['asymptotic', 'conjugate', 'geodesic', 'geodesicBoth', 'streamMax', 'streamMin', 'chebyshev'].includes(S.net); }
-function directionRelevant() { return ['geodesic', 'geodesicBoth', 'chebyshev'].includes(S.net); }
+// A web seeded from the border needs no seed point; the seed cross and the fill start there
+function seedRelevant() { return ['asymptotic', 'conjugate', 'geodesic', 'geodesicBoth', 'streamMax', 'streamMin', 'chebyshev'].includes(S.net) && !(S.layout === 1 && S.net !== 'chebyshev'); }
+function directionRelevant() { return ['geodesic', 'geodesicBoth', 'chebyshev'].includes(S.net) && seedRelevant(); }
 
 async function updateSeedHandle() {
   const v = S.viewer;
@@ -341,6 +343,7 @@ function netOptions() {
     seed: S.seed, direction: S.dir, edgeLength: pct(+$('edge').value), count: +$('count').value,
     angleDeg: +$('famangle').value, levels: +$('levels').value, field: $('isofield').value,
     minAngle: +$('minangle').value, fromBorder: $('fromborder').checked, borderAngle: +$('borderangle').value, jacobi: $('jacobi').checked,
+    layout: S.layout,
   };
 }
 
@@ -355,6 +358,7 @@ async function traceNet() {
   if (S.net === 'none') {
     v.clearCurves(); v.clearOverlay('ends'); S.netData = null;
     $('net-stats').textContent = ''; $('net-warn').classList.add('hidden'); $('hud-net').textContent = ''; $('quality').classList.add('hidden'); $('spacing-count').textContent = '';
+    $('end-legend')?.classList.add('hidden');
     await updateSeedHandle(); updateRecipe(); return;
   }
   if (!S.stats || S.loading) return; // the pending shape load traces the net itself
@@ -387,8 +391,26 @@ async function traceNet() {
   });
 }
 
+// The markers in the viewport, explained next to the numbers: only the
+// kinds that are actually there, plus the seed knob (which is always there
+// for the seeded nets). The quality card keeps the counts.
+function renderEndLegend(d) {
+  const el = $('end-legend'); if (!el) return;
+  const items = [];
+  if (d?.endClasses?.length) {
+    const counts = [0, 0, 0, 0];
+    for (const c of d.endClasses) counts[c] = (counts[c] || 0) + 1;
+    for (let k = 1; k < END_CLASS.length; k++) if (counts[k]) items.push(`<div><i style="background:${cssRgb(END_CLASS[k].color)}"></i><b>${counts[k]} end${counts[k] > 1 ? 's' : ''} ${END_CLASS[k].name}</b> — ${END_CLASS[k].what}</div>`);
+  }
+  if (seedRelevant()) items.push(`<div><i class="knob" style="background:${cssRgb(SEED_COLOR)}"></i><b>seed</b> — the orange square is where the net starts (shift-click the surface to move it)${directionRelevant() ? '; the knob on the ring sets the first direction (drag it)' : ''}</div>`);
+  if ($('crossings').checked && d?.crossings) items.push('<div><i style="background:#475569"></i><b>crossings</b> — where the two families meet (joints)</div>');
+  el.innerHTML = items.join('');
+  el.classList.toggle('hidden', items.length === 0);
+}
+
 function showEndMarkers() {
   const d = S.netData; const v = S.viewer;
+  renderEndLegend(d);
   if (!d || !d.endPoints?.length) { v.clearOverlay('ends'); return; }
   const pts = [], cols = [];
   for (let i = 0; i < d.endClasses.length; i++) {
@@ -436,7 +458,12 @@ function showNetParams() {
   document.querySelectorAll('#net-params [data-for]').forEach((el) => {
     el.classList.toggle('hidden', !el.dataset.for.split(' ').includes(S.net));
   });
-  $('borderangle-row').classList.toggle('hidden', !(directionRelevant() && $('fromborder').checked && S.net !== 'chebyshev'));
+  const geo = ['geodesic', 'geodesicBoth'].includes(S.net);
+  $('borderangle-row').classList.toggle('hidden', !(geo && ($('fromborder').checked || S.layout === 1)));
+  // the seed row only when a seed is used; "from the border" and Jacobi angles belong to the fill
+  const seedRow = $('seed-label')?.closest('.row'); if (seedRow) seedRow.classList.toggle('hidden', !seedRelevant());
+  $('fromborder').closest('.chk').classList.toggle('dim', S.layout !== 0);
+  $('jacobi').closest('.chk').classList.toggle('dim', S.layout !== 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -552,7 +579,7 @@ function updateRecipe() {
     let p = `${comp}: `;
     if (S.net === 'chebyshev') p += `L = ${fmt(o.edgeLength)}, Count = ${o.count}, Angle = ${o.angleDeg}°`;
     else if (S.net === 'isocurves') p += `field ${o.field}, ${o.levels} levels`;
-    else p += `AutoSpace = True, Spacing = ${fmt(o.spacing)}, Continuous = ${o.continuous}, Step = 0 (auto)`;
+    else p += `AutoSpace = True, Spacing = ${fmt(o.spacing)}, Layout = ${o.layout} (${["evenly spaced fill", "web from the border", "web from the seed cross"][o.layout]}), Continuous = ${o.continuous}, Step = 0 (auto)`;
     if (S.net === 'asymptotic') p += `, MinAngle = ${o.minAngle}`;
     if (S.seed >= 0) p += `, Seed = ${S.seed}`;
     if (directionRelevant()) p += `, Direction = (${o.direction.map((x) => x.toFixed(2)).join(', ')})`;
@@ -648,6 +675,15 @@ async function main() {
     $('upright').checked = S.net === 'asymptotic'; // asymptotic laths stand upright, geodesic laths lie flat
     traceNet();
   });
+  $('layouts').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $('layouts').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    S.layout = +b.dataset.layout;
+    $('continuous-row').classList.toggle('dim', S.layout !== 0);
+    showNetParams();
+    if (S.net !== 'none') traceNet();
+  });
+  $('continuous-row').classList.add('dim');
   document.querySelectorAll('#net-params input[type=range]').forEach((inp) => {
     inp.addEventListener('input', () => { if (inp.nextElementSibling?.tagName === 'OUTPUT' && !inp.nextElementSibling.id) inp.nextElementSibling.value = inp.value; updateSpacingReadout(); });
     inp.addEventListener('change', () => { if (S.net !== 'none') traceNet(); });

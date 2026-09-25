@@ -58,6 +58,20 @@ instead — with `Ba` (BorderAngle) that gives the helix layout of a vault.
 size / 12). Outputs both lath families and a quad net mesh whose edges all have
 length `L` — the flat-lattice kinematics of an elastic gridshell.
 
+### Layout: web or fill
+
+Every net component has a `Ly` (Layout) input at the bottom. `1` (web from
+the border) seeds curves exactly `Sp` apart along the mesh border and traces
+each one border to border — no curve ever stops on a neighbour, so every lath
+is continuous; `2` does the same from the crossing curve through the seed.
+Between seeds the spacing is what the surface dictates: asymptotic curves are
+never equidistant except on special surfaces (on a catenoid neighbours
+separate as cosh z), and geodesics converge where K > 0. `0` (the evenly
+spaced fill) keeps the spacing instead, by inserting curves where it opens and
+stopping them where it closes — those ends are T-junctions, which Net Joints
+and Gridshell Analysis handle, but the laths are shorter. Use the web for the
+structure you will build and the fill when you want a uniform density preview.
+
 ## 3. Check buildability (2 minutes)
 
 Wire any net's curves into **Lath Analysis** together with the same mesh:

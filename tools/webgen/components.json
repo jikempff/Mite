@@ -73,6 +73,14 @@
     "desc": "Cap on curves per family (AutoSpace, default 200)",
     "access": "item",
     "default": "200"
+   },
+   {
+    "name": "Layout",
+    "nick": "Ly",
+    "type": "Integer",
+    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
+    "access": "item",
+    "default": "0"
    }
   ],
   "outputs": [
@@ -285,6 +293,14 @@
     "desc": "Cap on curves per family (default 200)",
     "access": "item",
     "default": "200"
+   },
+   {
+    "name": "Layout",
+    "nick": "Ly",
+    "type": "Integer",
+    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
+    "access": "item",
+    "default": "0"
    }
   ],
   "outputs": [
@@ -639,6 +655,14 @@
     "desc": "Cap on the number of curves (AutoSpace, default 200)",
     "access": "item",
     "default": "200"
+   },
+   {
+    "name": "Layout",
+    "nick": "Ly",
+    "type": "Integer",
+    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
+    "access": "item",
+    "default": "0"
    }
   ],
   "outputs": [
@@ -2435,6 +2459,14 @@
     "desc": "Cap on the number of lines (AutoSpace, default 200)",
     "access": "item",
     "default": "200"
+   },
+   {
+    "name": "Layout",
+    "nick": "Ly",
+    "type": "Integer",
+    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
+    "access": "item",
+    "default": "0"
    }
   ],
   "outputs": [

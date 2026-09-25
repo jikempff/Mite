@@ -28,6 +28,7 @@ public class ConjugateNetComponent : MiteComponent
         pManager.AddPointParameter("SeedPoint", "P", "First seed as a point (overrides Seed)", GH_ParamAccess.item);
         pManager.AddIntegerParameter("MaxCurves", "Mx", "Cap on curves per family (default 200)", GH_ParamAccess.item, 200);
         pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
+        pManager.AddIntegerParameter("Layout", "Ly", "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates", GH_ParamAccess.item, 0);
         pManager[5].Optional = true;
     }
 
@@ -51,6 +52,8 @@ public class ConjugateNetComponent : MiteComponent
         DA.GetData(5, ref seedPoint);
         DA.GetData(6, ref maxCurves);
         DA.GetData(7, ref continuous);
+        int layout = 0;
+        DA.GetData(8, ref layout);
 
         var data = input.Data;
         var proj = new MeshProjection(data);
@@ -59,7 +62,8 @@ public class ConjugateNetComponent : MiteComponent
         var opts = new EvenlySpacedNet.Options
         {
             Spacing = spacing, StepSize = step, MaxSteps = maxSteps,
-            MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous
+            MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous,
+            Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
         };
 
         var net = ConjugateNet.Trace(data, firstSeed, opts);

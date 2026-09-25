@@ -12,6 +12,17 @@ namespace Mite.Core.Gridshells;
 /// accepted curve, and stop traces when they close in on an existing curve.
 /// Produces a complete, uniformly dense family from a single starting seed.
 /// </summary>
+/// <summary>How a family of curves is laid out over the surface (see <see cref="EvenlySpacedNet.Options.Layout"/>).</summary>
+public enum NetLayout
+{
+    /// <summary>Evenly spaced fill: curves inserted and stopped to keep the spacing (T-junctions).</summary>
+    Fill,
+    /// <summary>Web seeded every Spacing along the mesh border; every curve border to border.</summary>
+    WebBorder,
+    /// <summary>Web seeded every Spacing along the crossing curve through the seed; every curve border to border.</summary>
+    WebCross,
+}
+
 public static class EvenlySpacedNet
 {
     public class Options
@@ -75,6 +86,20 @@ public static class EvenlySpacedNet
         /// <summary>Angle (degrees) between the border geodesics and the inward normal of the border.</summary>
         public double BorderAngle { get; set; } = 0.0;
 
+        /// <summary>
+        /// Fill (default): evenly spaced curves grown sideways from the seed
+        /// (Jobard &amp; Lefer 1997), new curves inserted wherever the spacing
+        /// opens up and stopped where it closes — even spacing, T-junctions.
+        /// WebBorder / WebCross: a web — every curve runs border to border,
+        /// none stops on a neighbour, seeds every Spacing along the border
+        /// or along the other family's curve through the seed; the spacing
+        /// elsewhere is what the surface dictates. See <see cref="TraceFieldWeb"/>.
+        /// For geodesic families WebBorder seeds on the border edge nearest the
+        /// seed (as FromBorder) and WebCross along the geodesic perpendicular
+        /// to the first direction through the seed.
+        /// </summary>
+        public NetLayout Layout { get; set; } = NetLayout.Fill;
+
         /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
         public int SmoothingPasses { get; set; } = 10;
 
@@ -129,6 +154,9 @@ public static class EvenlySpacedNet
         Vec3d[]? secondaryDirs = null)
     {
         options ??= new Options();
+        if (options.Layout != NetLayout.Fill)
+            return TraceFieldWeb(mesh, dirs, mask, firstSeed, options, secondaryDirs,
+                options.Layout == NetLayout.WebCross ? WebSeeding.Cross : WebSeeding.Border);
         options.ReachedMaxCurves = false;
         options.Cancelled = false;
         var proj = new MeshProjection(mesh);
@@ -187,6 +215,112 @@ public static class EvenlySpacedNet
         return results;
     }
 
+    /// <summary>Where a web (<see cref="TraceFieldWeb"/>) takes its seeds from.</summary>
+    public enum WebSeeding
+    {
+        /// <summary>Every Spacing along the mesh border (all loops): complete coverage of a bordered patch.</summary>
+        Border,
+        /// <summary>Every Spacing along the other family's curve through the seed point (a seed cross).</summary>
+        Cross,
+    }
+
+    /// <summary>
+    /// A web instead of an evenly spaced fill: every curve runs border to
+    /// border (or closes) and no curve ever stops on a neighbour, so there
+    /// are no T-junctions and every lath is continuous. Seeds sit exactly
+    /// Spacing apart — measured perpendicular to the curves — along the seed
+    /// line (the border, or the other family's curve through the seed);
+    /// away from it the spacing is whatever the surface dictates, e.g. on a
+    /// catenoid adjacent asymptotic curves separate as cosh v. This is the
+    /// layout of built asymptotic gridshells (Schling, Hitrec, Barthel 2017;
+    /// Schling 2018, "Repetitive Structures", §4.3: curves started from a
+    /// guide curve and run to the edge) and of geodesic timber shells seeded
+    /// from the border (Pirazzi &amp; Weinand 2006). A seed whose curve would
+    /// fall within half a Spacing of an existing curve is skipped, which is
+    /// how a curve traced from one end of the border is not traced again
+    /// from its other end.
+    /// </summary>
+    public static List<Vec3d[]> TraceFieldWeb(
+        MeshData mesh, Vec3d[] dirs, bool[]? mask, int seed, Options? options = null,
+        Vec3d[]? secondaryDirs = null, WebSeeding seeding = WebSeeding.Border)
+    {
+        options ??= new Options();
+        options.ReachedMaxCurves = false;
+        options.Cancelled = false;
+        var proj = new MeshProjection(mesh);
+        var results = new List<Vec3d[]>();
+        Resolve(options, proj, out double spacing, out double step, out int maxSteps);
+        var registry = new PointRegistry(spacing);
+        double minLen = options.MinCurveLength > 0 ? options.MinCurveLength : 2.0 * spacing;
+
+        // seed lines
+        var seedLines = new List<Vec3d[]>();
+        if (seeding == WebSeeding.Border)
+        {
+            foreach (var loop in BoundaryLoops(mesh))
+            {
+                if (loop.Count < 2) continue;
+                var pts = new Vec3d[loop.Count + 1];
+                for (int i = 0; i < loop.Count; i++) pts[i] = mesh.Vertices[loop[i]];
+                pts[loop.Count] = pts[0];
+                seedLines.Add(pts);
+            }
+        }
+        if (seeding == WebSeeding.Cross || seedLines.Count == 0)
+        {
+            // the other family's curve through the seed (closed meshes have no
+            // border, so they always seed from a cross)
+            int s0 = seed >= 0 && seed < mesh.VertexCount ? seed : DefaultSeed(mesh, mask, dirs, secondaryDirs);
+            if (s0 < 0 || (mask != null && !mask[s0])) return results;
+            var other = secondaryDirs ?? dirs;
+            var cross = FieldTracer.TraceBoth(proj, mesh.Vertices[s0], s0, other, secondaryDirs == null ? null : dirs, mask,
+                step, maxSteps, null, options.MinFieldMagnitude);
+            if (cross.Length < 2) return results;
+            seedLines.Add(cross);
+        }
+
+        foreach (var line in seedLines)
+        {
+            if (options.ShouldCancel?.Invoke() == true) { options.Cancelled = true; break; }
+            // walk the seed line; the next seed is placed when the arc length
+            // since the last one reaches Spacing / sin(angle between the field
+            // and the seed line), so the perpendicular distance is Spacing
+            double due = 0.5 * spacing;
+            double acc = 0;
+            for (int i = 0; i + 1 < line.Length; i++)
+            {
+                Vec3d a = line[i], b = line[i + 1];
+                double l = (b - a).Length;
+                if (l < 1e-15) continue;
+                Vec3d tb = (b - a) / l;
+                while (acc + l >= due)
+                {
+                    if (results.Count >= options.MaxCurves) { options.ReachedMaxCurves = true; return results; }
+                    double t = (due - acc) / l;
+                    Vec3d p = a + t * (b - a);
+                    var hit = proj.ClosestPoint(p, proj.NearestVertexGlobal(p));
+                    int v = hit.NearestVertex;
+                    Vec3d d = dirs[v];
+                    double sinA = d.LengthSquared > 1e-20 ? Vec3d.Cross(d.Normalized(), tb).Length : 1.0;
+                    double along = spacing / Math.Max(0.2, sinA);
+                    due += along;
+                    if (mask != null && !mask[v]) continue;
+                    if (d.LengthSquared < 1e-20) continue;
+                    if (registry.HasPointWithin(hit.Point, 0.7 * spacing)) continue; // a curve already passes here (traced from the other end of the border)
+                    var curve = FieldTracer.TraceBoth(proj, hit.Point, v, dirs, secondaryDirs, mask,
+                        step, maxSteps, null, options.MinFieldMagnitude);
+                    if (curve.Length < 3 || ArcLength(curve) < minLen) continue;
+                    curve = CurveFairing.SmoothOnSurface(proj, curve, options.SmoothingPasses);
+                    results.Add(curve);
+                    registry.AddLine(curve, 0.02 * spacing);
+                }
+                acc += l;
+            }
+        }
+        options.ResolvedSpacing = spacing;
+        return results;
+    }
+
     /// <summary>
     /// Fills the surface with evenly-spaced geodesics of one family. Each new
     /// geodesic starts one spacing beside an existing one, heading in the
@@ -226,7 +360,57 @@ public static class EvenlySpacedNet
         Func<Vec3d[], int, Vec3d, Vec3d, Vec3d, double>? seedAngle = K == null ? null :
             (parent, index, point, tangent, side) => JacobiStartAngle(proj, K, parent, index, spacing, maxAngle);
 
-        var border = options.FromBorder ? BorderSeeds(proj, spacing, options.BorderAngle * Math.PI / 180.0, proj.Mesh.Vertices[firstSeed]) : null;
+        bool web = options.Layout != NetLayout.Fill;
+        var border = options.FromBorder || options.Layout == NetLayout.WebBorder
+            ? BorderSeeds(proj, spacing, options.BorderAngle * Math.PI / 180.0, proj.Mesh.Vertices[firstSeed], wholeBorder: options.Layout == NetLayout.WebBorder) : null;
+        if (web && options.Layout == NetLayout.WebCross)
+        {
+            // seeds every Spacing along the geodesic through the seed perpendicular to the first direction
+            Vec3d across = Vec3d.Cross(proj.ClosestPoint(proj.Mesh.Vertices[firstSeed], firstSeed).SmoothNormal, firstDir);
+            var perp = GeodesicCurves.TraceBothFrom(proj, proj.Mesh.Vertices[firstSeed], firstSeed, across.Normalized(), step, maxSteps, null, out _, out _);
+            var crossSeeds = new List<(Vec3d, int, Vec3d)>();
+            double acc = 0, due = 0; int h = firstSeed; Vec3d d = firstDir.Normalized();
+            // transport the direction along the perpendicular so each seed starts parallel to the first geodesic
+            int i0 = 0; double best = double.MaxValue;
+            for (int i = 0; i < perp.Length; i++) { double dd = (perp[i] - proj.Mesh.Vertices[firstSeed]).LengthSquared; if (dd < best) { best = dd; i0 = i; } }
+            foreach (int sign in new[] { 1, -1 })
+            {
+                acc = 0; due = sign == 1 ? 0 : spacing; d = firstDir.Normalized(); h = firstSeed;
+                for (int i = i0; i + sign >= 0 && i + sign < perp.Length; i += sign)
+                {
+                    Vec3d a = perp[i], b = perp[i + sign];
+                    var ha = proj.ClosestPoint(a, h); var hb = proj.ClosestPoint(b, ha.NearestVertex); h = hb.NearestVertex;
+                    d = GeodesicCurves.Transport(d, ha.SmoothNormal, hb.SmoothNormal);
+                    double l = (b - a).Length;
+                    while (acc + l >= due)
+                    {
+                        double t = (due - acc) / Math.Max(l, 1e-300);
+                        crossSeeds.Add((a + t * (b - a), h, d));
+                        due += spacing;
+                    }
+                    acc += l;
+                }
+            }
+            border = crossSeeds;
+        }
+        if (web && border != null && border.Count > 0)
+        {
+            double minLen = options.MinCurveLength > 0 ? options.MinCurveLength : 2.0 * spacing;
+            foreach (var (pos, hint, dir) in border)
+            {
+                if (results.Count >= options.MaxCurves) { options.ReachedMaxCurves = true; break; }
+                if (options.ShouldCancel?.Invoke() == true) { options.Cancelled = true; break; }
+                if (registry.HasPointWithin(pos, 0.7 * spacing)) continue;
+                var line = options.Layout == NetLayout.WebCross
+                    ? GeodesicCurves.TraceBothFrom(proj, pos, hint, dir, step, maxSteps, null, out _, out _)
+                    : GeodesicCurves.TraceOneFrom(proj, pos, hint, dir, step, maxSteps, null, out _, out _).ToArray();
+                if (line.Length < 3 || ArcLength(line) < minLen) continue;
+                line = CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses);
+                results.Add(line);
+                registry.AddLine(line, 0.02 * spacing);
+            }
+            return results;
+        }
         if (border != null && border.Count > 0)
         {
             double thinGap = Math.Max(0.5 * dtest, 0.02 * spacing);
@@ -317,12 +501,25 @@ public static class EvenlySpacedNet
     /// (a dome rim) contributes the third of its length centred nearest the
     /// seed. Empty on closed meshes.
     /// </summary>
-    internal static List<(Vec3d pos, int hint, Vec3d dir)> BorderSeeds(MeshProjection proj, double spacing, double angle, Vec3d near)
+    internal static List<(Vec3d pos, int hint, Vec3d dir)> BorderSeeds(MeshProjection proj, double spacing, double angle, Vec3d near, bool wholeBorder = false)
     {
         var mesh = proj.Mesh;
         var loops = BoundaryLoops(mesh);
         var seeds = new List<(Vec3d, int, Vec3d)>();
         if (loops.Count == 0) return seeds;
+        if (wholeBorder)
+        {
+            // a web: every loop, its whole length (each seed is a full geodesic
+            // and duplicates are skipped by the caller, so opposite sides do
+            // not collide the way growing fills do)
+            foreach (var l in loops)
+            {
+                if (l.Count < 2) continue;
+                var idx = new List<int>(l) { l[0] };
+                SeedAlong(proj, idx, spacing, angle, seeds);
+            }
+            return seeds;
+        }
 
         // pick the loop containing the boundary vertex nearest 'near'
         List<int> loop = loops[0];
@@ -372,7 +569,15 @@ public static class EvenlySpacedNet
             edge = idx;
         }
         if (edge.Count < 2) return seeds;
+        SeedAlong(proj, edge, spacing, angle, seeds);
+        return seeds;
+    }
 
+    /// <summary>Seeds every spacing along a run of boundary vertices, heading inward at the given angle from the inward normal.</summary>
+    private static void SeedAlong(MeshProjection proj, List<int> edge, double spacing, double angle, List<(Vec3d, int, Vec3d)> seeds)
+    {
+        var mesh = proj.Mesh;
+        int count0 = seeds.Count;
         double len = 0;
         for (int i = 0; i + 1 < edge.Count; i++) len += (mesh.Vertices[edge[i + 1]] - mesh.Vertices[edge[i]]).Length;
         int count = Math.Max(1, (int)Math.Floor(len / spacing));
@@ -383,7 +588,7 @@ public static class EvenlySpacedNet
             Vec3d a = mesh.Vertices[edge[i]], b = mesh.Vertices[edge[i + 1]];
             double l = (b - a).Length;
             if (l < 1e-15) continue;
-            while (accum + l >= target && seeds.Count < count)
+            while (accum + l >= target && seeds.Count - count0 < count)
             {
                 double t = (target - accum) / l;
                 Vec3d p = a + t * (b - a);
@@ -403,7 +608,6 @@ public static class EvenlySpacedNet
             }
             accum += l;
         }
-        return seeds;
     }
 
     private static double LoopLength(MeshData mesh, List<int> loop)

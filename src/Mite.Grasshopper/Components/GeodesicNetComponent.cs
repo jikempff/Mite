@@ -34,6 +34,7 @@ public class GeodesicNetComponent : MiteComponent
         pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
         pManager.AddBooleanParameter("FromBorder", "Bd", "AutoSpace: start the family on the border edge nearest the first seed (geodesics leave it every Spacing at BorderAngle from the inward normal) instead of growing sideways from the seed alone. Good on vaults and long patches; ignored on closed meshes", GH_ParamAccess.item, false);
         pManager.AddNumberParameter("BorderAngle", "Ba", "FromBorder: angle in degrees between the border geodesics and the inward normal of the border (0 = perpendicular to the edge)", GH_ParamAccess.item, 0.0);
+        pManager.AddIntegerParameter("Layout", "Ly", "Layout of the family: 0 = evenly spaced fill (new geodesics beside existing ones, stopped where they converge; T-junctions), 1 = web from the border edge nearest the seed (every geodesic runs until it leaves the mesh, seeds every Spacing along the edge at BorderAngle), 2 = web from the seed cross (seeds every Spacing along the geodesic through the seed perpendicular to Direction, each parallel-transported). Webs never merge; geodesics converge where K > 0 and diverge where K < 0 (Jacobi), so their spacing away from the seed line is what the surface dictates", GH_ParamAccess.item, 0);
         pManager[1].Optional = true;
         pManager[7].Optional = true;
     }
@@ -64,6 +65,8 @@ public class GeodesicNetComponent : MiteComponent
         bool fromBorder = false; double borderAngle = 0;
         DA.GetData(10, ref fromBorder);
         DA.GetData(11, ref borderAngle);
+        int layout = 0;
+        DA.GetData(12, ref layout);
 
         var data = input.Data;
         var proj = new MeshProjection(data);
@@ -104,7 +107,8 @@ public class GeodesicNetComponent : MiteComponent
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
                 MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous,
-                FromBorder = fromBorder, BorderAngle = borderAngle
+                FromBorder = fromBorder, BorderAngle = borderAngle,
+                Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
             };
             lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], opts);
             ReportTracing(opts, "Geodesics");

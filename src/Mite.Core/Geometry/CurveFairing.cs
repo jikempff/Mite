@@ -17,7 +17,7 @@ public static class CurveFairing
     public static Vec3d[] SmoothOnSurface(
         MeshProjection proj, Vec3d[] line, int iterations = 10, double strength = 0.5)
     {
-        if (line.Length < 3 || iterations <= 0) return line;
+        if (line.Length < 5 || iterations <= 0) return line;
 
         bool closed = (line[0] - line[line.Length - 1]).LengthSquared < 1e-24;
         int n = line.Length;
@@ -51,9 +51,14 @@ public static class CurveFairing
         int n = pts.Length;
         Array.Copy(pts, next, n);
 
-        // Distinct movable points: 0..n-2 for closed loops, 1..n-2 for open lines
-        int first = closed ? 0 : 1;
-        for (int i = first; i <= n - 2; i++)
+        // Distinct movable points: 0..n-2 for closed loops; open lines keep
+        // their two end points AND the points next to them, so the end
+        // segments (the exact border exits of the tracer) keep their
+        // direction — smoothing up to a fixed end pulled the last interior
+        // point off the trend and left an 8° hook on faceted borders.
+        int first = closed ? 0 : 2;
+        int last = closed ? n - 2 : n - 3;
+        for (int i = first; i <= last; i++)
         {
             Vec3d prev = pts[i == 0 ? n - 2 : i - 1];
             Vec3d nxt = pts[i + 1];

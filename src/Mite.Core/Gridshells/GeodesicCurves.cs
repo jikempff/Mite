@@ -168,8 +168,8 @@ public static class GeodesicCurves
             if (FieldTracer.LeftMesh(proj, pos, intended, hit, stepSize, out Vec3d exit))
             {
                 Vec3d clampTravel = exit - pos;
-                if (Vec3d.Dot(clampTravel, dMid) > 0 && clampTravel.LengthSquared > 1e-6 * stepSize * stepSize)
-                    points.Add(exit);
+                if (clampTravel.LengthSquared > 1e-6 * stepSize * stepSize && Vec3d.Dot(clampTravel.Normalized(), dMid) > 0.8)
+                    points.Add(exit); // ahead and within 37° of the travel: never a crawl along the border
                 break;
             }
 

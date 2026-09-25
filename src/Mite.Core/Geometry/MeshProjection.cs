@@ -111,9 +111,24 @@ public class MeshProjection
         exit = hit.Point;
         if (hit.Face < 0) return false;
 
+        // The step chord from → to floats above the surface (and the boundary
+        // edge is a chord under it), so the closest points of the two skew
+        // segments in 3D land up to a tenth of a step beside the trajectory —
+        // enough for a visible hook after fairing. Intersect them in the
+        // tangent plane of the hit instead: the exit is where the projected
+        // step crosses the projected edge, i.e. exactly on the curve's line
+        // of travel. The 3D closest point remains the fallback for steps
+        // that do not cross an edge in projection.
+        Vec3d n = hit.Normal.LengthSquared > 1e-20 ? hit.Normal.Normalized() : hit.SmoothNormal.Normalized();
+        Vec3d ax = to - from; ax = ax - Vec3d.Dot(ax, n) * n;
+        if (ax.LengthSquared < 1e-30) return false;
+        ax = ax.Normalized();
+        Vec3d ay = Vec3d.Cross(n, ax);
+        double stepLen = Vec3d.Dot(to - from, ax);
+
         var seen = new HashSet<long>();
-        double best = double.MaxValue;
-        bool found = false;
+        double best = double.MaxValue, bestT = double.MaxValue;
+        bool found = false, crossed = false;
         var face = _mesh.Faces[hit.Face];
         for (int c = 0; c < 3; c++)
         {
@@ -125,8 +140,26 @@ public class MeshProjection
                     int a = f[i], b = f[(i + 1) % 3];
                     long k = EdgeKey(a, b);
                     if (!_boundaryEdges.Contains(k) || !seen.Add(k)) continue;
-                    double d = SegmentQueries.SegmentSegment(from, to, _mesh.Vertices[a], _mesh.Vertices[b],
-                        out _, out _, out _, out Vec3d q);
+                    Vec3d A = _mesh.Vertices[a], B = _mesh.Vertices[b];
+                    // 2D intersection in the tangent plane: from + t·ax·stepLen meets A + u (B − A)
+                    double ax0 = Vec3d.Dot(A - from, ax), ay0 = Vec3d.Dot(A - from, ay);
+                    double bx0 = Vec3d.Dot(B - from, ax), by0 = Vec3d.Dot(B - from, ay);
+                    double dy = by0 - ay0;
+                    if (Math.Abs(dy) > 1e-15)
+                    {
+                        double u = -ay0 / dy; // where the edge crosses the travel line (ay = 0)
+                        if (u >= -1e-9 && u <= 1 + 1e-9)
+                        {
+                            double t = (ax0 + u * (bx0 - ax0)) / Math.Max(stepLen, 1e-300);
+                            // ahead of the start (allow a hair behind for a start on the edge) and within ~2 steps
+                            if (t > -0.05 && t < 2.0 && t < bestT)
+                            {
+                                bestT = t; exit = A + Math.Max(0.0, Math.Min(1.0, u)) * (B - A); found = true; crossed = true;
+                            }
+                        }
+                    }
+                    if (crossed) continue;
+                    double d = SegmentQueries.SegmentSegment(from, to, A, B, out _, out _, out _, out Vec3d q);
                     if (d < best) { best = d; exit = q; found = true; }
                 }
             }

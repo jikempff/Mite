@@ -182,6 +182,20 @@ remains the self-test review page.
 - [x] App: boot race fixed (shape change during the first load traced the
       default net at the placeholder size and hung on "tracing…");
       `tools/web-smoke.js` is the headless regression — 2026-09-25.
+- [x] Accuracy at the border: jet-fitted rings and an extrapolated border row
+      replace the one-sided normal differences (8° → 0.7° direction error on
+      a catenoid rim; traced curves 0.35 → 0.01–0.03 edge from the closed
+      form); tangent-plane border exits, end-preserving fairing — 2026-09-25.
+- [x] Web layout (border / seed cross) on all four net components and the
+      app: every curve border to border, no T-junctions, seeds exactly
+      Spacing apart; verified on the catenoid against u ∓ v = const and on
+      the cylinder (parallel helices) — 2026-09-25.
+- [ ] Interior field accuracy: tensor (not vector) interpolation inside the
+      faces and RK4 stepping would take the remaining 0.1° / 0.01-edge
+      interior error down another order; only worth it on coarse meshes.
+- [ ] Web coverage: seeds along a user curve (Schling's guide curve) and
+      automatic extra seed lines where a cross web leaves gaps (the catenoid's
+      band).
 - [x] Profile applied to every curve *and every check*: Lath Analysis and
       Gridshell Analysis take Shape / Section; `LathProfile.SectionProperties`
       (rectangle, round, custom polygon) feeds strain fibres, twist length,
