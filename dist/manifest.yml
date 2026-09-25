@@ -10,7 +10,7 @@ description: >-
   and conjugate nets with evenly-spaced auto-seeding, plus shortest geodesic
   paths. Lath buildability analysis with bending and twist strain checks and
   frame analysis of the whole network. Turn nets into buildable gridshells:
-  sweep laths with rectangular profiles (flat or upright), cut half-lap or
+  sweep laths with rectangular, round or custom profiles (flat or upright), cut half-lap or
   egg-crate joints at every crossing, unroll flat cutting patterns, segment to
   stock lengths with splice joints, label laths and export the net topology.
   Mesh healing, pull-to-mesh and one-step colour maps.

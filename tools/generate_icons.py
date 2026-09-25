@@ -10,7 +10,8 @@ lattice on a light patch for grids, and a soft drop shadow (+1, +1, blur 2,
 ~30%) applied in raster. Families: Surfaces/curvature amber (#FFC200-#FF7900,
 outline #6E0000), Meshes/form finding orange-red (#FF9E05-#D72000, #8E1500),
 Math/analysis green (#00C860, #024F00), Parameters/util greys (#C5C5C5-#454545),
-fabrication in a timber brown of the same warm range.
+fabrication in a timber brown of the same warm range. The tab icon is the
+Mite logo (icon.png) reduced to 24 px.
 
 Drawn at 8x and downsampled with Lanczos. Run: python3 tools/generate_icons.py
 """
@@ -501,17 +502,24 @@ def icon_mesh_colour_map():
 
 
 def icon_tab():
-    """Tab icon: the K mark of kempffsele.me on an amber tile."""
-    img, d = canvas()
-    fill_poly(img, [P(2, 2), P(22, 2), P(22, 22), P(2, 22)], "surface")
-    # favicon polygon (566.9 box) scaled into 4..20
-    k = [(311.8, 332.4), (311.8, 460.5), (255.1, 460.5), (255.1, 106.1), (311.8, 106.1), (311.8, 234.2), (422.7, 170.2), (451.1, 219.3), (340.2, 283.3), (451.1, 347.3), (422.7, 396.4)]
-    sc = 16.0 / 566.9
-    poly = [P(4 + x * sc, 4 + y * sc) for x, y in k]
-    ink = (25, 25, 25, 255)
-    d.polygon(poly, fill=ink)
-    d.rectangle([P(4 + 141.7 * sc, 4 + 254.9 * sc), P(4 + 198.4 * sc, 4 + 311.6 * sc)], fill=ink)
-    finish(img, "Mite_Tab")
+    """Tab icon: the Mite logo (black hexagon tile with the white asymptotic knot,
+    ../icon.png) reduced to 24 px. The knot's strokes are dilated first so they
+    still read at this size instead of blurring into grey."""
+    src = Image.open(os.path.join(os.path.dirname(__file__), "..", "icon.png")).convert("RGBA")
+    src = src.crop(src.getchannel("A").getbbox())
+    r, g, b, a = src.split()
+    solid = a.point(lambda v: 255 if v > 128 else 0)
+    white = Image.composite(r.point(lambda v: 255 if v > 128 else 0), Image.new("L", src.size, 0), solid)
+    white = Image.composite(white.filter(ImageFilter.MaxFilter(9)), Image.new("L", src.size, 0), solid)
+    tile = Image.new("RGBA", src.size, (0, 0, 0, 0))
+    tile.paste(Image.new("RGBA", src.size, (15, 15, 15, 255)), (0, 0), solid)
+    tile.paste(Image.new("RGBA", src.size, (255, 255, 255, 255)), (0, 0), white)
+    inner = SIZE - 1
+    sc = inner / max(src.size)
+    im = tile.resize((max(1, round(src.width * sc)), max(1, round(src.height * sc))), Image.LANCZOS)
+    out = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    out.paste(im, ((SIZE - im.width) // 2, (SIZE - im.height) // 2), im)
+    out.save(os.path.join(OUT, "Mite_Tab.png"))
 
 
 ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics,
