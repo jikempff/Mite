@@ -42,7 +42,6 @@ public class MitePriority : GH_AssemblyPriority
             global::Grasshopper.Instances.ComponentServer.AddCategoryIcon("Mite", new Bitmap(stream));
         }
         global::Grasshopper.Instances.ComponentServer.AddCategorySymbolName("Mite", 'M');
-        global::Grasshopper.Instances.ComponentServer.AddCategoryShortName("Mite", "Mite");
         return GH_LoadingInstruction.Proceed;
     }
 }
