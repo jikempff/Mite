@@ -98,6 +98,9 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       vertices of valence 3, dense border rows).
 - [ ] Dirty meshes for Mesh Cleanup: unwelded seams, duplicate faces,
       flipped faces, slivers, millimetre scale, far from origin.
+- [x] Marching tetrahedra and the Enneper chart moved into the core
+      (`Geometry/ImplicitSurface.cs`, `AnalyticShapes.EnneperPoint`); TestMeshes
+      delegates to them — 2026-09-25.
 - [x] Analytic typologies as code for the web app: `Geometry/AnalyticShapes.cs`
       (saddle, sphere, dome, ellipsoid, torus, hyperboloid, monkey saddle,
       catenoid, Enneper, vault, cone, annulus, wave) — 1.2.2. Open: unify
@@ -168,8 +171,12 @@ remains the self-test review page.
       (1.2.2).
 - [ ] App: lath segmentation, joints and nesting sheet (material %).
 - [ ] App: planarization and Chebyshev angle map; isocurve labels.
-- [ ] App: the kinetic "fold" slider of E, and the Lath Sweep section shapes
-      (rectangle / round / custom) in the lath views.
+- [x] App: catalogue extended with n-fold Enneper, the bilinear ruled patch,
+      Schwarz D and gyroid (nodal form → marching tetrahedra → relaxation);
+      Lath block section choice (rectangle / round); favicon, touch icon and
+      Open Graph share image — 2026-09-25.
+- [ ] App: the kinetic "fold" slider of E; custom section curves in the lath
+      views; a "buildable" summary that waits for the colouring pass.
 - [ ] Bench to reuse the app's typologies once the shape generators are
       unified (A).
 

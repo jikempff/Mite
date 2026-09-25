@@ -224,6 +224,31 @@ public class MinimalSurfaceCatalogueTests
     }
 
     [Fact]
+    public void AnalyticShapes_CatalogueNames_BuildAnticlasticOrMinimalPatches()
+    {
+        // The web app and the bench reach the catalogue through AnalyticShapes.Build
+        foreach (var (name, p1, p2, p3) in new[] { ("enneper3", 3.0, 0.9, 0.0), ("ruled", 2.0, 0.8, 0.3), ("schwarzd", 1.0, 16.0, 20.0), ("gyroid", 1.0, 16.0, 20.0) })
+        {
+            var mesh = AnalyticShapes.Build(name, p1, p2, p3, 40);
+            Assert.True(mesh.VertexCount > 300 && mesh.FaceCount > 500, $"{name}: {mesh.VertexCount} vertices, {mesh.FaceCount} faces");
+            var boundary = mesh.BuildBoundaryVertexFlags();
+            var K = GaussianCurvature.Compute(mesh);
+            var H = MeanCurvature.Compute(mesh).Values;
+            var pc = PrincipalCurvature.Compute(mesh);
+            var interior = Enumerable.Range(0, mesh.VertexCount).Where(v => !boundary[v]).ToArray();
+            int positive = interior.Count(v => K[v] > 1e-6);
+            Assert.True(positive == 0, $"{name}: K should be ≤ 0 everywhere, {positive} of {interior.Length} interior vertices positive");
+            if (name != "ruled")
+            {
+                double meanH = interior.Average(v => Math.Abs(H[v])), meanK1 = interior.Average(v => Math.Abs(pc.K1[v]));
+                Assert.True(meanH < 0.08 * meanK1, $"{name}: should be (near) minimal, mean |H| {meanH:F4} vs k1 {meanK1:F3}");
+            }
+        }
+        Assert.Contains("schwarzd", AnalyticShapes.Names);
+        Assert.Throws<ArgumentException>(() => AnalyticShapes.Build("batwing"));
+    }
+
+    [Fact]
     public void SchwarzD_NodalPatchRelaxesToAMinimalSurface_AndCarriesAnAsymptoticNet()
     {
         var nodal = TestMeshes.CreateSchwarzD(0, Math.PI, 24, relaxIterations: 0);

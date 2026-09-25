@@ -26,6 +26,14 @@ const SHAPES = {
     note: 'Minimal surface: H = 0 so k1 = −k2 and the asymptotic families cross at exactly 90°, the ideal asymptotic gridshell.' },
   enneper: { label: 'Enneper patch (H = 0)', params: [['extent', 0.5, 1.6, 1.2, 0.05]],
     note: 'Minimal surface with a self-intersecting far field; keep the extent below ~1.4 for a clean patch.' },
+  enneper3: { label: 'Enneper, n-fold (H = 0)', params: [['folds', 2, 5, 3, 1], ['radius', 0.4, 1.2, 0.9, 0.05]],
+    note: 'Higher-order Enneper surfaces (Weierstrass g = wⁿ⁻¹). The centre is a flat point where the asymptotic cross turns by 180° per loop, so with 3 or more folds the two families are one family globally and some laths end on their neighbours as T-junctions.' },
+  ruled: { label: 'Ruled patch (bilinear)', params: [['size', 1, 4, 2, 0.1], ['twist', 0.1, 2, 0.8, 0.05], ['skew', 0, 1, 0.3, 0.05]],
+    note: 'A skew quad spanned bilinearly: doubly ruled, and the two families of straight iso-lines are exactly its asymptotic curves — every asymptotic lath comes out straight.' },
+  schwarzd: { label: 'Schwarz D patch (TPMS)', params: [['extent', 0.5, 2, 1, 0.1], ['cells', 12, 40, 24, 2], ['relax', 0, 60, 30, 5]],
+    note: 'The diamond surface of Schling\'s asymptotic pavilion: cut from its nodal approximation and relaxed to a soap film (H ≈ 0), so the asymptotic families cross at ~90°. Slower at high cell counts.' },
+  gyroid: { label: 'Gyroid patch (TPMS)', params: [['extent', 0.5, 2, 1, 0.1], ['cells', 12, 40, 24, 2], ['relax', 0, 60, 30, 5]],
+    note: 'Gyroid patch from its nodal approximation, relaxed to H ≈ 0. Like the Schwarz D, a minimal surface with an asymptotic net of nearly right angles.' },
   wave: { label: 'Wave  z = A·sin(fx)·cos(fy)', params: [['size', 1, 4, 2, 0.1], ['amplitude', 0.05, 0.8, 0.3, 0.01], ['frequency', 0.5, 4, 2, 0.1]],
     note: 'Mixed curvature: elliptic caps and anticlastic saddles between them, separated by K = 0 lines where asymptotic curves fade out.' },
   sphere: { label: 'Sphere', params: [['radius', 0.5, 2, 1, 0.05]],
@@ -399,7 +407,7 @@ function showNetParams() {
 // ---------------------------------------------------------------------------
 
 function lathOpts() {
-  return { width: pct(+$('width').value), thickness: pct(+$('thick').value), upright: $('upright').checked, maxStrain: +$('strain').value / 100 };
+  return { width: pct(+$('width').value), thickness: pct(+$('thick').value), upright: $('upright').checked, maxStrain: +$('strain').value / 100, section: +($('section')?.value ?? 0) };
 }
 
 async function analyseSelected() {
@@ -407,7 +415,7 @@ async function analyseSelected() {
   if (!sel) return;
   const o = lathOpts();
   const gen = S.gen;
-  const L = await K('lath', sel.points.flat(), o.width, o.thickness, o.upright, o.maxStrain, $('solid').checked);
+  const L = await K('lath', sel.points.flat(), o.width, o.thickness, o.upright, o.maxStrain, $('solid').checked, o.section);
   if (gen !== S.gen || S.selected !== sel) return;
   S.lath = L;
   $('lath-result').classList.remove('hidden');
@@ -426,7 +434,7 @@ async function colourByUtilization() {
   const gen = S.gen, data = S.netData;
   const utils = [];
   for (const pts of [...data.a, ...data.b]) {
-    const r = await K('lath', pts.flat(), o.width, o.thickness, o.upright, o.maxStrain, false);
+    const r = await K('lath', pts.flat(), o.width, o.thickness, o.upright, o.maxStrain, false, o.section);
     if (gen !== S.gen || S.netData !== data) return;
     utils.push(r.maxUtilization);
   }
@@ -514,6 +522,7 @@ function updateRecipe() {
   if (S.lath) {
     const o = lathOpts();
     lines.push(`Lath Analysis: Width = ${fmt(o.width)}, Thickness = ${fmt(o.thickness)}, Upright = ${o.upright}, MaxStrain = ${o.maxStrain}`);
+    lines.push(`Lath Sweep: Width = ${fmt(o.width)}, Thickness = ${fmt(o.thickness)}, Upright = ${o.upright}, Shape = ${o.section} (0 rectangle, 1 round bar)`);
     lines.push('Lath Unroll: same Width / Upright → Patterns');
   }
   if (S.frame && !S.frame.error) lines.push(`Gridshell Analysis: Supports = border ends, Load = (0,0,-${$('load').value} kN/m), model ${$('scale').value} m across`);
@@ -619,6 +628,7 @@ async function main() {
     inp.addEventListener('change', () => { if (S.selected) analyseSelected(); if ($('colorutil').checked) colourByUtilization(); });
   });
   $('upright').addEventListener('change', () => { if (S.selected) analyseSelected(); if ($('colorutil').checked) colourByUtilization(); });
+  $('section')?.addEventListener('change', () => { if (S.selected) analyseSelected(); });
   $('solid').addEventListener('change', () => { if (S.selected) analyseSelected(); });
   $('colorutil').addEventListener('change', () => { if ($('colorutil').checked) colourByUtilization(); else { S.lathUtil = null; S.viewer.colorCurves(null, null); if (S.selected) S.viewer.selectCurve(S.selected); if (S.netData) drawQuality(S.netData, S.stats.boundaryVertices === 0); } });
 

@@ -452,7 +452,7 @@ public static partial class MiteApi
 
     [JSExport]
     public static string Lath([JSMarshalAs<JSType.Array<JSType.Number>>] double[] polyline,
-        double width, double thickness, bool upright, double maxStrain, bool sweep)
+        double width, double thickness, bool upright, double maxStrain, bool sweep, int shape)
     {
         var sw = Stopwatch.StartNew();
         if (_proj == null) throw new InvalidOperationException("No mesh loaded.");
@@ -469,8 +469,9 @@ public static partial class MiteApi
             Utilization = la.Utilization, MaxUtilization = la.MaxUtilization, Buildable = la.Buildable,
             Length = arc[arc.Length - 1]
         };
-        var profile = new LathProfile(width, thickness, upright);
-        var un = StripUnroll.Unroll(_proj, line, profile);
+        // 0 = rectangle width × thickness, 1 = round bar of diameter width (unroll keeps the rectangle's band width)
+        var profile = shape == 1 ? LathProfile.Round(width, 24) : new LathProfile(width, thickness, upright);
+        var un = StripUnroll.Unroll(_proj, line, new LathProfile(width, thickness, upright));
         if (un.HasValue)
         {
             p.UnrollA = un.Value.EdgeA.Select(q => new[] { q.X, q.Y }).ToArray();

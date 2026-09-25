@@ -9,8 +9,14 @@ namespace Mite.Core.Geometry;
 /// ellipsoid (K &gt; 0, four umbilics), a torus (mixed sign), saddles and a
 /// hyperboloid of one sheet (K &lt; 0, ruled), a monkey saddle (flat umbilic
 /// with three asymptotic directions), a catenoid and an Enneper patch
-/// (H = 0), a barrel vault and a cone (K = 0, developable) and an annulus
-/// (inner boundary).
+/// (H = 0), a barrel vault and a cone (K = 0, developable), an annulus
+/// (inner boundary), and the catalogue of the Studio X submission: n-fold
+/// Enneper surfaces (Weierstrass g = w^(n−1); asymptotic directions from the
+/// Hopf differential (n−1) w^(n−2) dw²), a skew bilinear "ruled" patch (doubly
+/// ruled by its iso-lines, which are its asymptotic curves) and patches of
+/// the Schwarz D and gyroid triply periodic minimal surfaces, cut from their
+/// nodal approximations by marching tetrahedra and relaxed with Minimal
+/// Surface so H ≈ 0 (Schling's asymptotic pavilion sits on a Schwarz D).
 /// </summary>
 public static class AnalyticShapes
 {
@@ -18,7 +24,8 @@ public static class AnalyticShapes
     public static readonly string[] Names =
     {
         "saddle", "sphere", "torus", "hyperboloid", "monkey", "ellipsoid", "catenoid",
-        "enneper", "vault", "cone", "dome", "annulus", "wave"
+        "enneper", "vault", "cone", "dome", "annulus", "wave",
+        "enneper3", "ruled", "schwarzd", "gyroid"
     };
 
     /// <summary>
@@ -103,12 +110,54 @@ public static class AnalyticShapes
                 return Parametric((u, v) => { double x = v * Math.Cos(u), y = v * Math.Sin(u); return new Vec3d(x, y, k * (x * x - y * y)); },
                     0, 2 * Math.PI, rin, rout, n, Math.Max(6, n / 3), true, false, false, false);
             }
+            case "enneper3":
+            {
+                int folds = (int)Math.Round(P(p1, 3.0));
+                double radius = P(p2, folds == 2 ? 1.0 : 0.9);
+                return Parametric((phi, r) => EnneperPoint(folds, r, phi), 0, 2 * Math.PI, 0, radius, n, Math.Max(6, n / 2), true, false, true, false);
+            }
+            case "ruled":
+            {
+                // skew bilinear patch: corners of a size×size square lifted by ±twist, one corner pushed sideways by skew
+                double size = P(p1, 2.0), twist = P(p2, 0.8), skew = p3;
+                Vec3d p00 = new Vec3d(-size / 2, -size / 2, 0), p10 = new Vec3d(size / 2, -size / 2, twist);
+                Vec3d p01 = new Vec3d(-size / 2 + skew, size / 2, twist * 0.75), p11 = new Vec3d(size / 2 + skew, size / 2, -twist * 0.6);
+                return Grid((u, v) => (1 - u) * (1 - v) * p00 + u * (1 - v) * p10 + (1 - u) * v * p01 + u * v * p11, 0, 1, 0, 1, n, n);
+            }
+            case "schwarzd":
+            case "gyroid":
+            {
+                double extent = P(p1, 1.0) * Math.PI;
+                int cells = Math.Max(8, Math.Min(48, (int)Math.Round(P(p2, n))));
+                Func<Vec3d, double> fn = name.ToLowerInvariant() == "gyroid" ? ImplicitSurface.Gyroid : ImplicitSurface.SchwarzD;
+                var nodal = ImplicitSurface.MarchingTetrahedra(fn, 0, extent, cells);
+                int iterations = (int)Math.Round(p3 > 0 ? p3 : 30);
+                if (iterations <= 0) return nodal;
+                var fixedFlags = nodal.BuildBoundaryVertexFlags();
+                var relaxed = FormFinding.MinimalSurface.Compute(nodal, fixedFlags, new FormFinding.MinimalSurface.Options { MaxIterations = iterations });
+                return new MeshData(relaxed.Vertices, nodal.Faces);
+            }
             default:
                 throw new ArgumentException($"Unknown shape '{name}'. Known: {string.Join(", ", Names)}", nameof(name));
         }
     }
 
     private static double P(double v, double dflt) => v > 0 ? v : dflt;
+
+    /// <summary>
+    /// n-fold Enneper surface in polar chart coordinates (r, φ):
+    /// x = r cos φ − r^(2n−1) cos((2n−1)φ)/(2n−1), y = −r sin φ − r^(2n−1) sin((2n−1)φ)/(2n−1),
+    /// z = 2 r^n cos(nφ)/n (Weisstein, MathWorld); n = 2 is the classic Enneper surface.
+    /// </summary>
+    public static Vec3d EnneperPoint(int n, double r, double phi)
+    {
+        int m = 2 * n - 1;
+        double rm = Math.Pow(r, m);
+        return new Vec3d(
+            r * Math.Cos(phi) - rm * Math.Cos(m * phi) / m,
+            -r * Math.Sin(phi) - rm * Math.Sin(m * phi) / m,
+            2.0 * Math.Pow(r, n) * Math.Cos(n * phi) / n);
+    }
 
     /// <summary>Height field over a rectangle, triangulated along the shorter diagonal.</summary>
     public static MeshData Grid(Func<double, double, Vec3d> f, double x0, double x1, double y0, double y1, int nx, int ny)
