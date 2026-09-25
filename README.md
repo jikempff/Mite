@@ -135,9 +135,9 @@ plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
 
-### 1.2.4
+### 1.2.5
 - Web app: the catalogue gains n-fold Enneper, a skew bilinear ruled patch and Schwarz D / gyroid patches (marching tetrahedra + Minimal Surface relaxation, `AnalyticShapes` / `ImplicitSurface` in the core); the Lath block gets a section choice (rectangle or round bar); favicon back to the black hexagon mark, PNG/Apple icons and Open Graph share image for links.
-- New Mite logo (black hexagon with the asymptotic knot) as package icon, Grasshopper tab icon and web app favicon; the tab icon is now registered as the category icon, so it shows in the ribbon tab and its tooltip instead of a plain "M". 1.2.3 went out with the previous logo; 1.2.4 is otherwise the same build.
+- New Mite logo (black hexagon with the asymptotic knot) as package icon, Grasshopper tab icon and web app favicon; the tab icon is now registered as the category icon, so it shows in the ribbon tab and its tooltip instead of a plain "M". 1.2.3 went out with the previous logo and 1.2.4 with the hexagon tab icon; 1.2.5 has the knot tab icon and the loading-error fix.
 - Lath Sweep: new `Shape` (0 rectangle, 1 round bar of diameter W, 2 custom closed planar `Section` curve) applied to every curve; the section always rides in the surface frame (across / normal, `Upright` swaps them). `LathProfile.Round` / `LathProfile.Custom` in the core; StripSweep sweeps any closed section.
 - Component icons redrawn in the Grasshopper house style (amber surfaces, orange-red meshes, green analysis, timber fabrication, grey util) — `tools/generate_icons.py`; new Mite logo (black hexagon with the asymptotic knot) as package icon, tab icon and web app favicon.
 - Test surfaces from the Studio X catalogue: catenoid, 2- and 3-fold Enneper, skew bilinear ruled patch, Schwarz D (marching tetrahedra + Minimal Surface relaxation); Mite Bench shows them on the Asymptotic Net card and uses the kempffsele.me favicon.
