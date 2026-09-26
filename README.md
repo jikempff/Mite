@@ -47,6 +47,9 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - **Lath Preview** — color-codes laths by utilization (green → red)
 - **Net Topology** — nodes and members of a two-family net as a structural graph (for Karamba-style analysis or a node schedule); same-family crossings and T-junctions are nodes too
 
+### Kinetics
+- **Net Kinetics** — moves a scissor-jointed asymptotic net as a mechanism (Schikore, Schling, Oberbichler & Bauer 2020; Wan, Crolla & Schling 2025): constant joint spacing along the laths, laths perpendicular to the moving surface normal, rest bend kept with a chosen stiffness; driven by fixed / sliding supports, moved points or actuator cables, with a `Fold` slider and per-state drift / deviation / miss diagnostics. Exact on the doubly ruled hyperboloid grid (1e-12), settles traced nets in one step
+
 ### Utilities
 - **Mesh Cleanup** — weld vertices (also far from the origin), reduce collapsed faces, drop degenerate/duplicate faces, unify winding
 - **Pull To Mesh** — project hand-drawn curves and points onto a mesh, with optional on-surface fairing
@@ -59,7 +62,7 @@ All Grasshopper components weld coincident vertices on intake (STL imports, Brep
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (27 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (28 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -125,6 +128,7 @@ Components appear under the **Mite** tab:
 - **Gridshells** — Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
 - **Analysis** — Lath Analysis, Gridshell Analysis, Mesh Isocurves
 - **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview, Net Topology
+- **Kinetics** — Net Kinetics
 - **Util** — Mesh Cleanup, Pull To Mesh, Mesh Colour Map
 
 A typical gridshell workflow: heal the mesh with **Mesh Cleanup**, trace a **Geodesic Net**
@@ -134,6 +138,9 @@ split to stock with **Lath Segment**, and produce cutting patterns with **Lath U
 plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
+
+### 1.2.8
+- **Net Kinetics** (new component, Mite > Kinetics) and `Kinetics/ScissorNet` in the core: a scissor-jointed asymptotic net as a semi-compliant grid mechanism. Unknowns are joint positions and unit normals; residuals are constant joint spacing, segment ⟂ normal at both ends (Wan, Crolla & Schling 2025, *Geometry-driven development of semi-compliant kinetic asymptotic structures*, Adv. Eng. Informatics 68), unit normals, and the change of each lath's turning against its rest bend in the moving lath frame (Wan et al.'s plain second difference would straighten curved laths and penalise uneven joint spacing); drivers are fixed nodes, sliding ground nodes, moved nodes and cables; Levenberg–Marquardt on the sparse envelope solver, one state per fold step. Exact ground truth from Schikore, Schling, Oberbichler & Bauer 2020 (*Kinetics and Design of Semi-Compliant Grid Mechanisms*, AAG 2020): the doubly ruled grid of straight rods tangent to a circle, whose joints sit at rod positions ρ tan(πm/n) for every tilt β (`ScissorNet.HyperboloidMechanism`), is reproduced through the whole motion to 2e-12 with zero joint drift; a planar lazy-tongs lattice shears exactly; a traced catenoid net standing on sliding ground nodes follows a 20 % top-ring pull with joint drift 3e-4 and 0.04° asymptotic deviation, rising by 0.52 as it narrows. Bench: Kinetics tab with a fold slider on both. Discrete finding: the hinge constraints alone leave a kink mode at every joint (four coplanar segments, not two straight laths), so the bending stiffness is what makes the discrete grid behave like the smooth mechanism — with stiffness 0 the hyperboloid grid folds along 100° kinks while satisfying every constraint.
 
 ### 1.2.7
 - Web app favicon (SVG, 32 px, Apple touch icon): the new logo, black hexagon with the white knot, as on Food4Rhino — web only, no plugin change.

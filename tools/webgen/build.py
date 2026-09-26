@@ -6,13 +6,14 @@ scenes = json.load(open("scenes.json"))
 numbers = json.load(open("numbers.json"))
 icons = json.load(open("icons.json"))
 
-TAB_ORDER = ["Curvature", "Form Finding", "Gridshells", "Analysis", "Fabrication", "Util"]
+TAB_ORDER = ["Curvature", "Form Finding", "Gridshells", "Analysis", "Fabrication", "Kinetics", "Util"]
 TAB_BLURB = {
     "Curvature": "Per-vertex differential geometry. Every output is one item per input mesh vertex, so it wires straight into Mesh Colours.",
     "Form Finding": "Equilibrium shapes on a fast sparse solver. Leave Fixed empty to pin the boundary.",
     "Gridshells": "Curve networks on the mesh. Curves are continuous border to border by default (Continuous input); step, spacing and step count default to 0 = derived from the mesh.",
     "Analysis": "Can it be built, and does it stand up.",
     "Fabrication": "From curves to parts: solids, joints, cutting patterns, stock pieces, labels.",
+    "Kinetics": "Nets that move: scissor-jointed asymptotic grids as mechanisms.",
     "Util": "Mesh intake, projection and colouring helpers.",
 }
 COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics",
@@ -20,6 +21,7 @@ COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Cu
               "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
               "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
               "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
+              "Net Kinetics",
               "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 byname = {c["name"]: c for c in comps}
 assert set(byname) == set(COMP_ORDER), set(byname) ^ set(COMP_ORDER)
@@ -67,13 +69,18 @@ for tab in TAB_ORDER:
                 controls = '<div class="demo-ctl"><span class="ctl-l">shape</span>' + "".join(
                     f'<label><input type="radio" name="sh-{slug(n)}" value="{key}" {"checked" if k == 0 else ""}> {lbl}</label>'
                     for k, (key, lbl) in enumerate(note["shapes"])) + '</div>'
+            if note.get("slider"):
+                controls = '<div class="demo-ctl">' + ("".join(
+                    f'<label><input type="radio" name="sh-{slug(n)}" value="{key}" {"checked" if k == 0 else ""}> {lbl}</label>'
+                    for k, (key, lbl) in enumerate(note.get("shapes", []))) + '<span class="ctl-l" style="flex-basis:100%"></span>' if note.get("shapes") else "") + \
+                    f'<label style="flex-basis:100%"><span class="ctl-l">{esc(note["slider"])}</span><input type="range" min="0" max="1" step="0.001" value="1" style="flex:1"></label><span class="fold-label" style="flex-basis:100%"></span></div>'
             if demo == "torusK":
                 mode = note.get("demoMode", "K")
                 controls = '<div class="demo-ctl"><span class="ctl-l">show</span>' + "".join(
                     f'<label><input type="radio" name="tk-{slug(n)}" value="{m}" {"checked" if m == mode else ""}> {lbl}</label>'
                     for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2")]) + '</div>'
             hint = "drag to rotate · scroll to zoom" if kind == "3d" else ""
-            demo_html = f'<div class="demo" data-demo="{demo}" data-kind="{kind}" data-id="{slug(n)}">{controls}<canvas></canvas><div class="demo-legend" id="lg-{slug(n)}"></div><div class="demo-hint">{hint}</div></div>'
+            demo_html = f'<div class="demo{" tall" if note.get("tall") else ""}" data-demo="{demo}" data-kind="{kind}" data-id="{slug(n)}">{controls}<canvas></canvas><div class="demo-legend" id="lg-{slug(n)}"></div><div class="demo-hint">{hint}</div></div>'
         checks_html = ""
         if note["checks"]:
             checks_html = '<ul class="checks">' + "".join(

@@ -20,7 +20,9 @@ Rules for every session
 Priorities set by José (2026-09-25), in order
 1. Kinetic / adaptive asymptotic gridshells (E): simulate the folding of a
    scissor-jointed asymptotic net (moving canopies), drive it from a "Fold"
-   parameter in Grasshopper and a slider in the bench.
+   parameter in Grasshopper and a slider in the bench — first version done
+   2026-09-26 (kinematic solve, exact on doubly ruled grids); next: elastic
+   states, speed, per-state strains, the design side.
 2. Surface catalogue from the Studio X submission (A): done for catenoid,
    ruled patch, Enneper 2/3, Schwarz D; Schoen's Batwing and the gyroid open.
 3. Plugin UX (B): profiles for every curve (done), `Mite Net` type,
@@ -204,8 +206,9 @@ remains the self-test review page.
       Gridshell Analysis take Shape / Section; `LathProfile.SectionProperties`
       (rectangle, round, custom polygon) feeds strain fibres, twist length,
       A / I / J — 2026-09-25.
-- [ ] App: the kinetic "fold" slider of E; custom section curves in the lath
-      views; a "buildable" summary that waits for the colouring pass.
+- [ ] App: the kinetic "fold" slider of E (core `ScissorNet` is ready, the
+      wasm binding and a worker call are missing); custom section curves in
+      the lath views; a "buildable" summary that waits for the colouring pass.
 - [ ] App: run `tools/web-smoke.js` from `tools/build-web.sh` (needs a
       Playwright install on the deploying machine).
 - [ ] Bench to reuse the app's typologies once the shape generators are
@@ -218,8 +221,9 @@ remains the self-test review page.
       demos; the viewer re-applies the scene view on switch — 2026-09-25.
 - [ ] Shape switch on the remaining demos and a "classic vs continuous"
       toggle on the net demos.
-- [ ] Kinetic demo: a "fold" slider that plays the state sequence of E on
-      the canopy and on the hyperboloid twist test.
+- [x] Kinetic demo: a "fold" slider that plays the state sequence of E on
+      the hyperboloid twist and on the catenoid net — 2026-09-26 (Net
+      Kinetics card, Kinetics tab).
 - [ ] Metrics with distributions, not only extremes: spacing histogram,
       crossing-angle histogram, utilisation histogram (small, consistent
       charts).
@@ -330,12 +334,19 @@ remains the self-test review page.
 ## E. Kinetic and adaptive asymptotic structures (new, top priority)
 
 Literature
-- Schling & Barthel 2021, Kinetics and Design of Semi-Compliant Grid
-  Mechanisms (AAG 2020/21): an asymptotic or geodesic lath grid with
-  scissor (single-axis) joints is a mechanism — rigid-body shearing at the
-  joints plus compliant bending/twisting of the strips — and its motion is
-  governed by geometry alone (constant joint spacing along each lath,
-  joints rotating about the surface normal).
+- Schikore, Schling, Oberbichler & Bauer 2020, Kinetics and Design of
+  Semi-Compliant Grid Mechanisms (AAG 2020; the roadmap used to attribute
+  this to "Schling & Barthel 2021"): an asymptotic or geodesic lath grid
+  with scissor (single-axis) joints is a mechanism — rigid-body shearing at
+  the joints plus compliant bending/twisting of the strips — and its motion
+  is governed by geometry alone (constant joint spacing along each lath,
+  joints rotating about the surface normal). Doubly ruled grids (hyperbolic
+  paraboloid, hyperboloid) move as rigid-body mechanisms and are the exact
+  test cases; the strain energy is ½∫(GI_t κ_x² + EI_y κ_y² + EI_z κ_z²) ds,
+  read on a "curvature-square diagram" against the state parameter; the
+  kinetic umbrella's predicted natural diameter (4.47 m) matched FEM (4.43 m).
+  Follow-up: Schling & Schikore 2023, Morphology of Kinetic Asymptotic Grids
+  (DMS 2022): singularities and supports decide how far a grid can move.
 - Wan, Crolla & Schling 2025, Geometry-driven development of semi-compliant
   kinetic asymptotic structures (Advanced Engineering Informatics 68,
   103762): design and motion are computed by nonlinear least squares
@@ -358,40 +369,77 @@ Literature
   solver that fits Mite's existing sparse symmetric solver.
 
 Plan
-- [ ] Core `Kinetics/ScissorNet`: a net (mesh + families + contacts from
-      Net Topology) becomes nodes = joints and free lath ends, members =
-      lath pieces between joints, unknowns = node positions + unit normals.
-      Constraints as in Wan et al.: member length constant (scissor joint,
-      joint spacing fixed), member ⟂ normal at both ends (stays asymptotic,
-      so laths stay straight-unrollable), normals unit, plus a discrete
-      bending/twist energy along each lath (upright strip: strong axis =
-      kn, weak axis = kg, twist = τg from the current Lath Analysis).
-      Driver: prescribed displacement of support nodes or of an actuator
-      cable length; solve by Gauss–Newton on the constraint residuals with
-      the sparse symmetric solver (or projective dynamics if convergence is
-      poor), stepping the driver from 0 to 1 and recording every state.
-- [ ] Analytic tests (exact ground truth):
-      1. Hyperboloid twist: the ruling net of a cylinder (rows of joints on
-         circles, straight rods of length L between rings) twisted by angle
-         θ is exactly a hyperboloid of one sheet (waist radius R cos(θ/2),
-         height √(L² − 4R² sin²(θ/2))); rod lengths and joint spacings stay
-         constant along the whole motion. Every intermediate state must
-         match the closed form to mesh tolerance.
-      2. Bilinear patch: a scissor grid of straight rods between two skew
-         lines is a 1-DOF mechanism; moving one corner keeps all rod lengths
-         and gives another bilinear patch — compare against
-         `CreateBilinearPatch` with the moved corner.
-      3. Minimal-surface associate family (catenoid ↔ helicoid, Bonnet):
-         edge lengths of an asymptotic net are preserved by the isometry,
-         so the net must move without strain — a stress test for the length
-         constraints (normals rotate, laths twist).
-- [ ] Grasshopper `Net Kinetics` component: Net (or A / B / mesh), supports,
-      driver (target points or cable), `Fold` 0..1, steps → curves per state,
-      joint angles, per-lath strains (Lath Analysis on each state), and a
-      "buildable through the whole motion" flag. Animate with a slider.
-- [ ] Bench: kinetic demo with a fold slider on the hyperboloid twist and
-      on a canopy patch; checks: max length drift, max normality residual,
-      strain envelope vs the static state.
+- [x] Core `Kinetics/ScissorNet` — 2026-09-26. Nodes = joints + free lath
+      ends (+ optional subdivision nodes, `maxSegment`), laths = node
+      sequences, unknowns = positions + unit normals (6 per node; fixed nodes
+      keep their normal free). Residuals: joint spacing (|e| − l)/l, e·n_a/l
+      and e·n_b/l, n·n − 1 (all × HingeWeight 10), bending = change of the
+      lath's turning (v_{i+1} − v_i)/l_{i+1} − (v_i − v_{i−1})/l_i against its
+      rest value carried in the lath frame (× √Stiffness), targets, cables
+      and sliding ground nodes (Wan et al.'s Σ v_z²). Levenberg–Marquardt on
+      the envelope LDLᵀ, damping λ·diag, one state per fold step from the
+      previous state. `FromTopology` builds it from Net Topology.
+      Findings:
+      - Wan et al.'s fairness Σ|2v_i − v_{i−1} − v_{i+1}|² is unusable for a
+        given net: it penalises uneven joint spacing on straight rods (the
+        hyperboloid grid's ρ tan(πm/n) spacing) and straightens curved laths
+        at the settle step. Measuring the change of turning against the rest
+        state (rest turning re-expressed in the moving frame t, n, n × t)
+        keeps straight rods straight, pre-bent laths pre-bent and the input
+        stress-free.
+      - The hinge constraints alone do not make a mechanism: at a joint they
+        only ask the four segments to be coplanar, so every lath may kink in
+        the tangent plane at every joint (DOF count of the 12 × 5 hyperboloid
+        grid: 180 − 96 − 72 − 6 = 6, not 1). With Stiffness 0 the grid folds
+        along 100° kinks while satisfying every constraint to 1e-12; the
+        bending term is what selects the smooth mechanism.
+      - Weights are a conditioning question, not only a modelling one: hinge
+        weight 100 needed ~300 LM iterations where 10 needs 15 (the diagonal
+        damping over-damps the soft directions of DOFs shared with stiff
+        rows); with all residuals zero at the exact mechanisms the answer is
+        the same at any weight.
+      - Cost: envelope factorisation of 6n unknowns; 367 nodes × 6 states
+        ≈ 5 s, 983 nodes ≈ 20× slower. Fine for a batch, slow for a slider.
+- [x] Analytic tests (exact ground truth) — `KineticsTests`, 6 tests:
+      1. Hyperboloid mechanism (corrected from the cylinder-twist formula
+         above, which is not a constant-spacing mechanism: on a twisted
+         cylinder the crossing positions slide along the rods). The exact
+         family: n straight rods per family tangent to the circle of radius
+         ρ, pinned where they cross, tilted by β about their tangent points —
+         a hyperboloid with waist ρ cos β whose joints sit at rod positions
+         s_m = ρ tan(πm/n) independent of β (`HyperboloidMechanism`). Driven
+         by a cable across the top ring (β 30° → 65°, 8 states): every state
+         matches the closed form in all pairwise distances to 2.5e-12, joint
+         drift 1e-14, asymptotic deviation 1e-12°, waist scissor angle 2β;
+         also through NetIntersections/NetTopology with target drivers and
+         with rods subdivided into 3 pieces (laths stay straight to 1e-12).
+      2. Planar rhombic lattice (lazy tongs) sheared from 90° to 60° by one
+         corner, with fixed or sliding ground nodes: every node on the exact
+         lattice to 1e-7, angles exact.
+      3. Bilinear patch: not done. Note that a square grid of rods with
+         pinned crossings can only shear in its plane (|a|=|b|, a·b = |a|²
+         forces a = b); the 1-DOF hypar mechanism needs a non-planar start
+         and moving corners — worth a test with |a|,|b|,|c|,|d|, a·b fixed.
+      4. Associate family (catenoid ↔ helicoid): not done.
+- [x] Grasshopper `Net Kinetics` (Mite > Kinetics, icon, smoke test) —
+      2026-09-26: A / B curves, Fixed, Move / To, Cables / Lengths, Fold,
+      Steps, Stiffness, Segment, Iterations, Tolerance, Sampling, Mesh
+      (normals), Slide / SlideNormal → A, B, Joints, Normals, Angles,
+      StatesA / StatesB trees, Folds, Drift, Deviation, Miss, Report.
+      Open: per-state Lath Analysis strains and a "buildable through the
+      motion" flag (wire the state trees into Lath Analysis for now); a
+      viewport preview that plays the states; a `Mite Net` input (B).
+- [x] Bench: Kinetics tab, fold slider on the hyperboloid twist (13 states,
+      2e-12) and on the catenoid net standing on sliding ground nodes with
+      two crossed top cables (20 % pull: drift 3e-4, 0.04° off asymptotic,
+      cables 1 % short, rise 0.52, scissor angles 78–90° → 60–71°) —
+      2026-09-26. Open: strain envelope along the motion.
+- [ ] Speed: a block-aware ordering or a preconditioned CG on JᵀJ for nets
+      above ~500 nodes; reuse the symbolic envelope across iterations.
+- [ ] Elastic (not only kinematic) states: minimise Schikore's strain energy
+      with material stiffness along the mechanism's path (curvature-square
+      diagram) to find the natural state and the actuation forces; twist
+      energy from the normals' rotation along the lath.
 - [ ] Then the design side of Wan et al.: given a target family of surfaces
       (open/closed canopy), find the net whose motion passes through both —
       alternate the kinetic solve with the layout solve.
@@ -413,6 +461,11 @@ Plan
 
 ## Done
 
+- [x] 2026-09-26 (session 1, E): `Kinetics/ScissorNet` and the Net Kinetics
+      component — scissor-jointed asymptotic nets as mechanisms with exact
+      hyperboloid and lazy-tongs tests, sliding ground supports, cables, and
+      the bench Kinetics tab with a fold slider; version 1.2.8 (1.2.7 was the
+      nets/webs release on main).
 - [x] 2026-09-25 (session 2): minimal-surface catalogue (catenoid, Enneper
       2/3, bilinear ruled patch, Schwarz D with marching tetrahedra +
       relaxation) with analytic tests and bench shapes; icons v2 in the

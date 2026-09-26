@@ -466,6 +466,16 @@ def icon_net_topology():
     finish(img, "NetTopology")
 
 
+# ================================================================ Kinetics (mesh / form-finding family)
+def icon_net_kinetics():
+    """A rhombic scissor lattice sheared by the fold: rods straight, white hinge dots, a fold arrow."""
+    img, d = canvas()
+    quad = [(2.5, 6.5), (13.5, 6.5), (21.5, 19.5), (10.5, 19.5)]   # parallelogram = the sheared grid
+    lattice(img, d, "mesh", 3, 3, nodes=True, quad=quad)
+    arrow(d, 15.5, 3.2, 20.5, 3.2, "mesh", 1.0, 2.0)
+    finish(img, "NetKinetics")
+
+
 # ================================================================ Util (parameter greys)
 def icon_mesh_cleanup():
     img, d = canvas()
@@ -531,7 +541,7 @@ ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, i
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
        icon_asymptotic_net, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
        icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,
-       icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology,
+       icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics,
        icon_mesh_cleanup, icon_pull_to_mesh, icon_mesh_colour_map, icon_tab]
 
 if __name__ == "__main__":

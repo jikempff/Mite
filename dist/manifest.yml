@@ -1,5 +1,5 @@
 name: mite
-version: 1.2.7
+version: 1.2.8
 authors:
   - Mite Contributors
 description: >-
@@ -14,7 +14,8 @@ description: >-
   used as the beam section — flat or upright; cut half-lap or
   egg-crate joints at every crossing, unroll flat cutting patterns, segment to
   stock lengths with splice joints, label laths and export the net topology.
-  Mesh healing, pull-to-mesh and one-step colour maps.
+  Net Kinetics moves a scissor-jointed asymptotic net as a mechanism (fold
+  slider, supports, cables). Mesh healing, pull-to-mesh and one-step colour maps.
 url: https://github.com/jikempff/Mite
 icon: icon.png
 keywords:

@@ -140,6 +140,32 @@ beams take their area, inertia and torsion constant from the same `Sh` / `Sc`
 section as Lath Sweep and Lath Analysis, so one profile feeds the model, the
 strain check and the statics.
 
+## 6. Make it move (kinetic asymptotic nets)
+
+**Net Kinetics** (Mite > Kinetics) treats the crossings of an asymptotic net
+as scissor hinges and moves the net as a mechanism, after Schikore, Schling,
+Oberbichler & Bauer (2020) and Wan, Crolla & Schling (2025): joint spacing
+along every lath stays constant, every lath segment stays perpendicular to the
+moving surface normal (so upright laths remain straight-unrollable) and the
+laths keep their rest bend with the given `K` stiffness. Wire the `A` / `B`
+curves of an **Asymptotic Net**, then drive it:
+
+- `F` fixed points hold the nearest joints; `Sl` ground points let joints slide
+  in the plane through their rest position (normal `Sn`, default Z);
+- `Mv` / `To` move the nearest joints to targets; `C` cables (lines between two
+  joints) shorten or lengthen to `Le` at `Fo` = 1.
+
+Put `Fo` on a slider (0 = the settled rest state, 1 = drivers at their
+targets) to animate; `St` states are solved in sequence and come out as trees
+`SA` / `SB`. `Dr` (joint-spacing drift), `Dv` (degrees off asymptotic) and `Ms`
+(driver miss) tell you whether the net can follow: the exact doubly ruled grids
+(a hyperboloid of straight rods) follow to 1e-12, a traced catenoid net follows
+a 20 % top-ring pull with drift 3e-4 and 0.05° deviation, a net with its whole
+bottom ring fixed cannot move and reports a large `Ms`. Feed the state curves
+to **Lath Analysis** to check strains along the motion. Keep `Sg` at 0 (joints
+only) for interactive use; a value subdivides the laths so they can bend
+between joints, at several times the solve time.
+
 ## Units
 
 All lengths (Spacing, Step, EdgeLength, Width, Thickness, Offset, Margin,

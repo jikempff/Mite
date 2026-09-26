@@ -76,6 +76,7 @@ h4{margin:0 0 6px;font:600 11px/1 var(--mono);letter-spacing:.08em;text-transfor
 .demo{position:relative;border:1px solid var(--line);border-radius:6px;background:var(--surface2);overflow:hidden;margin-top:4px}
 .demo canvas{display:block;width:100%;aspect-ratio:16/10;max-width:100%;touch-action:none;cursor:grab}
 .demo canvas:active{cursor:grabbing}
+.demo.tall canvas{aspect-ratio:1/1}
 .demo[data-kind="sparkline"] canvas,.demo[data-kind="plot1d"] canvas{aspect-ratio:16/5}
 .demo[data-kind="plot2d"] canvas{aspect-ratio:16/6}
 .demo-ctl{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:6px 10px;max-width:calc(100% - 16px);font:12px var(--sans);background:color-mix(in srgb,var(--surface) 85%,transparent);padding:4px 8px;border-radius:5px;z-index:2}
@@ -109,9 +110,9 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
 
 <div class="wrap">
   <header class="masthead">
-    <h1><small>Grasshopper plugin · version 1.2.2 · 27 components</small>Mite Bench</h1>
+    <h1><small>Grasshopper plugin · version 1.2.8 · 28 components</small>Mite Bench</h1>
     <p>Every component with its inputs, outputs and defaults, what it should do, a self-test run on the real Mite.Core library, and a live view of the result. Tick the ones that make sense, note what doesn't, and copy the summary back to the chat.</p>
-    <div class="progress"><b><span id="done">0</span> / 27</b>reviewed<div class="bar"><i id="barfill"></i></div></div>
+    <div class="progress"><b><span id="done">0</span> / 28</b>reviewed<div class="bar"><i id="barfill"></i></div></div>
   </header>
 
   <nav class="nav" aria-label="Components">
@@ -125,7 +126,7 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
 
   <main>
     <div class="intro">
-      <div><h4>Self-tests</h4><p>Each PASS / FAIL chip comes from running the 1.2.2 core on analytic shapes (unit sphere, torus R = 3 r = 1, saddle z = x² − y², flat grids) and comparing with theory. The numbers next to the chip are the actual results.</p></div>
+      <div><h4>Self-tests</h4><p>Each PASS / FAIL chip comes from running the 1.2.8 core on analytic shapes (unit sphere, torus R = 3 r = 1, saddle z = x² − y², flat grids) and comparing with theory. The numbers next to the chip are the actual results.</p></div>
       <div><h4>Live views</h4><p>Curves and meshes in the viewers are the library's real output for those shapes, not illustrations. Drag to orbit, scroll to zoom. Family A is teal, family B plum.</p></div>
       <div><h4>Your review</h4><p>Ticks and notes stay in this browser only. "Copy review summary" puts them on the clipboard as text you can paste into the chat.</p></div>
     </div>
@@ -149,7 +150,7 @@ function updateProgress(){
   let n = 0;
   document.querySelectorAll('[data-ok]').forEach(cb => { const card = cb.closest('.card'); card.classList.toggle('done', cb.checked); const dot = document.querySelector(`[data-nav="${cb.dataset.ok}"] .dot`); if (dot) dot.classList.toggle('on', cb.checked); if (cb.checked) n++; });
   document.getElementById('done').textContent = n;
-  document.getElementById('barfill').style.width = (100*n/27)+'%';
+  document.getElementById('barfill').style.width = (100*n/28)+'%';
 }
 document.querySelectorAll('[data-ok]').forEach(cb => { cb.checked = store.get('ok:'+cb.dataset.ok) === '1'; cb.addEventListener('change', () => { store.set('ok:'+cb.dataset.ok, cb.checked ? '1':'0'); updateProgress(); }); });
 document.querySelectorAll('[data-note]').forEach(ta => { ta.value = store.get('note:'+ta.dataset.note) || ''; ta.addEventListener('input', () => store.set('note:'+ta.dataset.note, ta.value)); });
@@ -166,7 +167,7 @@ function summary(){
     fails.push(...failed.map(f => name + ': ' + f));
     if (ticked || note) lines.push(`${ticked ? '[x]' : '[ ]'} ${name}${note ? ' — ' + note.replace(/\s+/g,' ') : ''}`);
   });
-  lines.splice(1, 0, `${ok} of 27 marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
+  lines.splice(1, 0, `${ok} of 28 marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
   return lines.join('\n');
 }
 function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
@@ -242,6 +243,7 @@ const A = () => css('--acc'), B = () => css('--fam-b'), WIRE = () => css('--wire
 const wireLayer = w => ({ lines: w, color: WIRE(), width: 0.8 });
 
 function mode(el){ const r = el.querySelector('.demo-ctl input:checked'); return r ? r.value : null; }
+function slider(el){ const r = el.querySelector('.demo-ctl input[type=range]'); return r ? +r.value : 0; }
 const builders = {
   torusK(el){ const t = SC.torusK; const m = mode(el) || 'K'; const vals = m === 'K' ? t.values : m === 'H' ? t.valuesH : m === 'k1' ? N.torusCurvature && t.valuesK1 : t.valuesK2;
     let v = vals; if (!v) { // k1/k2 not stored per vertex: derive from K and H (k = H ± sqrt(H²−K))
@@ -264,6 +266,14 @@ const builders = {
   joints(el){ const j = SC.joints; legend(el.dataset.id, [[A(), 'family A'], [B(), 'family B'], [INK(), 'crossings (' + j.nodes.length + ')']]); return { view: SADDLE_VIEW, layers: [{ lines: j.a, color: A(), width: 1.2, alpha: 0.7 }, { lines: j.b, color: B(), width: 1.2, alpha: 0.7 }], points: [{ pts: j.nodes, color: INK(), r: 1.8 }] }; },
   sweep(el){ const s = SC.sweep; legend(el.dataset.id, [[WIRE(), 'saddle'], [A(), 'upright lath solid (0.08 × 0.012)']]); return { view: SADDLE_VIEW, layers: [wireLayer(s.wire)], mesh: { verts: s.mesh.verts, faces: s.mesh.faces, fill: css('--acc') } }; },
   frame(el){ const f = SC.frame; legend(el.dataset.id, [[MUTED(), 'net'], [B(), 'deformed × ' + f.scale + ' under 1 kN/m'], [INK(), 'supports']]); return { view: SADDLE_VIEW, layers: [{ lines: f.original, color: MUTED(), width: 0.8, alpha: 0.6 }, { lines: f.deformed, color: B(), width: 1.4 }], points: [{ pts: f.supports, color: INK(), r: 2 }] }; },
+  kinetics(el){ const m = mode(el) || 'kinHyp'; const sc = SC[m]; const k = Math.min(sc.states.length - 1, Math.round(slider(el) * (sc.states.length - 1))); const st = sc.states[k]; const row = N[m].rows[k];
+    const lab = el.querySelector('.fold-label'); if (lab) lab.textContent = 'fold ' + row.fold.toFixed(2) + (m === 'kinHyp' ? ' · β = ' + row.betaDeg + '° · waist ' + row.waist + ' (theory ' + row.waistTheory + ') · scissor angle ' + row.waistAngle + '°' : ' · cable ' + row.cable + ' → ' + row.cableTarget + ' · rise ' + row.rise + ' · scissor angles ' + row.minAngle + '°…' + row.maxAngle + '° · drift ' + row.drift.toExponential(1));
+    const L = m === 'kinCat' ? [wireLayer(sc.wire)] : [];
+    L.push({ lines: st.a, color: A(), width: 1.6 }, { lines: st.b, color: B(), width: 1.6 });
+    if (st.cables) L.push({ lines: st.cables, color: INK(), width: 1.2, dash: [4,3] });
+    const pts = [{ pts: st.joints, color: INK(), r: 1.8 }];
+    legend(el.dataset.id, m === 'kinHyp' ? [[A(), 'family A rods'], [B(), 'family B rods'], [INK(), 'scissor joints (' + st.joints.length + ')']] : [[WIRE(), 'catenoid (rest surface)'], [A(), 'family A'], [B(), 'family B'], [INK(), 'scissor joints · dashed: actuator cables']]);
+    return { view: { yaw: -0.6, pitch: 0.35 }, layers: L, points: pts }; },
   pull(el){ const p = SC.pull; legend(el.dataset.id, [[WIRE(), 'sphere'], [MUTED(), 'input circle (floating)'], [A(), 'pulled + faired']]); return { layers: [wireLayer(p.wire), { lines: [p.before], color: MUTED(), width: 1.4, dash: [4,3] }, { lines: [p.after], color: A(), width: 2.2 }] }; },
 };
 ['minimal','fdm','dynrelax','planar'].forEach(k => builders[k] = el => { const m = mode(el) || 'after'; const s = SC[k]; const L = [];
@@ -308,7 +318,7 @@ function sparkline(canvas, el){ const u = SC.lathUtil.util; const ctx = canvas.g
 const viewers = [];
 document.querySelectorAll('.demo').forEach(el => { const canvas = el.querySelector('canvas'); const kind = el.dataset.kind;
   if (kind === 'plot2d') return plot2d(canvas, el); if (kind === 'plot1d') return plot1d(canvas, el); if (kind === 'sparkline') return sparkline(canvas, el);
-  const b = builders[el.dataset.demo]; if (!b) return; const v = Viewer(canvas, () => b(el)); viewers.push(v); el.querySelectorAll('.demo-ctl input').forEach(r => r.addEventListener('change', () => v.rebuild())); });
+  const b = builders[el.dataset.demo]; if (!b) return; const v = Viewer(canvas, () => b(el)); viewers.push(v); el.querySelectorAll('.demo-ctl input').forEach(r => { r.addEventListener('change', () => v.rebuild()); if (r.type === 'range') r.addEventListener('input', () => v.rebuild()); }); });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => viewers.forEach(v => v.rebuild()));
 new MutationObserver(() => viewers.forEach(v => v.rebuild())).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 </script>

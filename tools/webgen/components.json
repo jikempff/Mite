@@ -2532,5 +2532,257 @@
     "default": null
    }
   ]
+ },
+ {
+  "file": "NetKineticsComponent.cs",
+  "name": "Net Kinetics",
+  "nick": "Kinetics",
+  "desc": "Moves a scissor-jointed asymptotic net as a mechanism (Wan, Crolla & Schling 2025; Schikore et al. 2020). The crossings of A and B become scissor hinges: the distance between consecutive joints along every lath stays constant, every lath segment stays perpendicular to the (moving) surface normal at its ends — so upright laths remain straight-unrollable — and laths keep their rest bend with the given Stiffness. Drive the motion with Fixed points, Slide points (joints kept on the ground plane, free to slide), points moved To targets, or Cables whose Lengths change; Fold 0…1 runs the drivers from the rest state to the target in Steps states. Drift, Deviation and Miss tell you how well the mechanism can follow (a rigid net cannot follow at all; the exact doubly ruled grids follow to 1e-12).",
+  "tab": "Kinetics",
+  "icon": "NetKinetics",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCE01",
+  "inputs": [
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "First lath family (asymptotic curves)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Second lath family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Fixed",
+    "nick": "F",
+    "type": "Point",
+    "desc": "Support points: the nearest joints are held in place",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Move",
+    "nick": "Mv",
+    "type": "Point",
+    "desc": "Points whose nearest joints are moved (paired with To by index)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "To",
+    "nick": "To",
+    "type": "Point",
+    "desc": "Target position at Fold = 1 for each Move point (interpolated linearly from the rest position)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Cables",
+    "nick": "C",
+    "type": "Line",
+    "desc": "Actuator cables: each line's ends snap to the nearest joints",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Lengths",
+    "nick": "Le",
+    "type": "Number",
+    "desc": "Cable length at Fold = 1 for each cable (the rest length is the line's length; the last value repeats)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Fold",
+    "nick": "Fo",
+    "type": "Number",
+    "desc": "How far to run the drivers: 0 = rest state (settled), 1 = targets reached",
+    "access": "item",
+    "default": "1.0"
+   },
+   {
+    "name": "Steps",
+    "nick": "St",
+    "type": "Integer",
+    "desc": "Number of states between rest and Fold (each solved from the previous one)",
+    "access": "item",
+    "default": "10"
+   },
+   {
+    "name": "Stiffness",
+    "nick": "K",
+    "type": "Number",
+    "desc": "Bending stiffness of the laths relative to the hinge constraints (0 = laths kink freely at every node, 1 = default, 10 = nearly rigid pre-bent laths)",
+    "access": "item",
+    "default": "1.0"
+   },
+   {
+    "name": "Segment",
+    "nick": "Sg",
+    "type": "Number",
+    "desc": "Longest lath piece between nodes: members longer than this get intermediate nodes so laths can bend between joints (0 = joints only)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Iterations",
+    "nick": "It",
+    "type": "Integer",
+    "desc": "Solver iterations per state",
+    "access": "item",
+    "default": "60"
+   },
+   {
+    "name": "Tolerance",
+    "nick": "X",
+    "type": "Number",
+    "desc": "Maximum gap accepted as a crossing (0 = automatic)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic: 1/500 of the net size)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Optional surface mesh: its normals start the joint normals (otherwise they come from the crossing laths)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Slide",
+    "nick": "Sl",
+    "type": "Point",
+    "desc": "Ground points: the nearest joints stay on the plane through their rest position (normal SlideNormal) and slide in it",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "SlideNormal",
+    "nick": "Sn",
+    "type": "Vector",
+    "desc": "Normal of the sliding planes (default Z: joints stay on the ground)",
+    "access": "item",
+    "default": "Vector3d.ZAxis"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "A",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Family A laths at Fold (polylines through the joints)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "B",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Family B laths at Fold",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Joints",
+    "nick": "J",
+    "type": "Point",
+    "desc": "Joint positions at Fold",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Normals",
+    "nick": "N",
+    "type": "Vector",
+    "desc": "Surface normal at each joint at Fold",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Angles",
+    "nick": "An",
+    "type": "Number",
+    "desc": "Scissor angle (degrees) between the two laths at each joint at Fold",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "StatesA",
+    "nick": "SA",
+    "type": "Curve",
+    "desc": "Family A laths per state (one branch per state, Fold 0 → Fold)",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "StatesB",
+    "nick": "SB",
+    "type": "Curve",
+    "desc": "Family B laths per state",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Folds",
+    "nick": "Fs",
+    "type": "Number",
+    "desc": "Fold parameter of each state",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Drift",
+    "nick": "Dr",
+    "type": "Number",
+    "desc": "Per state: largest relative change of a joint spacing (0 = perfect scissor joints)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Deviation",
+    "nick": "Dv",
+    "type": "Number",
+    "desc": "Per state: largest angle (degrees) between a lath segment and the tangent plane (0 = exactly asymptotic)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Miss",
+    "nick": "Ms",
+    "type": "Number",
+    "desc": "Per state: largest distance of a moved point from its target, of a cable from its length or of a sliding joint from its plane",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Summary of the motion",
+    "access": "item",
+    "default": null
+   }
+  ]
  }
 ]

@@ -428,6 +428,68 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     }
 }
 
+// ---------- Net Kinetics: scissor-jointed asymptotic nets as mechanisms ----------
+{
+    // 1. Exact: the doubly ruled hyperboloid grid of Schikore et al. 2020 (16 rods per family, 7 joints each),
+    //    driven by a cable across the top ring from β = 25° to 70°; every state must match the closed form.
+    int n = 16, levels = 3, rows = 2 * levels + 1; double rho = 1.0;
+    double b0 = 25 * Math.PI / 180, b1 = 70 * Math.PI / 180;
+    var (nodes0, laths0, normals0) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(n, levels, rho, b0);
+    var net = new Mite.Core.Kinetics.ScissorNet(nodes0, laths0, n, normals0);
+    int top0 = 2 * levels, topOpp = (n / 2) * rows + 2 * levels, waist0 = levels;
+    double TopDiameter(double beta) { var (nn, _, _) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(n, levels, rho, beta); return (nn[top0] - nn[topOpp]).Length; }
+    int steps = 12;
+    var t = Stopwatch.StartNew();
+    var res = net.Solve(new Mite.Core.Kinetics.ScissorNet.Options { Fixed = new[] { waist0 }, Cables = new[] { (top0, topOpp) }, CableLengthsAt = f => new[] { TopDiameter(b0 + f * (b1 - b0)) }, Steps = steps, Tolerance = 1e-11 });
+    t.Stop();
+    var stateRows = new List<object>(); var stateScenes = new List<object>();
+    double worstShape = 0, worstDrift = 0, worstAsym = 0, worstCable = 0; int worstIt = 0;
+    foreach (var st in res.States)
+    {
+        double beta = b0 + st.Fold * (b1 - b0);
+        var (truth, _, _) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(n, levels, rho, beta);
+        double shape = 0;
+        for (int i = 0; i < truth.Length; i++) for (int j = i + 1; j < truth.Length; j++) shape = Math.Max(shape, Math.Abs((st.Nodes[i] - st.Nodes[j]).Length - (truth[i] - truth[j]).Length));
+        worstShape = Math.Max(worstShape, shape); worstDrift = Math.Max(worstDrift, st.LengthDrift); worstAsym = Math.Max(worstAsym, st.AsymptoticDeviation); worstCable = Math.Max(worstCable, st.CableMiss); worstIt = Math.Max(worstIt, st.Iterations);
+        var ang = net.CrossingAngles(st);
+        var polys = net.LathPolylines(st);
+        stateRows.Add(new { fold = R3(st.Fold), betaDeg = R3(beta * 180 / Math.PI), waist = R3((st.Nodes[waist0] - st.Nodes[(n / 2) * rows + levels]).Length / 2), waistTheory = R3(rho * Math.Cos(beta)), shapeErr = shape, drift = st.LengthDrift, asymDeg = st.AsymptoticDeviation, cableMiss = st.CableMiss, waistAngle = R3(ang[waist0]), waistAngleTheory = R3(2 * beta * 180 / Math.PI > 90 ? 180 - 2 * beta * 180 / Math.PI : 2 * beta * 180 / Math.PI), iterations = st.Iterations, converged = st.Converged });
+        stateScenes.Add(new { a = polys.Take(n).Select(l => Line(l)).ToArray(), b = polys.Skip(n).Select(l => Line(l)).ToArray(), joints = st.Nodes.Select(P).ToArray() });
+    }
+    numbers["kinHyp"] = new { rods = 2 * n, joints = nodes0.Length, states = res.States.Count, worstShape, worstDrift, worstAsym, worstCable, worstIt, ms = t.ElapsedMilliseconds, rows = stateRows };
+    scenes["kinHyp"] = new { states = stateScenes };
+
+    // 2. A traced asymptotic net on the catenoid (the Studio X "concave cylinder") standing on the ground (bottom-rim
+    //    joints slide in z = −1, Wan et al.'s ground nodes), top ring pulled in by 20 % with two crossed cables; the laths
+    //    keep their rest bend (stiffness 1) and the hinges their spacing as far as they can.
+    var cat = TestMeshes.CreateCatenoid(1, 2, 64, 32);
+    var pcC = PrincipalCurvature.Compute(cat);
+    var fieldC = AsymptoticCurves.ComputeDirections(pcC);
+    var catA = EvenlySpacedNet.TraceField(cat, fieldC.Family1, fieldC.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.3 }, fieldC.Family2);
+    var catB = EvenlySpacedNet.TraceField(cat, fieldC.Family2, fieldC.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.3 }, fieldC.Family1);
+    var topoC = NetTopology.Build(catA, catB, NetIntersections.FindAll(catA, catB, 0));
+    var projC = new MeshProjection(cat);
+    var netC = Mite.Core.Kinetics.ScissorNet.FromTopology(topoC, catA.Count + catB.Count, catA.Count, 0, p => projC.ClosestPoint(p, -1).SmoothNormal);
+    var top = Enumerable.Range(0, netC.Nodes.Length).Where(i => netC.Nodes[i].Z > 0.95).ToArray();
+    int c0 = top.OrderBy(i => netC.Nodes[i].X).First(), c1 = top.OrderByDescending(i => netC.Nodes[i].X).First();
+    int c2 = top.OrderBy(i => netC.Nodes[i].Y).First(), c3 = top.OrderByDescending(i => netC.Nodes[i].Y).First();
+    var ground = Enumerable.Range(0, netC.Nodes.Length).Where(i => netC.Nodes[i].Z < -0.95).ToArray();
+    double d0 = (netC.Nodes[c0] - netC.Nodes[c1]).Length, d1 = (netC.Nodes[c2] - netC.Nodes[c3]).Length;
+    t.Restart();
+    var resC = netC.Solve(new Mite.Core.Kinetics.ScissorNet.Options { Sliding = ground, Cables = new[] { (c0, c1), (c2, c3) }, CableLengthsAt = f => new[] { d0 * (1 - 0.2 * f), d1 * (1 - 0.2 * f) }, Steps = 5 });
+    t.Stop();
+    var catRows = new List<object>(); var catScenes = new List<object>();
+    foreach (var st in resC.States)
+    {
+        var polys = netC.LathPolylines(st);
+        var ang = netC.CrossingAngles(st).Where(a => !double.IsNaN(a)).ToArray();
+        catRows.Add(new { fold = R3(st.Fold), drift = st.LengthDrift, asymDeg = st.AsymptoticDeviation, cableMiss = st.CableMiss, slideMiss = st.SlideMiss, cable = R3((st.Nodes[c0] - st.Nodes[c1]).Length), cableTarget = R3(d0 * (1 - 0.2 * st.Fold)), rise = R3(st.Nodes.Max(q => q.Z) - 1), maxMove = R3(st.Nodes.Zip(netC.Nodes, (a2, b2) => (a2 - b2).Length).Max()), minAngle = R3(ang.Min()), maxAngle = R3(ang.Max()), iterations = st.Iterations, converged = st.Converged });
+        catScenes.Add(new { a = polys.Take(netC.CountA).Select(l => Line(l)).ToArray(), b = polys.Skip(netC.CountA).Select(l => Line(l)).ToArray(), joints = Enumerable.Range(0, netC.Nodes.Length).Where(i => netC.IsJoint[i]).Select(i => P(st.Nodes[i])).ToArray(), cables = new[] { new[] { P(st.Nodes[c0]), P(st.Nodes[c1]) }, new[] { P(st.Nodes[c2]), P(st.Nodes[c3]) } } });
+    }
+    numbers["kinCat"] = new { laths = netC.Laths.Count, joints = netC.IsJoint.Count(j => j), nodes = netC.Nodes.Length, ground = ground.Length, cableStart = R3(d0), settleMove = R3(resC.States[0].Nodes.Zip(netC.Nodes, (a2, b2) => (a2 - b2).Length).Max()), settleDeg = resC.States[0].AsymptoticDeviation, ms = t.ElapsedMilliseconds, rows = catRows };
+    scenes["kinCat"] = new { wire = Edges(cat, 4), states = catScenes };
+}
+
 // ---------- Form finding on a 24x24 grid ----------
 {
     int n = 24;
