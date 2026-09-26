@@ -28,7 +28,12 @@ namespace Mite.Core.Kinetics;
 ///                2 v_i − v_{i−1} − v_{i+1}, which also penalises uneven joint
 ///                spacing on a straight lath and straightens curved ones —
 ///                inadmissible for a net that is given, not designed),
-///   boundary     v_i − target_i (soft) and cable lengths |v_p − v_q| − d,
+///   boundary     v_i − target_i (soft), cable lengths |v_p − v_q| − d, sliding
+///                ground nodes (v_i − v_i⁰)·n_plane,
+///   twist        equal twist rate on both sides of a node that lies on one lath
+///                only (subdivision nodes) and zero twist on a free tail beyond
+///                the last hinge: the torsion equilibrium of a rod free between
+///                hinges, and it fixes the otherwise free spin of those normals,
 /// minimised in the least-squares sense; Wan et al. use a trust-region
 /// reflective solver, here it is Levenberg–Marquardt on the sparse normal
 /// equations (envelope LDLᵀ). The mechanism reading — rigid shearing at the
@@ -329,28 +334,51 @@ public sealed class ScissorNet
             var c = Vec3d.Cross(tangents[0], tangents[1]);
             if (c.Length > 1e-6) n[v] = c.Normalized();
         }
-        // propagate along laths to non-joint nodes (free ends, subdivision nodes)
-        for (int pass = 0; pass < 2; pass++)
-            foreach (var lath in Laths)
+        // Runs of unknown normals between two known ones (subdivision nodes between joints) get a uniform
+        // twist: the known normals are rotated about the lath into each other in proportion to arc length,
+        // which is the torsion equilibrium of a rod free between its hinges. Runs at a lath end (free
+        // tails) transport the nearest known normal along the lath.
+        foreach (var lath in Laths)
+        {
+            int L = lath.Length;
+            var arc = new double[L];
+            for (int j = 1; j < L; j++) arc[j] = arc[j - 1] + (Nodes[lath[j]] - Nodes[lath[j - 1]]).Length;
+            Vec3d TangentAt(int j)
             {
-                // forward / backward fill of empty normals from the nearest known one, transported along the lath
-                for (int dir = 0; dir < 2; dir++)
+                int i0 = Math.Max(0, j - 1), i1 = Math.Min(L - 1, j + 1);
+                return (Nodes[lath[i1]] - Nodes[lath[i0]]).Normalized();
+            }
+            int i = 0;
+            while (i < L)
+            {
+                if (n[lath[i]].LengthSquared > 0.5) { i++; continue; }
+                int start = i; while (i < L && n[lath[i]].LengthSquared <= 0.5) i++;
+                int end = i; // [start, end) unknown; start-1 and end are known when inside the lath
+                bool hasPrev = start > 0, hasNext = end < L;
+                if (!hasPrev && !hasNext) continue;
+                for (int k = start; k < end; k++)
                 {
-                    Vec3d known = Vec3d.Zero; int knownIdx = -1;
-                    for (int s = 0; s < lath.Length; s++)
+                    var t = TangentAt(k);
+                    Vec3d m;
+                    if (hasPrev && hasNext)
                     {
-                        int i = dir == 0 ? s : lath.Length - 1 - s;
-                        int v = lath[i];
-                        if (n[v].LengthSquared > 0.5) { known = n[v]; knownIdx = i; continue; }
-                        if (knownIdx < 0) continue;
-                        // make the transported normal perpendicular to the local tangent
-                        int i0 = Math.Max(0, i - 1), i1 = Math.Min(lath.Length - 1, i + 1);
-                        var t = (Nodes[lath[i1]] - Nodes[lath[i0]]).Normalized();
-                        var m = known - Vec3d.Dot(known, t) * t;
-                        if (m.Length > 1e-9) { n[v] = m.Normalized(); known = n[v]; knownIdx = i; }
+                        var a = n[lath[start - 1]]; var b = n[lath[end]];
+                        a = (a - Vec3d.Dot(a, t) * t).Normalized(); b = (b - Vec3d.Dot(b, t) * t).Normalized();
+                        if (Vec3d.Dot(a, b) < 0) b = -b;
+                        double f = (arc[k] - arc[start - 1]) / Math.Max(arc[end] - arc[start - 1], 1e-300);
+                        double ang = Math.Atan2(Vec3d.Dot(Vec3d.Cross(a, b), t), Vec3d.Dot(a, b)) * f;
+                        var perp = Vec3d.Cross(t, a);
+                        m = Math.Cos(ang) * a + Math.Sin(ang) * perp;
                     }
+                    else
+                    {
+                        var a = n[lath[hasPrev ? start - 1 : end]];
+                        m = a - Vec3d.Dot(a, t) * t;
+                    }
+                    if (m.Length > 1e-9) n[lath[k]] = m.Normalized();
                 }
             }
+        }
         return n;
     }
     private struct Bend
@@ -407,6 +435,20 @@ public sealed class ScissorNet
                     var b0 = Vec3d.Cross(n0, t0);
                     fair.Add(new Bend { Prev = p, Node = v, Next = q, LPrev = lp, LNext = lq, Along = Vec3d.Dot(d0, t0), Normal = Vec3d.Dot(d0, n0), InPlane = Vec3d.Dot(d0, b0) });
                 }
+        // uniform twist through nodes that lie on one lath only (subdivision nodes): the normal's rate of
+        // change along the lath is the same on both sides — the torsion equilibrium of a rod free between
+        // hinges, and it removes the free spin of those normals. Joints are left alone (τg varies).
+        // Free tails (a lath end on one lath only) carry no torque: zero twist on the end segment, q = −1.
+        var twistNodes = new List<(int p, int v, int q, double lp, double lq)>();
+        for (int l = 0; l < Laths.Count; l++)
+        {
+            var lath = Laths[l]; int L = lath.Length;
+            for (int i = 1; i + 1 < L; i++)
+                if (NodeLaths[lath[i]].Length == 1)
+                    twistNodes.Add((lath[i - 1], lath[i], lath[i + 1], RestLengths[l][i - 1], RestLengths[l][i]));
+            if (L >= 2 && NodeLaths[lath[0]].Length == 1) twistNodes.Add((lath[1], lath[0], -1, RestLengths[l][0], 0));
+            if (L >= 2 && NodeLaths[lath[L - 1]].Length == 1) twistNodes.Add((lath[L - 2], lath[L - 1], -1, RestLengths[l][L - 2], 0));
+        }
         double wF = Math.Sqrt(Math.Max(0, opt.Fairness));
         double wT = opt.TargetWeight / Scale;
         double wC = opt.CableWeight / Scale;
@@ -418,7 +460,7 @@ public sealed class ScissorNet
             var targets = opt.TargetsAt != null && opt.Driven.Count > 0 ? opt.TargetsAt(t) : Array.Empty<Vec3d>();
             var cableLen = opt.CableLengthsAt != null && opt.Cables.Count > 0 ? opt.CableLengthsAt(t) : Array.Empty<double>();
 
-            var st = SolveState(opt, t, pos, nrm, dof, ndof, freeCount, segs, fair, wF, wT, wC, targets, cableLen);
+            var st = SolveState(opt, t, pos, nrm, dof, ndof, freeCount, segs, fair, twistNodes, wF, wT, wC, targets, cableLen);
             result.States.Add(st);
             if (opt.Cancel != null && opt.Cancel()) { result.Cancelled = true; break; }
         }
@@ -426,7 +468,7 @@ public sealed class ScissorNet
     }
 
     private State SolveState(Options opt, double t, Vec3d[] pos, Vec3d[] nrm, int[] dof, int[] ndof, int freeCount,
-        List<(int a, int b, double l)> segs, List<Bend> fair,
+        List<(int a, int b, double l)> segs, List<Bend> fair, List<(int p, int v, int q, double lp, double lq)> twistNodes,
         double wF, double wT, double wC, Vec3d[] targets, double[] cableLen)
     {
         // residual blocks: per seg 3 (length, asym a, asym b); per node 1 (unit);
@@ -434,7 +476,7 @@ public sealed class ScissorNet
         int nDriven = Math.Min(opt.Driven.Count, targets.Length);
         int nCable = Math.Min(opt.Cables.Count, cableLen.Length);
         int nSlide = opt.Sliding.Count;
-        int m = segs.Count * 3 + Nodes.Length + fair.Count * 3 + nDriven * 3 + nCable + nSlide;
+        int m = segs.Count * 3 + Nodes.Length + fair.Count * 3 + nDriven * 3 + nCable + nSlide + twistNodes.Count;
         var r = new double[m];
         // Jacobian in triplets per residual row: (col, value) lists
         var rowsCols = new List<int>[m];
@@ -442,7 +484,7 @@ public sealed class ScissorNet
         for (int i = 0; i < m; i++) { rowsCols[i] = new List<int>(12); rowsVals[i] = new List<double>(12); }
 
         var slideN = opt.SlideNormal.Normalized();
-        double cost = Evaluate(pos, nrm, dof, ndof, segs, fair, wF, wT, wC, opt, nDriven, nCable, targets, cableLen, slideN, r, rowsCols, rowsVals);
+        double cost = Evaluate(pos, nrm, dof, ndof, segs, fair, twistNodes, wF, wT, wC, opt, nDriven, nCable, targets, cableLen, slideN, r, rowsCols, rowsVals);
         double lambda = 1e-4;
         var st = new State { Fold = t };
         int it = 0, slow = 0;
@@ -493,7 +535,7 @@ public sealed class ScissorNet
                 var r2 = new double[m];
                 var rc2 = new List<int>[m]; var rv2 = new List<double>[m];
                 for (int i = 0; i < m; i++) { rc2[i] = new List<int>(12); rv2[i] = new List<double>(12); }
-                double cost2 = Evaluate(newPos, newNrm, dof, ndof, segs, fair, wF, wT, wC, opt, nDriven, nCable, targets, cableLen, slideN, r2, rc2, rv2);
+                double cost2 = Evaluate(newPos, newNrm, dof, ndof, segs, fair, twistNodes, wF, wT, wC, opt, nDriven, nCable, targets, cableLen, slideN, r2, rc2, rv2);
                 opt.Log?.Invoke($"it {it} attempt {attempt} lambda {lambda:E1} cost {cost:E3} -> {cost2:E3} maxr {MaxAbs(r2):E2}");
                 if (cost2 < cost || double.IsNaN(cost))
                 {
@@ -550,7 +592,7 @@ public sealed class ScissorNet
 
     /// <summary>Fills residuals and Jacobian rows; returns ½ Σ r².</summary>
     private double Evaluate(Vec3d[] pos, Vec3d[] nrm, int[] dof, int[] ndof,
-        List<(int a, int b, double l)> segs, List<Bend> fair,
+        List<(int a, int b, double l)> segs, List<Bend> fair, List<(int p, int v, int q, double lp, double lq)> twistNodes,
         double wF, double wT, double wC, Options opt, int nDriven, int nCable, Vec3d[] targets, double[] cableLen, Vec3d slideN,
         double[] r, List<int>[] cols, List<double>[] vals)
     {
@@ -648,6 +690,32 @@ public sealed class ScissorNet
         {
             r[row] = wT * Vec3d.Dot(pos[v] - Nodes[v], slideN);
             AddVec(v, false, wT * slideN);
+            row++;
+        }
+        foreach (var (p, v, q, lp, lq) in twistNodes)
+        {
+            // twist rate (rotation angle of the normal about the segment per length) equal on both sides of v;
+            // the angle form keeps unit normals exact, the Jacobian over the nine normal components is by
+            // central differences (the dependence on the positions through the tangents is second order)
+            var tp = (pos[v] - pos[p]).Normalized();
+            var tq = q >= 0 ? (pos[q] - pos[v]).Normalized() : tp;
+            double Rate(Vec3d a, Vec3d b, Vec3d t, double l)
+            {
+                a = (a - Vec3d.Dot(a, t) * t).Normalized(); b = (b - Vec3d.Dot(b, t) * t).Normalized();
+                return Math.Atan2(Vec3d.Dot(Vec3d.Cross(a, b), t), Vec3d.Dot(a, b)) / l;
+            }
+            // interior: equal rates on both sides; free tail (q < 0): zero rate on the end segment
+            double Res(Vec3d np, Vec3d nv, Vec3d nq) => Scale * (Rate(np, nv, tp, lp) - (q >= 0 ? Rate(nv, nq, tq, lq) : 0.0));
+            var nq0 = q >= 0 ? nrm[q] : Vec3d.Zero;
+            r[row] = Res(nrm[p], nrm[v], nq0);
+            const double h = 1e-6;
+            for (int c = 0; c < 3; c++)
+            {
+                var e = new Vec3d(c == 0 ? h : 0, c == 1 ? h : 0, c == 2 ? h : 0);
+                Add(p, c, true, (Res(nrm[p] + e, nrm[v], nq0) - Res(nrm[p] - e, nrm[v], nq0)) / (2 * h));
+                Add(v, c, true, (Res(nrm[p], nrm[v] + e, nq0) - Res(nrm[p], nrm[v] - e, nq0)) / (2 * h));
+                if (q >= 0) Add(q, c, true, (Res(nrm[p], nrm[v], nq0 + e) - Res(nrm[p], nrm[v], nq0 - e)) / (2 * h));
+            }
             row++;
         }
         double cost = 0; foreach (double x in r) cost += x * x;

@@ -29,7 +29,10 @@ public class NetKineticsComponent : MiteComponent
             "upright laths remain straight-unrollable — and laths keep their rest bend with the given Stiffness. " +
             "Drive the motion with Fixed points, Slide points (joints kept on the ground plane, free to slide), points moved To targets, or Cables whose Lengths change; Fold 0…1 " +
             "runs the drivers from the rest state to the target in Steps states. Drift, Deviation and Miss tell you " +
-            "how well the mechanism can follow (a rigid net cannot follow at all; the exact doubly ruled grids follow to 1e-12).",
+            "how well the mechanism can follow (a rigid net cannot follow at all; the exact doubly ruled grids follow to 1e-12). " +
+            "Every state is also read elastically (Schikore, Schling, Oberbichler & Bauer 2020): bending and twist strains of the lath section " +
+            "(Upright/Width/Thickness or Shape/Section, as Lath Analysis), the strain energy Π = ½∫(GJτ² + EIκ²) ds per state and the natural " +
+            "(least-energy) state along the motion.",
             "Kinetics", "NetKinetics") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCE01");
@@ -60,6 +63,14 @@ public class NetKineticsComponent : MiteComponent
         pManager.AddPointParameter("Slide", "Sl", "Ground points: the nearest joints stay on the plane through their rest position (normal SlideNormal) and slide in it", GH_ParamAccess.list);
         pManager[15].Optional = true;
         pManager.AddVectorParameter("SlideNormal", "Sn", "Normal of the sliding planes (default Z: joints stay on the ground)", GH_ParamAccess.item, Vector3d.ZAxis);
+        // elastic reading of every state (Schikore et al. 2020): the lath section as on Lath Analysis
+        pManager.AddBooleanParameter("Upright", "U", "True: laths stand upright on the surface (asymptotic gridshells); false: flat strips", GH_ParamAccess.item, true);
+        pManager.AddNumberParameter("Width", "W", "Strip width, across the curve (default 0.1)", GH_ParamAccess.item, 0.1);
+        pManager.AddNumberParameter("Thickness", "T", "Strip thickness (default 0.01)", GH_ParamAccess.item, 0.01);
+        pManager.AddNumberParameter("MaxStrain", "E", "Allowable bending strain for the utilization (default 0.005 ≈ timber; 0.002 steel, 0.008 GFRP)", GH_ParamAccess.item, 0.005);
+        pManager.AddNumberParameter("Modulus", "Em", "Young's modulus in Pa for the strain energy (default 11 GPa); the shear modulus is taken as E/16", GH_ParamAccess.item, 11e9);
+        pManager.AddNumberParameter("Density", "Rho", "Density in kg/m³ for the self-weight potential in the energy diagram (0 = ignore self-weight)", GH_ParamAccess.item, 0.0);
+        RegisterSectionInputs(pManager); // 23 Shape, 24 Section — the same profile Lath Sweep builds
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -76,6 +87,11 @@ public class NetKineticsComponent : MiteComponent
         pManager.AddNumberParameter("Deviation", "Dv", "Per state: largest angle (degrees) between a lath segment and the tangent plane (0 = exactly asymptotic)", GH_ParamAccess.list);
         pManager.AddNumberParameter("Miss", "Ms", "Per state: largest distance of a moved point from its target, of a cable from its length or of a sliding joint from its plane", GH_ParamAccess.list);
         pManager.AddTextParameter("Report", "R", "Summary of the motion", GH_ParamAccess.item);
+        pManager.AddNumberParameter("Utilization", "U", "Per state: peak strain utilization over all laths (bending and twist of the section, as Lath Analysis)", GH_ParamAccess.list);
+        pManager.AddNumberParameter("LathUtil", "Ul", "Per state (branch) and lath: peak utilization — A laths first, then B; the last branch goes straight into Lath Preview", GH_ParamAccess.tree);
+        pManager.AddNumberParameter("Energy", "En", "Per state: strain energy Π = ½∫(GJτ² + EI κ²) ds in joules, plus the self-weight potential when Density is set", GH_ParamAccess.list);
+        pManager.AddNumberParameter("Natural", "Nf", "Fold parameter of the least-energy state along the motion (Schikore et al.'s natural configuration); NaN when the energy is flat", GH_ParamAccess.item);
+        pManager.AddBooleanParameter("Buildable", "Ok", "True when every state stays within MaxStrain", GH_ParamAccess.item);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -92,6 +108,8 @@ public class NetKineticsComponent : MiteComponent
         Mesh? mesh = null;
         var slidePts = new List<Point3d>();
         var slideNormal = Vector3d.ZAxis;
+        bool upright = true; double width = 0.1, thickness = 0.01, maxStrain = 0.005, modulus = 11e9, density = 0.0;
+        int shape = 0; Curve? section = null;
         if (!DA.GetDataList(0, curvesA)) return;
         if (!DA.GetDataList(1, curvesB)) return;
         DA.GetDataList(2, fixedPts);
@@ -110,6 +128,20 @@ public class NetKineticsComponent : MiteComponent
         DA.GetDataList(15, slidePts);
         DA.GetData(16, ref slideNormal);
         if (slideNormal.IsTiny()) slideNormal = Vector3d.ZAxis;
+        DA.GetData(17, ref upright);
+        DA.GetData(18, ref width);
+        DA.GetData(19, ref thickness);
+        DA.GetData(20, ref maxStrain);
+        DA.GetData(21, ref modulus);
+        DA.GetData(22, ref density);
+        DA.GetData(23, ref shape);
+        DA.GetData(24, ref section);
+        if (width <= 0 || thickness <= 0 || maxStrain <= 0)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness and MaxStrain must be positive.");
+            return;
+        }
+        if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, 1.0, curvesA.Count + curvesB.Count, out Mite.Core.Fabrication.LathProfile profile)) return;
 
         if (movePts.Count > 0 && toPts.Count == 0)
         {
@@ -231,6 +263,20 @@ public class NetKineticsComponent : MiteComponent
             folds.Add(st.Fold); drift.Add(st.LengthDrift); dev.Add(st.AsymptoticDeviation); miss.Add(Math.Max(st.TargetMiss, Math.Max(st.CableMiss, st.SlideMiss)));
         }
 
+        // elastic reading of every state
+        double toMeters = ModelToMeters();
+        var strainOpt = new KineticStrain.Options { Profile = profile, MaxStrain = maxStrain, YoungsModulus = modulus, Density = Math.Max(0, density), UnitScale = toMeters };
+        var elastic = KineticStrain.Analyze(net, result, strainOpt);
+        var utilPerState = elastic.Select(e => e.MaxUtilization).ToList();
+        var energyPerState = elastic.Select(e => e.Total).ToList();
+        var lathUtil = new DataTree<double>();
+        for (int k = 0; k < elastic.Count; k++) lathUtil.AddRange(elastic[k].LathUtilization, BranchPath(DA, k));
+        int natural = KineticStrain.NaturalState(elastic);
+        double naturalFold = natural >= 0 ? result.States[natural].Fold : double.NaN;
+        bool buildable = elastic.All(e => e.Buildable);
+        if (!buildable)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Laths exceed MaxStrain during the motion: peak utilization {utilPerState.Max():0.00} at Fold {result.States[utilPerState.IndexOf(utilPerState.Max())].Fold:0.##}.");
+
         int notConverged = result.States.Count(s => !s.Converged);
         if (notConverged > 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{notConverged} state(s) stopped at the iteration cap: raise Iterations or Steps, or lower Stiffness.");
@@ -242,7 +288,10 @@ public class NetKineticsComponent : MiteComponent
         sb.AppendLine($"Drivers: {fixedIdx.Count} fixed, {slideIdx.Count} sliding, {driven.Count} moved, {cablePairs.Count} cables; {result.States.Count} states to Fold {last.Fold:0.##}, stiffness {stiffness:G3}");
         sb.AppendLine($"Rest state settled: joints moved up to {result.States[0].Nodes.Zip(net.Nodes, (a, b) => (a - b).Length).Max():G3}, deviation {result.States[0].AsymptoticDeviation:0.###}° from asymptotic");
         sb.AppendLine($"At Fold {last.Fold:0.##}: joint spacing drift {last.LengthDrift:E2}, asymptotic deviation {last.AsymptoticDeviation:0.###}°, driver miss {Math.Max(last.TargetMiss, last.CableMiss):G3}, {last.Iterations} iterations{(last.Converged ? "" : " (cap)")}");
-        sb.Append($"Scissor angles at Fold {last.Fold:0.##}: {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Min():0.#}° … {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Max():0.#}°");
+        sb.AppendLine($"Scissor angles at Fold {last.Fold:0.##}: {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Min():0.#}° … {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Max():0.#}°");
+        var eLast = elastic[elastic.Count - 1];
+        sb.AppendLine($"Elastic ({(profile.Kind == Mite.Core.Fabrication.SectionKind.Rectangle ? (upright ? "upright" : "flat") + $" {width:G3} × {thickness:G3}" : profile.Kind.ToString().ToLowerInvariant())}, E {modulus / 1e9:G3} GPa, limit {maxStrain:P1}): utilization {utilPerState[0]:0.00} at rest → peak {utilPerState.Max():0.00} at Fold {result.States[utilPerState.IndexOf(utilPerState.Max())].Fold:0.##}; strain energy {elastic[0].StrainEnergy:G4} J → {eLast.StrainEnergy:G4} J (bending {eLast.BendingEnergy:G3}, twist {eLast.TwistEnergy:G3}){(density > 0 ? $", self-weight potential {eLast.Potential:G4} J" : "")}");
+        sb.Append(natural >= 0 ? $"Natural state (least energy along the motion): Fold {naturalFold:0.##}{(natural == 0 || natural == elastic.Count - 1 ? " (at the end of the range: the grid wants to go further)" : "")}" : "Natural state: none — the energy is flat along the motion (rigid-body mechanism)");
 
         DA.SetDataList(0, outA);
         DA.SetDataList(1, outB);
@@ -256,5 +305,10 @@ public class NetKineticsComponent : MiteComponent
         DA.SetDataList(9, dev);
         DA.SetDataList(10, miss);
         DA.SetData(11, sb.ToString());
+        DA.SetDataList(12, utilPerState);
+        DA.SetDataTree(13, lathUtil);
+        DA.SetDataList(14, energyPerState);
+        DA.SetData(15, naturalFold);
+        DA.SetData(16, buildable);
     }
 }

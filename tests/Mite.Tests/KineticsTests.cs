@@ -264,6 +264,172 @@ public class KineticsTests
         }
     }
 
+    // ------------------------------------------------------------------ elastic reading (KineticStrain)
+
+    /// <summary>
+    /// Along a ruling of the hyperboloid mechanism the normal rotates about the rod by
+    /// θ(s) = atan(s / b), b = ρ sin β (the surface x² + y² − z² = 1 gives atan s with b = 1),
+    /// so τg(s) = b / (b² + s²) and ∫τg² ds has the closed form s/(2(b²+s²)) + atan(s/b)/(2b).
+    /// </summary>
+    private static double ExactTwistIntegral(double b, double s1, double s2)
+    {
+        double F(double s) => s / (2 * (b * b + s * s)) + Math.Atan(s / b) / (2 * b);
+        return F(s2) - F(s1);
+    }
+
+    [Fact]
+    public void HyperboloidRods_TwistIsExactPerSegment_AndTheEnergyConvergesToTheClosedForm()
+    {
+        double beta = 40 * Math.PI / 180, b = Rho * Math.Sin(beta);
+        var (nodes, laths, normals) = ScissorNet.HyperboloidMechanism(N, Levels, Rho, beta);
+        var net = new ScissorNet(nodes, laths, N, normals);
+        var rest = net.Solve(new ScissorNet.Options { Steps = 1 }).States[0];
+        var opt = new KineticStrain.Options { Profile = LathProfile.Round(0.02), YoungsModulus = 11e9, ShearModulus = 0.7e9 };
+        var r = KineticStrain.Analyze(net, rest, opt);
+        double J = LathProfile.Round(0.02).SectionProperties().J;
+
+        double exactRod = 0.5 * 0.7e9 * J * ExactTwistIntegral(b, Rho * Math.Tan(-Math.PI * Levels / N), Rho * Math.Tan(Math.PI * Levels / N));
+        foreach (var lr in r.Laths)
+        {
+            // straight rods: no bending anywhere
+            Assert.All(lr.NormalCurvature, k => Assert.InRange(Math.Abs(k), 0, 1e-9));
+            Assert.All(lr.GeodesicCurvature, k => Assert.InRange(Math.Abs(k), 0, 1e-9));
+            Assert.InRange(lr.BendingEnergy, 0, 1e-12);
+            // segment twist × length = exact rotation of the normal between the joints
+            int rows = 2 * Levels + 1;
+            for (int i = 0; i + 1 < rows; i++)
+            {
+                double s0 = Rho * Math.Tan(Math.PI * (i - Levels) / N), s1 = Rho * Math.Tan(Math.PI * (i + 1 - Levels) / N);
+                double exactMean = (Math.Atan(s1 / b) - Math.Atan(s0 / b)) / (s1 - s0);
+                // node torsion is the mean of the adjacent segments; the end nodes carry the end segments
+                double segTau = i == 0 ? lr.GeodesicTorsion[0] : (i == rows - 2 ? lr.GeodesicTorsion[rows - 1] : double.NaN);
+                if (!double.IsNaN(segTau)) Assert.InRange(Math.Abs(Math.Abs(segTau) - exactMean), 0, 1e-9);
+            }
+            // torsion at the waist joint: mean of the two waist segments (s up to ρ tan 15°) = atan(s/b)/s, 0.947 of 1/(ρ sin β)
+            double sWaist = Rho * Math.Tan(Math.PI / N);
+            double meanWaist = Math.Atan(sWaist / b) / sWaist;
+            Assert.InRange(Math.Abs(lr.GeodesicTorsion[Levels]) / meanWaist, 1 - 1e-9, 1 + 1e-9);
+            // the discrete energy (mean τ per segment) is a lower bound of the exact one, within 10 % at 5 joints
+            Assert.InRange(lr.TwistEnergy / exactRod, 0.90, 1.0 + 1e-9);
+        }
+        // sign: the two families twist in opposite senses (Beltrami–Enneper, as Lath Analysis reports on the hyperboloid)
+        Assert.True(r.Laths[0].GeodesicTorsion[Levels] * r.Laths[N].GeodesicTorsion[Levels] < 0);
+
+        // Subdividing the rods does not change the twist energy: between two hinges a free rod twists
+        // uniformly (no distributed torque), which is what the solver's twist-uniformity term enforces at
+        // subdivision nodes, so every sub-segment carries the member's mean τ and the energy is the
+        // joints-only value — a lower bound (Jensen) of ½GJ∫(√−K)² ds along the surface's asymptotic curve,
+        // which a lath hinged only at the joints does not follow.
+        var familyA = laths.Take(N).Select(l => l.Select(v => nodes[v]).ToArray()).ToList();
+        var familyB = laths.Skip(N).Select(l => l.Select(v => nodes[v]).ToArray()).ToList();
+        var topo = NetTopology.Build(familyA, familyB, NetIntersections.FindAll(familyA, familyB, 1e-9));
+        var fine = ScissorNet.FromTopology(topo, 2 * N, N, maxSegment: Rho * Math.Tan(Math.PI / N) / 3 + 1e-9);
+        var fineRest = fine.Solve(new ScissorNet.Options { Steps = 1, Tolerance = 1e-11 }).States[0];
+        var rf = KineticStrain.Analyze(fine, fineRest, opt);
+        int rod = Enumerable.Range(0, fine.Laths.Count).First(l => fine.Laths[l].Length > 5);
+        Assert.InRange(rf.Laths[rod].TwistEnergy / exactRod, 0.90, 1.0 + 1e-9);
+        Assert.InRange(rf.Laths[rod].TwistEnergy / r.Laths[0].TwistEnergy, 1 - 1e-6, 1 + 1e-6);
+        // uniform twist: the sub-segments of the waist member all carry the member's mean τ = atan(s/b)/s
+        double sW = Rho * Math.Tan(Math.PI / N), meanTau = Math.Atan(sW / b) / sW;
+        var lathF = fine.Laths[rod];
+        int mid = lathF.Length / 2; // the waist joint
+        Assert.InRange(Math.Abs(rf.Laths[rod].GeodesicTorsion[mid]) / meanTau, 1 - 1e-6, 1 + 1e-6);
+        Assert.InRange(Math.Abs(rf.Laths[rod].GeodesicTorsion[mid + 1]) / meanTau, 1 - 1e-6, 1 + 1e-6);
+        Assert.InRange(Math.Abs(rf.Laths[rod].GeodesicTorsion[mid - 1]) / meanTau, 1 - 1e-6, 1 + 1e-6);
+    }
+
+    [Fact]
+    public void CircularLath_SplitsBendingIntoNormalAndGeodesicCurvatureExactly()
+    {
+        // a single lath along a circle of radius R: chords are uniform, so |tq − tp| / chord = 1/R exactly
+        double R = 2.0; int n = 37;
+        var pts = new Vec3d[n]; var radial = new Vec3d[n]; var vertical = new Vec3d[n];
+        for (int i = 0; i < n; i++)
+        {
+            double a = Math.PI * i / (n - 1); // half circle
+            pts[i] = new Vec3d(R * Math.Cos(a), R * Math.Sin(a), 0);
+            radial[i] = new Vec3d(-Math.Cos(a), -Math.Sin(a), 0);   // surface normal towards the centre: the lath bends out of the surface
+            vertical[i] = new Vec3d(0, 0, 1);                        // surface normal up: the lath bends within the surface
+        }
+        var lath = new[] { Enumerable.Range(0, n).ToArray() };
+        var profile = new LathProfile(0.1, 0.01, upright: false);   // flat strip: kn uses t/2 and IA = w t³/12, kg uses w/2 and IB
+        var sp = profile.SectionProperties();
+        double chord = (pts[1] - pts[0]).Length;
+        double E = 10e9;
+        var opt = new KineticStrain.Options { Profile = profile, YoungsModulus = E, MaxStrain = 0.005 };
+
+        var netN = new ScissorNet(pts, lath, 1, radial);
+        var rN = KineticStrain.Analyze(netN, new ScissorNet.State { Nodes = pts, Normals = radial }, opt);
+        for (int i = 1; i + 1 < n; i++)
+        {
+            Assert.InRange(rN.Laths[0].NormalCurvature[i], 1 / R - 1e-12, 1 / R + 1e-12);
+            Assert.InRange(Math.Abs(rN.Laths[0].GeodesicCurvature[i]), 0, 1e-12);
+            Assert.InRange(Math.Abs(rN.Laths[0].GeodesicTorsion[i]), 0, 1e-12);
+        }
+        double expectedN = 0.5 * E * sp.IA / (R * R) * (n - 2) * chord;
+        Assert.InRange(rN.BendingEnergy, expectedN * (1 - 1e-9), expectedN * (1 + 1e-9));
+        Assert.InRange(rN.MaxUtilization, (0.005 / R) / 0.005 - 1e-9, (0.005 / R) / 0.005 + 1e-9); // kn · t/2 / MaxStrain
+        Assert.InRange(rN.TwistEnergy, 0, 1e-15);
+
+        var netG = new ScissorNet(pts, lath, 1, vertical);
+        var rG = KineticStrain.Analyze(netG, new ScissorNet.State { Nodes = pts, Normals = vertical }, opt);
+        for (int i = 1; i + 1 < n; i++)
+        {
+            Assert.InRange(Math.Abs(rG.Laths[0].GeodesicCurvature[i]), 1 / R - 1e-12, 1 / R + 1e-12);
+            Assert.InRange(Math.Abs(rG.Laths[0].NormalCurvature[i]), 0, 1e-12);
+        }
+        double expectedG = 0.5 * E * sp.IB / (R * R) * (n - 2) * chord;
+        Assert.InRange(rG.BendingEnergy, expectedG * (1 - 1e-9), expectedG * (1 + 1e-9));
+        Assert.InRange(rG.MaxUtilization, (0.05 / R) / 0.005 - 1e-9, (0.05 / R) / 0.005 + 1e-9);  // kg · w/2 / MaxStrain: 5× over the limit
+        Assert.False(rG.Buildable);
+        Assert.True(rN.Buildable);
+
+        // unit scale: the same lath in millimetres gives the same utilization and the same energy in joules
+        var mm = pts.Select(q => 1000 * q).ToArray();
+        var optMm = new KineticStrain.Options { Profile = new LathProfile(100, 10, false), YoungsModulus = E, MaxStrain = 0.005, UnitScale = 1e-3 };
+        var rMm = KineticStrain.Analyze(new ScissorNet(mm, lath, 1, radial), new ScissorNet.State { Nodes = mm, Normals = radial }, optMm);
+        Assert.InRange(rMm.MaxUtilization / rN.MaxUtilization, 1 - 1e-9, 1 + 1e-9);
+        Assert.InRange(rMm.BendingEnergy / rN.BendingEnergy, 1 - 1e-9, 1 + 1e-9);
+    }
+
+    [Fact]
+    public void NaturalState_IsTheLeastEnergyAlongTheMotion_AndUndefinedForARigidMechanism()
+    {
+        // hyperboloid rods: only twist, τg = b/(b² + s²) with b = ρ sin β growing with β, so Π falls monotonically → last state
+        double beta0 = 30 * Math.PI / 180, beta1 = 65 * Math.PI / 180;
+        var (nodes, laths, normals) = ScissorNet.HyperboloidMechanism(N, Levels, Rho, beta0);
+        var net = new ScissorNet(nodes, laths, N, normals);
+        int rows = 2 * Levels + 1, top0 = 2 * Levels, topOpp = (N / 2) * rows + 2 * Levels;
+        double TopDiameter(double beta) { var (nn, _, _) = ScissorNet.HyperboloidMechanism(N, Levels, Rho, beta); return (nn[top0] - nn[topOpp]).Length; }
+        var motion = net.Solve(new ScissorNet.Options { Fixed = new[] { Levels }, Cables = new[] { (top0, topOpp) }, CableLengthsAt = t => new[] { TopDiameter(beta0 + t * (beta1 - beta0)) }, Steps = 6, Tolerance = 1e-11 });
+        var states = KineticStrain.Analyze(net, motion, new KineticStrain.Options { Profile = LathProfile.Round(0.02), ShearModulus = 0.7e9 });
+        for (int k = 1; k < states.Count; k++) Assert.True(states[k].StrainEnergy < states[k - 1].StrainEnergy, $"energy should fall: {states[k - 1].StrainEnergy} → {states[k].StrainEnergy}");
+        Assert.Equal(states.Count - 1, KineticStrain.NaturalState(states));
+        // exact energy at every state: Σ rods ½ G J ∫τ² ds within 10 % (5 joints per rod), same lower-bound sense
+        double J = LathProfile.Round(0.02).SectionProperties().J;
+        for (int k = 0; k < states.Count; k++)
+        {
+            double beta = beta0 + (beta1 - beta0) * k / 6, b = Rho * Math.Sin(beta);
+            double exact = 2 * N * 0.5 * 0.7e9 * J * ExactTwistIntegral(b, Rho * Math.Tan(-Math.PI * Levels / N), Rho * Math.Tan(Math.PI * Levels / N));
+            Assert.InRange(states[k].TwistEnergy / exact, 0.90, 1.0 + 1e-9);
+        }
+
+        // the planar lazy tongs store nothing at any shear: no natural state
+        int n = 4;
+        Vec3d Node(int i, int j, double gamma) => new Vec3d(i + j * Math.Cos(gamma), j * Math.Sin(gamma), 0);
+        var flat = new Vec3d[(n + 1) * (n + 1)];
+        for (int i = 0; i <= n; i++) for (int j = 0; j <= n; j++) flat[i * (n + 1) + j] = Node(i, j, Math.PI / 2);
+        var fl = new List<int[]>();
+        for (int j = 0; j <= n; j++) fl.Add(Enumerable.Range(0, n + 1).Select(i => i * (n + 1) + j).ToArray());
+        for (int i = 0; i <= n; i++) fl.Add(Enumerable.Range(0, n + 1).Select(j => i * (n + 1) + j).ToArray());
+        var lattice = new ScissorNet(flat, fl, n + 1);
+        var shear = lattice.Solve(new ScissorNet.Options { Fixed = new[] { 0, n * (n + 1) }, Driven = new[] { n }, TargetsAt = t => new[] { Node(0, n, Math.PI / 2 - t * Math.PI / 6) }, Steps = 3, Tolerance = 1e-11 });
+        var flatStates = KineticStrain.Analyze(lattice, shear);
+        Assert.All(flatStates, st => Assert.InRange(st.Total, 0, 1e-12));
+        Assert.Equal(-1, KineticStrain.NaturalState(flatStates));
+        Assert.All(flatStates, st => Assert.True(st.Buildable));
+    }
+
     [Fact]
     public void SubdividedRods_StayStraightAndInextensible()
     {

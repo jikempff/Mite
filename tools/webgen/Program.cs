@@ -456,7 +456,21 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         stateRows.Add(new { fold = R3(st.Fold), betaDeg = R3(beta * 180 / Math.PI), waist = R3((st.Nodes[waist0] - st.Nodes[(n / 2) * rows + levels]).Length / 2), waistTheory = R3(rho * Math.Cos(beta)), shapeErr = shape, drift = st.LengthDrift, asymDeg = st.AsymptoticDeviation, cableMiss = st.CableMiss, waistAngle = R3(ang[waist0]), waistAngleTheory = R3(2 * beta * 180 / Math.PI > 90 ? 180 - 2 * beta * 180 / Math.PI : 2 * beta * 180 / Math.PI), iterations = st.Iterations, converged = st.Converged });
         stateScenes.Add(new { a = polys.Take(n).Select(l => Line(l)).ToArray(), b = polys.Skip(n).Select(l => Line(l)).ToArray(), joints = st.Nodes.Select(P).ToArray() });
     }
-    numbers["kinHyp"] = new { rods = 2 * n, joints = nodes0.Length, states = res.States.Count, worstShape, worstDrift, worstAsym, worstCable, worstIt, ms = t.ElapsedMilliseconds, rows = stateRows };
+    // elastic reading (Schikore et al. 2020): straight rods → twist only; along a ruling the normal turns by
+    // θ(s) = atan(s / b), b = ρ sin β, so τg = b / (b² + s²) and ∫τg² ds = [s / (2(b² + s²)) + atan(s / b) / (2b)];
+    // the discrete joint-to-joint twist (uniform between hinges) is a lower bound of that surface integral
+    var rodOpt = new Mite.Core.Kinetics.KineticStrain.Options { Profile = LathProfile.Round(0.02), YoungsModulus = 11e9, ShearModulus = 0.7e9, MaxStrain = 0.005 };
+    var rodElastic = Mite.Core.Kinetics.KineticStrain.Analyze(net, res, rodOpt);
+    double Jrod = LathProfile.Round(0.02).SectionProperties().J, sEnd = rho * Math.Tan(Math.PI * levels / n);
+    double F(double b, double s) => s / (2 * (b * b + s * s)) + Math.Atan(s / b) / (2 * b);
+    var elasticRows = new List<object>();
+    for (int k = 0; k < res.States.Count; k++)
+    {
+        double beta = b0 + res.States[k].Fold * (b1 - b0), bb = rho * Math.Sin(beta);
+        double exact = 2 * n * 0.5 * 0.7e9 * Jrod * (F(bb, sEnd) - F(bb, -sEnd));
+        elasticRows.Add(new { fold = R3(res.States[k].Fold), twist = rodElastic[k].TwistEnergy, exact, ratio = R3(rodElastic[k].TwistEnergy / exact), bending = rodElastic[k].BendingEnergy, util = R3(rodElastic[k].MaxUtilization), utilTheory = R3(0.01 / Math.Sqrt(3.0) / bb / 0.005 * (bb * Math.Atan(rho * Math.Tan(Math.PI / n) / bb) / (rho * Math.Tan(Math.PI / n)))) });
+    }
+    numbers["kinHyp"] = new { rods = 2 * n, joints = nodes0.Length, states = res.States.Count, worstShape, worstDrift, worstAsym, worstCable, worstIt, ms = t.ElapsedMilliseconds, rows = stateRows, elastic = elasticRows, natural = Mite.Core.Kinetics.KineticStrain.NaturalState(rodElastic) };
     scenes["kinHyp"] = new { states = stateScenes };
 
     // 2. A traced asymptotic net on the catenoid (the Studio X "concave cylinder") standing on the ground (bottom-rim
@@ -486,7 +500,12 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         catRows.Add(new { fold = R3(st.Fold), drift = st.LengthDrift, asymDeg = st.AsymptoticDeviation, cableMiss = st.CableMiss, slideMiss = st.SlideMiss, cable = R3((st.Nodes[c0] - st.Nodes[c1]).Length), cableTarget = R3(d0 * (1 - 0.2 * st.Fold)), rise = R3(st.Nodes.Max(q => q.Z) - 1), maxMove = R3(st.Nodes.Zip(netC.Nodes, (a2, b2) => (a2 - b2).Length).Max()), minAngle = R3(ang.Min()), maxAngle = R3(ang.Max()), iterations = st.Iterations, converged = st.Converged });
         catScenes.Add(new { a = polys.Take(netC.CountA).Select(l => Line(l)).ToArray(), b = polys.Skip(netC.CountA).Select(l => Line(l)).ToArray(), joints = Enumerable.Range(0, netC.Nodes.Length).Where(i => netC.IsJoint[i]).Select(i => P(st.Nodes[i])).ToArray(), cables = new[] { new[] { P(st.Nodes[c0]), P(st.Nodes[c1]) }, new[] { P(st.Nodes[c2]), P(st.Nodes[c3]) } } });
     }
-    numbers["kinCat"] = new { laths = netC.Laths.Count, joints = netC.IsJoint.Count(j => j), nodes = netC.Nodes.Length, ground = ground.Length, cableStart = R3(d0), settleMove = R3(resC.States[0].Nodes.Zip(netC.Nodes, (a2, b2) => (a2 - b2).Length).Max()), settleDeg = resC.States[0].AsymptoticDeviation, ms = t.ElapsedMilliseconds, rows = catRows };
+    // elastic reading of the catenoid motion: upright 80 × 12 mm timber laths, 0.5 % strain, self-weight 500 kg/m³
+    var catOpt = new Mite.Core.Kinetics.KineticStrain.Options { Profile = new LathProfile(0.08, 0.012, true), YoungsModulus = 11e9, MaxStrain = 0.005, Density = 500 };
+    var catElastic = Mite.Core.Kinetics.KineticStrain.Analyze(netC, resC, catOpt);
+    int catNatural = Mite.Core.Kinetics.KineticStrain.NaturalState(catElastic);
+    var catEnergyRows = catElastic.Select(e => new { fold = R3(e.Fold), util = R3(e.MaxUtilization), bending = R3(e.BendingEnergy), twist = R3(e.TwistEnergy), potential = R3(e.Potential), total = R3(e.Total), buildable = e.Buildable }).ToArray();
+    numbers["kinCat"] = new { laths = netC.Laths.Count, joints = netC.IsJoint.Count(j => j), nodes = netC.Nodes.Length, ground = ground.Length, cableStart = R3(d0), elastic = catEnergyRows, natural = catNatural, naturalFold = catNatural >= 0 ? R3(resC.States[catNatural].Fold) : -1, settleMove = R3(resC.States[0].Nodes.Zip(netC.Nodes, (a2, b2) => (a2 - b2).Length).Max()), settleDeg = resC.States[0].AsymptoticDeviation, ms = t.ElapsedMilliseconds, rows = catRows };
     scenes["kinCat"] = new { wire = Edges(cat, 4), states = catScenes };
 }
 

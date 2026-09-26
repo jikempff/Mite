@@ -161,10 +161,22 @@ targets) to animate; `St` states are solved in sequence and come out as trees
 (driver miss) tell you whether the net can follow: the exact doubly ruled grids
 (a hyperboloid of straight rods) follow to 1e-12, a traced catenoid net follows
 a 20 % top-ring pull with drift 3e-4 and 0.05° deviation, a net with its whole
-bottom ring fixed cannot move and reports a large `Ms`. Feed the state curves
-to **Lath Analysis** to check strains along the motion. Keep `Sg` at 0 (joints
-only) for interactive use; a value subdivides the laths so they can bend
-between joints, at several times the solve time.
+bottom ring fixed cannot move and reports a large `Ms`.
+
+Every state is also checked elastically with the lath section (`U` / `W` / `T`
+or `Sh` / `Sc`, as on Lath Analysis; `E` strain limit, `Em` Young's modulus,
+`Rho` density for self-weight): `U` is the peak utilization per state, `Ul`
+the per-lath utilization (last branch → **Lath Preview**), `En` the strain
+energy Π = ½∫(GJτ² + EIκ²) ds per state (Schikore et al.'s curvature-square
+diagram — plot it against `Fs`), `Nf` the fold of least energy, i.e. the
+state the unactuated grid settles into, and `Ok` says whether the whole
+motion stays within the limit. On the catenoid the upright laths sit at
+utilization 1.37 from twist alone at rest (√−K·t/√3 at the throat) and relax
+as the ring closes, so the natural state is the closed one and the cables
+would hold it open. Keep `Sg` at 0 (joints only) for interactive use; a value
+subdivides the laths so they can bend between joints, at several times the
+solve time (the twist energy does not change: a lath twists uniformly between
+hinges).
 
 ## Units
 

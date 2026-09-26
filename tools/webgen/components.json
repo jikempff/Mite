@@ -2537,7 +2537,7 @@
   "file": "NetKineticsComponent.cs",
   "name": "Net Kinetics",
   "nick": "Kinetics",
-  "desc": "Moves a scissor-jointed asymptotic net as a mechanism (Wan, Crolla & Schling 2025; Schikore et al. 2020). The crossings of A and B become scissor hinges: the distance between consecutive joints along every lath stays constant, every lath segment stays perpendicular to the (moving) surface normal at its ends — so upright laths remain straight-unrollable — and laths keep their rest bend with the given Stiffness. Drive the motion with Fixed points, Slide points (joints kept on the ground plane, free to slide), points moved To targets, or Cables whose Lengths change; Fold 0…1 runs the drivers from the rest state to the target in Steps states. Drift, Deviation and Miss tell you how well the mechanism can follow (a rigid net cannot follow at all; the exact doubly ruled grids follow to 1e-12).",
+  "desc": "Moves a scissor-jointed asymptotic net as a mechanism (Wan, Crolla & Schling 2025; Schikore et al. 2020). The crossings of A and B become scissor hinges: the distance between consecutive joints along every lath stays constant, every lath segment stays perpendicular to the (moving) surface normal at its ends — so upright laths remain straight-unrollable — and laths keep their rest bend with the given Stiffness. Drive the motion with Fixed points, Slide points (joints kept on the ground plane, free to slide), points moved To targets, or Cables whose Lengths change; Fold 0…1 runs the drivers from the rest state to the target in Steps states. Drift, Deviation and Miss tell you how well the mechanism can follow (a rigid net cannot follow at all; the exact doubly ruled grids follow to 1e-12). Every state is also read elastically (Schikore, Schling, Oberbichler & Bauer 2020): bending and twist strains of the lath section (Upright/Width/Thickness or Shape/Section, as Lath Analysis), the strain energy Π = ½∫(GJτ² + EIκ²) ds per state and the natural (least-energy) state along the motion.",
   "tab": "Kinetics",
   "icon": "NetKinetics",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCE01",
@@ -2684,6 +2684,71 @@
     "desc": "Normal of the sliding planes (default Z: joints stay on the ground)",
     "access": "item",
     "default": "Vector3d.ZAxis"
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "True: laths stand upright on the surface (asymptotic gridshells); false: flat strips",
+    "access": "item",
+    "default": "true"
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Strip width, across the curve (default 0.1)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Thickness",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Strip thickness (default 0.01)",
+    "access": "item",
+    "default": "0.01"
+   },
+   {
+    "name": "MaxStrain",
+    "nick": "E",
+    "type": "Number",
+    "desc": "Allowable bending strain for the utilization (default 0.005 ≈ timber; 0.002 steel, 0.008 GFRP)",
+    "access": "item",
+    "default": "0.005"
+   },
+   {
+    "name": "Modulus",
+    "nick": "Em",
+    "type": "Number",
+    "desc": "Young's modulus in Pa for the strain energy (default 11 GPa); the shear modulus is taken as E/16",
+    "access": "item",
+    "default": "11e9"
+   },
+   {
+    "name": "Density",
+    "nick": "Rho",
+    "type": "Number",
+    "desc": "Density in kg/m³ for the self-weight potential in the energy diagram (0 = ignore self-weight)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Shape",
+    "nick": "Sh",
+    "type": "Integer",
+    "desc": "Section shape applied to every curve: 0 = rectangle W × T, 1 = round bar of diameter W, 2 = custom closed planar Section curve (its plane X = across / Y = surface normal; Upright swaps them)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Section",
+    "nick": "Sc",
+    "type": "Curve",
+    "desc": "Closed planar section curve for Shape = 2 (drawn around the origin of its own plane, any units of the model)",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -2780,6 +2845,46 @@
     "nick": "R",
     "type": "Text",
     "desc": "Summary of the motion",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Utilization",
+    "nick": "U",
+    "type": "Number",
+    "desc": "Per state: peak strain utilization over all laths (bending and twist of the section, as Lath Analysis)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "LathUtil",
+    "nick": "Ul",
+    "type": "Number",
+    "desc": "Per state (branch) and lath: peak utilization — A laths first, then B; the last branch goes straight into Lath Preview",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Energy",
+    "nick": "En",
+    "type": "Number",
+    "desc": "Per state: strain energy Π = ½∫(GJτ² + EI κ²) ds in joules, plus the self-weight potential when Density is set",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Natural",
+    "nick": "Nf",
+    "type": "Number",
+    "desc": "Fold parameter of the least-energy state along the motion (Schikore et al.'s natural configuration); NaN when the energy is flat",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Buildable",
+    "nick": "Ok",
+    "type": "Boolean",
+    "desc": "True when every state stays within MaxStrain",
     "access": "item",
     "default": null
    }

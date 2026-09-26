@@ -436,10 +436,32 @@ Plan
       2026-09-26. Open: strain envelope along the motion.
 - [ ] Speed: a block-aware ordering or a preconditioned CG on JᵀJ for nets
       above ~500 nodes; reuse the symbolic envelope across iterations.
-- [ ] Elastic (not only kinematic) states: minimise Schikore's strain energy
-      with material stiffness along the mechanism's path (curvature-square
-      diagram) to find the natural state and the actuation forces; twist
-      energy from the normals' rotation along the lath.
+- [x] Elastic reading of the states — 2026-09-26 (session 1b),
+      `Kinetics/KineticStrain`: kn, kg from the lath's turning at each node
+      split in the node's Darboux frame, τg from the normal's rotation about
+      each segment (exact ∫τg ds on an asymptotic lath), strains as Lath
+      Analysis (fibre distances, Saint-Venant twist length), Schikore's
+      Π = ½∫(GJτ² + EIκ²) ds per lath and state, self-weight potential
+      ρAg∫z ds, the material-free Σ∫κ² ds, and `NaturalState` = least Total
+      along the motion (−1 when flat). Solver additions: subdivision nodes get
+      a uniform-twist residual (equal rotation rate of the normal on both
+      sides, angle form so unit normals stay exact) and free tails a
+      zero-twist residual — without them those normals spin freely and the
+      tail twist read 40× utilization on the catenoid. Exact tests: the
+      hyperboloid rod's normal turns by atan(s/b), b = ρ sin β, so τg =
+      b/(b² + s²) and ∫τg² ds has a closed form: the joint-to-joint twist is
+      exact to 1e-9 and Σ½GJ(Δθ)²/l is the Jensen lower bound (0.989–0.998
+      of the integral); a circular lath gives kn or kg = 1/R to 1e-12 and
+      ½EIκ²L; the planar lattice stores nothing. Finding: a lath hinged only
+      at the joints twists uniformly between them, so its twist energy does
+      not converge to ½GJ∫(√−K)² ds along the surface curve with
+      subdivision — the surface value is an upper bound.
+      Open: actuation forces (gradient of Π along the driver), a true
+      energy-minimising solve between the drivers (currently the geometric
+      LM solution is read elastically, the rest-relative bending term is a
+      regulariser, not EI), twist energy of the *change* of τ against the
+      rest state for pre-twisted laths, and the Lath Preview colouring per
+      state in the viewport.
 - [ ] Then the design side of Wan et al.: given a target family of surfaces
       (open/closed canopy), find the net whose motion passes through both —
       alternate the kinetic solve with the layout solve.
