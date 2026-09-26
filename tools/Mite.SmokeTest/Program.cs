@@ -411,6 +411,28 @@ internal static class Tests
             c => Expect(Points(c, 0).Count == 4 && CurveCount(c, 2) == 12,
                 $"4 nodes / 12 members, got {Points(c, 0).Count} / {CurveCount(c, 2)}"));
 
+        // Net Kinetics: a 3 × 3 planar rhombic lattice (lazy tongs) sheared by moving one corner;
+        // rods stay straight and joint spacing constant (exact mechanism)
+        TestComponent("Net Kinetics",
+            new Mite.Grasshopper.Components.NetKineticsComponent(),
+            c =>
+            {
+                SetCurveList(c, 0,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 1, 0), new Rhino.Geometry.Point3d(2, 1, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 2, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(0, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1, 0, 0), new Rhino.Geometry.Point3d(1, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(2, 0, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetPointList(c, 2, new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0));
+                SetPointList(c, 3, new Rhino.Geometry.Point3d(0, 2, 0));
+                SetPointList(c, 4, new Rhino.Geometry.Point3d(1, Math.Sqrt(3), 0));   // shear to 60°
+                SetInputs(c, (8, 4));
+            },
+            c => Expect(CurveCount(c, 0) == 3 && Points(c, 2).Count == 9 && Numbers(c, 8).Max() < 1e-6,
+                $"3 A laths / 9 joints / drift < 1e-6, got {CurveCount(c, 0)} / {Points(c, 2).Count} / {Numbers(c, 8).Max():E1}"));
+
         Console.WriteLine();
         Console.WriteLine($"=== {_passed} passed, {_failed} failed ===");
         return _failed == 0 ? 0 : 1;
