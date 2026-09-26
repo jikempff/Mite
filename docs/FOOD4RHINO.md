@@ -1,8 +1,8 @@
-# Food4Rhino listing — Mite 1.2.6
+# Food4Rhino listing — Mite 1.2.7
 
 Paste-ready copy for https://www.food4rhino.com/en/app/mite (edit form). Images
 to upload are listed at the end; the package itself goes up with
-`yak push dist/mite-1.2.6-rh8_0-any.yak`, which also sets the package icon (1.2.5 is on the server already).
+`yak push dist/mite-1.2.7-rh8_0-any.yak`, which also sets the package icon (1.2.6 is on the server already).
 
 ## Title
 Mite — curvature, form finding and gridshell nets for Grasshopper
@@ -52,6 +52,11 @@ where the answer is exact. The same library runs in the browser at
 kempffsele.me/mite — try a net on your own OBJ before installing anything.
 
 Source, examples and roadmap: https://github.com/jikempff/Mite
+
+## Version notes — 1.2.7
+- Nets follow the exact curves: the curvature estimate at the border rows is an osculating-jet fit instead of a one-sided difference (8° → 0.7° direction error at a catenoid rim), so traced asymptotic curves stay within 0.01–0.03 mesh edge of the closed-form lines.
+- New `Layout` input on Asymptotic Net, Conjugate Net, Curvature Streamlines and Geodesic Net: 1 = web from the border, 2 = web from a seed cross — every curve runs border to border, seeds exactly one spacing apart, gaps filled at the right spacing; 0 = the evenly spaced fill as before.
+- Browser app: layout choice (border web by default) and a legend that explains every marker in the viewport.
 
 ## Version notes — 1.2.6
 - One profile everywhere: Lath Analysis and Gridshell Analysis take the `Shape` / `Section` inputs of Lath Sweep — round bars and custom sections are strain-checked with their real fibre distances and Saint-Venant twist, and the beam frame gets their A, I, J.
