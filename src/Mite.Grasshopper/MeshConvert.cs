@@ -172,6 +172,18 @@ internal static class MeshConvert
     }
 
     /// <summary>Welded, triangulated mesh data (per-vertex results need the returned map to expand).</summary>
+    /// <summary>
+    /// A core mesh that is already welded (a Mite Net's surface) as a mesh
+    /// input: vertex indices map one to one.
+    /// </summary>
+    public static MeshInput FromData(MeshData data)
+    {
+        var topo = new int[data.VertexCount];
+        var back = new int[data.VertexCount][];
+        for (int i = 0; i < topo.Length; i++) { topo[i] = i; back[i] = new[] { i }; }
+        return new MeshInput(data, topo, back);
+    }
+
     public static MeshData ToMeshData(Mesh rhinoMesh) =>
         Load(rhinoMesh)?.Data ?? new MeshData(Array.Empty<Vec3d>(), Array.Empty<int[]>());
 

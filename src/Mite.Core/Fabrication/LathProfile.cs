@@ -139,6 +139,19 @@ public readonly struct LathProfile
         return new LathProfile(maxA - minA, maxB - minB, upright, offset, centred, SectionKind.Custom);
     }
 
+    /// <summary>
+    /// The same section with every length multiplied by <paramref name="factor"/>
+    /// (unit conversion, e.g. model units to metres for Gridshell Analysis).
+    /// </summary>
+    public LathProfile Scaled(double factor)
+    {
+        if (!(factor > 0) || double.IsInfinity(factor)) throw new ArgumentException("Scale factor must be positive.", nameof(factor));
+        if (Kind == SectionKind.Round) return Round(Width * factor, Section?.Count ?? 24, Offset * factor);
+        if (Kind == SectionKind.Custom && Section != null)
+            return Custom(Section.Select(p => (p.A * factor, p.B * factor)), Upright, Offset * factor);
+        return new LathProfile(Width * factor, Thickness * factor, Upright, Offset * factor);
+    }
+
     /// <summary>Section vertices in the (first axis, second axis) plane, counter-clockwise.</summary>
     public (double A, double B)[] SectionPoints()
     {

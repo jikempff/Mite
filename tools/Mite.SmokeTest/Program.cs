@@ -66,7 +66,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 27 components", IconsLoad());
+        Check("Icons load for all 29 components and the Mite Net parameter", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -433,9 +433,52 @@ internal static class Tests
             c => Expect(CurveCount(c, 0) == 3 && Points(c, 2).Count == 9 && Numbers(c, 8).Max() < 1e-6,
                 $"3 A laths / 9 joints / drift < 1e-6, got {CurveCount(c, 0)} / {Points(c, 2).Count} / {Numbers(c, 8).Max():E1}"));
 
+        // Mite Net: one wire from the net to the fabrication components. The two
+        // lines of family A and one of family B on a 4 × 4 plate: 2 joints; B ends
+        // on the border (x = ±2), A's second lath starts on B (a T-junction)
+        Check("Mite Net → Net Joints / Lath Labels / Net Topology (one wire)", NetWire());
+
         Console.WriteLine();
         Console.WriteLine($"=== {_passed} passed, {_failed} failed ===");
         return _failed == 0 ? 0 : 1;
+    }
+
+    private static bool NetWire()
+    {
+        try
+        {
+            var doc = new Grasshopper.Kernel.GH_Document();
+            var build = new Mite.Grasshopper.Components.MiteNetComponent();
+            var joints = new Mite.Grasshopper.Components.NetJointsComponent();
+            var labels = new Mite.Grasshopper.Components.LathLabelsComponent();
+            var topo = new Mite.Grasshopper.Components.NetTopologyComponent();
+            doc.AddObject(build, false); doc.AddObject(joints, false); doc.AddObject(labels, false); doc.AddObject(topo, false);
+            var plane = new Rhino.Geometry.Mesh();
+            plane.Vertices.Add(-2, -2, 0); plane.Vertices.Add(2, -2, 0); plane.Vertices.Add(2, 2, 0); plane.Vertices.Add(-2, 2, 0);
+            plane.Faces.AddFace(0, 1, 2, 3);
+            SetInputs(build, (1, plane), (7, true));   // Upright wired as a value: the net carries an upright profile
+            SetCurveList(build, 2,
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1, -1, 0), new Rhino.Geometry.Point3d(1, 1, 0)),
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1.5, 0, 0), new Rhino.Geometry.Point3d(1.5, 1, 0)));
+            SetCurveList(build, 3,
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-2, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0)));
+            joints.Params.Input[11].AddSource(build.Params.Output[0]);
+            labels.Params.Input[4].AddSource(build.Params.Output[0]);
+            topo.Params.Input[5].AddSource(build.Params.Output[0]);
+            foreach (var c in new Grasshopper.Kernel.GH_Component[] { build, joints, labels, topo }) { c.CollectData(); c.ComputeData(); }
+            foreach (var c in new Grasshopper.Kernel.GH_Component[] { build, joints, labels, topo })
+            {
+                var errors = c.RuntimeMessages(Grasshopper.Kernel.GH_RuntimeMessageLevel.Error);
+                if (errors.Count > 0) return Expect(false, $"no error on {c.Name}: {errors[0]}");
+            }
+            return Expect(Points(build, 5).Count == 2, $"2 border ends (B0), got {Points(build, 5).Count}")
+                && Expect(Points(build, 6).Count == 1, $"1 T-junction end (A1 on B0), got {Points(build, 6).Count}")
+                && Expect(Points(build, 7).Count == 3, $"3 free ends (A0 both, A1's top), got {Points(build, 7).Count}")
+                && Expect(Points(joints, 0).Count == 2, $"2 crossings through the Net wire, got {Points(joints, 0).Count}")
+                && Expect(Texts(labels, 1).SequenceEqual(new[] { "LA000", "LA001", "LB000" }), $"family IDs, got {string.Join(" ", Texts(labels, 1))}")
+                && Expect(Points(topo, 0).Count == 2, $"2 topology nodes, got {Points(topo, 0).Count}");
+        }
+        catch (Exception ex) { return Expect(false, ex.Message); }
     }
 
     // ---------- harness ----------
@@ -487,9 +530,17 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 27)
+        if (comps.Count != 29)
         {
-            Console.WriteLine($"      expected 27 components, found {comps.Count}");
+            Console.WriteLine($"      expected 29 components, found {comps.Count}");
+            return false;
+        }
+        var param = new Mite.Grasshopper.MiteNetParameter();
+        var paramIcon = typeof(Grasshopper.Kernel.GH_DocumentObject)
+            .GetProperty("Icon", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(param);
+        if (paramIcon is not System.Drawing.Bitmap pb || pb.Width != 24)
+        {
+            Console.WriteLine("      icon failed for MiteNetParameter");
             return false;
         }
 

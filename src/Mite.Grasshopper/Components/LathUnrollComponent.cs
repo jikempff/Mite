@@ -27,6 +27,9 @@ public class LathUnrollComponent : MiteComponent
         pManager.AddBooleanParameter("Upright", "U", "Lath orientation, as in Lath Sweep", GH_ParamAccess.item, false);
         pManager.AddNumberParameter("Gap", "G", "Gap between laid-out patterns (default 0.05)", GH_ParamAccess.item, 0.05);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
+        RegisterNetInput(pManager, "Each family is unrolled at its profile's width and orientation unless W / U are wired"); // 6
+        pManager[0].Optional = true;
+        pManager[1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -39,10 +42,11 @@ public class LathUnrollComponent : MiteComponent
 
     protected override void SolveInstance(IGH_DataAccess DA)
     {
-        var input = LoadMesh(DA, 0);
+        var netIn = GetNet(DA, 6);
+        var input = LoadMeshOrNet(DA, 0, netIn);
         if (input == null) return;
         var curves = new List<Curve>();
-        if (!DA.GetDataList(1, curves)) return;
+        if (!ReadCurvesOrNet(DA, 1, netIn, curves, -1, out bool fromNet)) return;
         double width = 0.1, gap = 0.05, sampling = 0.0;
         bool upright = false;
         DA.GetData(2, ref width);
@@ -67,11 +71,15 @@ public class LathUnrollComponent : MiteComponent
 
         double cursor = 0;
         int failed = 0;
-        foreach (var curve in curves)
+        for (int ci = 0; ci < curves.Count; ci++)
         {
+            var curve = curves[ci];
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
             var line = curve == null ? null : CurveSample.ToPolyline(curve, chord);
-            var r = line != null ? StripUnroll.Unroll(proj, line, profile) : null;
+            // the pattern is the strip's outline: the net profile's width and orientation
+            var np = NetProfile(netIn, fromNet ? ci : 0, 2, 3);
+            var lathProfile = np == null ? profile : new LathProfile(np.Value.Width, np.Value.Thickness, np.Value.Upright);
+            var r = line != null ? StripUnroll.Unroll(proj, line, lathProfile) : null;
             if (r == null)
             {
                 failed++;

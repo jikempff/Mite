@@ -31,6 +31,9 @@ public class NetJointsComponent : MiteComponent
         pManager.AddNumberParameter("Clearance", "Cl", "Fit clearance added to each notch side (default 0)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Tolerance", "X", "Maximum gap accepted as a crossing (0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
+        RegisterNetInput(pManager, "Its profiles (per family) shape the notches unless W / T / U / O are wired"); // 11
+        pManager[0].Optional = true;
+        pManager[1].Optional = true;
         pManager[2].Optional = true;
     }
 
@@ -47,12 +50,13 @@ public class NetJointsComponent : MiteComponent
 
     protected override void SolveInstance(IGH_DataAccess DA)
     {
-        var input = LoadMesh(DA, 0);
+        var netIn = GetNet(DA, 11);
+        var input = LoadMeshOrNet(DA, 0, netIn);
         if (input == null) return;
         var curvesA = new List<Curve>();
         var curvesB = new List<Curve>();
-        if (!DA.GetDataList(1, curvesA)) return;
-        DA.GetDataList(2, curvesB);
+        if (!ReadCurvesOrNet(DA, 1, netIn, curvesA, 0)) return;
+        ReadCurvesOrNet(DA, 2, netIn, curvesB, 1, required: false);
         double width = 0.1, thickness = 0.01, offset = 0.0, lap = 0.5, clearance = 0.0, tolerance = 0.0, sampling = 0.0;
         bool upright = false;
         DA.GetData(3, ref width);
@@ -73,6 +77,9 @@ public class NetJointsComponent : MiteComponent
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
         var profile = new LathProfile(width, thickness, upright, offset);
+        // a net's own profiles (e.g. A upright, B flat) unless the section inputs are wired
+        var profileA = NetProfile(netIn, 0, 3, 4, 5, 6) ?? profile;
+        var profileB = netIn != null ? NetProfile(netIn, netIn.CountA, 3, 4, 5, 6) ?? profile : profile;
 
         // Keep curve indices aligned with the inputs: null / degenerate curves become empty polylines
         var familyA = SampleAligned(curvesA, chord);
@@ -103,7 +110,7 @@ public class NetJointsComponent : MiteComponent
             Vec3d n = hit.SmoothNormal;
 
             if (!JointGeometry.TryBuildLapNotches(crossing.Point, ta, tb, n,
-                    profile, profile, lap, clearance, out NotchSolid notchA, out NotchSolid notchB))
+                    profileA, selfMode ? profileA : profileB, lap, clearance, out NotchSolid notchA, out NotchSolid notchB))
             {
                 parallel++;
                 continue;

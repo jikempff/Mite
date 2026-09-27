@@ -6,6 +6,7 @@ using Rhino.Geometry;
 using Mite.Core.Analysis;
 using Mite.Core.Fabrication;
 using Mite.Core.Geometry;
+using Mite.Core.Gridshells;
 
 namespace Mite.Grasshopper.Components;
 
@@ -38,7 +39,12 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("Sampling", "Sa", "Chord deviation for curve sampling (0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("MaxSegment", "Ms", "Beam element size in model units (0 = automatic: twice the mesh edge length)", GH_ParamAccess.item, 0.0);
         RegisterSectionInputs(pManager); // 13 Shape, 14 Section — beam section properties follow the profile
+        RegisterNetInput(pManager, "With a Net, empty Joints couple every contact of the net and empty Supports hold every lath end on the border; " +
+            "the frame takes family A's profile unless W / T / U / Shape / Section are wired"); // 15
+        pManager[0].Optional = true;
+        pManager[1].Optional = true;
         pManager[2].Optional = true;
+        pManager[3].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -55,14 +61,26 @@ public class GridshellAnalysisComponent : MiteComponent
 
     protected override void SolveInstance(IGH_DataAccess DA)
     {
-        var input = LoadMesh(DA, 0);
+        var netIn = GetNet(DA, 15);
+        var input = LoadMeshOrNet(DA, 0, netIn);
         if (input == null) return;
         var curves = new List<Curve>();
-        if (!DA.GetDataList(1, curves)) return;
+        if (!ReadCurvesOrNet(DA, 1, netIn, curves, -1, out bool fromNet)) return;
         var joints = new List<Point3d>();
         var supports = new List<Point3d>();
         DA.GetDataList(2, joints);
-        if (!DA.GetDataList(3, supports)) return;
+        DA.GetDataList(3, supports);
+        if (fromNet && netIn != null)
+        {
+            if (joints.Count == 0)
+                foreach (var x in netIn.Contacts()) joints.Add(MeshConvert.ToRhinoPoint(x.Point));
+            if (supports.Count == 0)
+            {
+                foreach (var end in netIn.Ends())
+                    if (end.Kind == LathEndKind.Border) supports.Add(MeshConvert.ToRhinoPoint(end.Point));
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Supports: the {supports.Count} lath ends on the border of the net.");
+            }
+        }
         var load = new Vector3d(0, 0, -1000);
         double e = 11e9, allowable = 20e6, width = 0.1, thickness = 0.01, scale = 1.0, sampling = 0.0, maxSegment = 0.0;
         bool upright = false;
@@ -103,6 +121,13 @@ public class GridshellAnalysisComponent : MiteComponent
         // Section in metres too: A, I and J come from the profile (rectangle,
         // round bar or custom polygon — LathProfile.SectionProperties)
         if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, s, curves.Count, out LathProfile profile)) return;
+        var netProfile = NetProfile(netIn, 0, 7, 8, 9, 13, 14);
+        if (netProfile != null)
+        {
+            profile = netProfile.Value.Scaled(s);
+            if (netIn!.CountB > 0 && LathNet.Describe(netIn.ProfileOf(netIn.CountA)) != LathNet.Describe(netIn.ProfileA))
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "The frame uses one section for every lath: family A's profile (the net's B profile differs).");
+        }
 
         var laths = new List<Vec3d[]>();
         var lathIndex = new List<int>();

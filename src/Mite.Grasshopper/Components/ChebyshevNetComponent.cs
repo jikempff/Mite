@@ -42,6 +42,7 @@ public class ChebyshevNetComponent : MiteComponent
         pManager.AddCurveParameter("VCurves", "Cv", "Laths of the second family", GH_ParamAccess.list);
         pManager.AddMeshParameter("NetMesh", "N", "Quad mesh over the valid net cells", GH_ParamAccess.item);
         pManager.AddNumberParameter("Angles", "An", "Shear angle between the families at each node (degrees); locking occurs near 0 / 180", GH_ParamAccess.tree);
+        RegisterNetOutput(pManager, "Laths as polylines through the nodes (straight segments of EdgeLength)"); // 5
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -129,6 +130,27 @@ public class ChebyshevNetComponent : MiteComponent
         DA.SetDataList(2, ExtractCurves(net, alongU: false));
         DA.SetData(3, BuildNetMesh(net));
         DA.SetDataTree(4, angleTree);
+        DA.SetData(5, new MiteNetGoo(new LathNet(data, Runs(net, alongU: true), Runs(net, alongU: false), NetKind.Chebyshev, edgeLength)));
+    }
+
+    /// <summary>Runs of valid nodes along one family, as polylines through the nodes.</summary>
+    internal static List<Vec3d[]> Runs(ChebyshevNet.Result net, bool alongU)
+    {
+        int nu = net.Points.GetLength(0), nv = net.Points.GetLength(1);
+        int outer = alongU ? nv : nu, inner = alongU ? nu : nv;
+        var runs = new List<Vec3d[]>();
+        var run = new List<Vec3d>();
+        void Flush() { if (run.Count > 1) runs.Add(run.ToArray()); run.Clear(); }
+        for (int o = 0; o < outer; o++)
+        {
+            for (int k = 0; k < inner; k++)
+            {
+                int i = alongU ? k : o, j = alongU ? o : k;
+                if (net.Valid[i, j]) run.Add(net.Points[i, j]); else Flush();
+            }
+            Flush();
+        }
+        return runs;
     }
 
     /// <summary>Angle (degrees) between the two lath directions at a node, from its valid neighbors.</summary>

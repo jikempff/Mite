@@ -41,6 +41,7 @@ public class AsymptoticNetComponent : MiteComponent
         pManager.AddCurveParameter("FamilyA", "A", "First asymptotic curve family", GH_ParamAccess.list);
         pManager.AddCurveParameter("FamilyB", "B", "Second asymptotic curve family", GH_ParamAccess.list);
         pManager.AddBooleanParameter("Anticlastic", "K", "Per input vertex: true where asymptotic directions exist (K < 0)", GH_ParamAccess.list);
+        RegisterNetOutput(pManager); // 3
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -82,6 +83,7 @@ public class AsymptoticNetComponent : MiteComponent
         }
 
         List<Vec3d[]> familyA, familyB;
+        double netSpacing = 0;
         if (autoSpace)
         {
             var opts = new EvenlySpacedNet.Options
@@ -104,6 +106,7 @@ public class AsymptoticNetComponent : MiteComponent
             };
             familyB = EvenlySpacedNet.TraceField(data, field.Family2, field.Exists, firstSeed, optsB, field.Family1);
             ReportTracing(optsB, "Family B");
+            netSpacing = opts.ResolvedSpacing;
             if (spacing <= 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
         }
@@ -137,5 +140,6 @@ public class AsymptoticNetComponent : MiteComponent
         var mask = new bool[input.RhinoVertexCount];
         for (int i = 0; i < mask.Length; i++) mask[i] = field.Exists[input.TopoOfVertex[i]];
         DA.SetDataList(2, mask);
+        DA.SetData(3, new MiteNetGoo(new LathNet(data, familyA, familyB, NetKind.Asymptotic, netSpacing)));
     }
 }

@@ -34,6 +34,9 @@ public class LathSegmentComponent : MiteComponent
         pManager.AddNumberParameter("Clearance", "Cl", "Fit clearance (default 0)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Offset", "O", "Gap between the surface and the nearest lath face, as in Lath Sweep (default 0)", GH_ParamAccess.item, 0.0);
+        RegisterNetInput(pManager, "With a Net, empty Joints avoid every contact of the net, and each family's splice notches follow its profile unless W / T / U / O are wired"); // 12
+        pManager[0].Optional = true;
+        pManager[1].Optional = true;
         pManager[4].Optional = true;
     }
 
@@ -48,10 +51,11 @@ public class LathSegmentComponent : MiteComponent
 
     protected override void SolveInstance(IGH_DataAccess DA)
     {
-        var input = LoadMesh(DA, 0);
+        var netIn = GetNet(DA, 12);
+        var input = LoadMeshOrNet(DA, 0, netIn);
         if (input == null) return;
         var curves = new List<Curve>();
-        if (!DA.GetDataList(1, curves)) return;
+        if (!ReadCurvesOrNet(DA, 1, netIn, curves, -1, out bool fromNet)) return;
         var joints = new List<Point3d>();
         double stock = 3.0, margin = 0.05, spliceLength = 0.15, width = 0.1, thickness = 0.01, clearance = 0.0, sampling = 0.0, offset = 0.0;
         bool upright = false;
@@ -83,6 +87,8 @@ public class LathSegmentComponent : MiteComponent
 
         var jointVecs = new List<Vec3d>();
         foreach (var p in joints) jointVecs.Add(MeshConvert.ToVec3d(p));
+        if (jointVecs.Count == 0 && fromNet && netIn != null)
+            foreach (var x in netIn.Contacts()) jointVecs.Add(x.Point);
         // A joint belongs to a lath when it lies within roughly a lath width of it
         double jointReach = Math.Max(width, 4.0 * chord);
 
@@ -107,6 +113,7 @@ public class LathSegmentComponent : MiteComponent
                 : null;
 
             var r = LathSegmentation.Segment(line, stock, margin, jointArcs, spliceLength);
+            var lathProfile = NetProfile(netIn, fromNet ? c : 0, 6, 7, 8, 11) ?? profile;
 
             foreach (var seg in r.Segments)
             {
@@ -126,7 +133,7 @@ public class LathSegmentComponent : MiteComponent
                 cuts.Add(MeshConvert.ToRhinoPoint(cut), path);
 
                 if (JointGeometry.TryBuildSpliceNotches(cut, tangent, hit.SmoothNormal,
-                        profile, spliceLength, clearance, out NotchSolid ne, out NotchSolid ns))
+                        lathProfile, spliceLength, clearance, out NotchSolid ne, out NotchSolid ns))
                 {
                     notchesEnd.Add(NetJointsComponent.ToRhinoBox(ne), path);
                     notchesStart.Add(NetJointsComponent.ToRhinoBox(ns), path);

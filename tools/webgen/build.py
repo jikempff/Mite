@@ -18,7 +18,7 @@ TAB_BLURB = {
 }
 COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics",
               "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
-              "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
+              "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Mite Net",
               "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
               "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
               "Net Kinetics",
@@ -37,7 +37,7 @@ def fmt_default(p):
     return d
 
 TYPE_LABEL = {"Mesh": "mesh", "Integer": "int", "Number": "num", "Vector": "vec", "Boolean": "bool", "Point": "pt", "Curve": "crv",
-              "Angle": "angle", "Text": "text", "Plane": "plane", "Box": "box", "Line": "line", "Colour": "colour", "Interval": "domain"}
+              "Angle": "angle", "Text": "text", "Plane": "plane", "Box": "box", "Line": "line", "Colour": "colour", "Interval": "domain", "Mite Net": "net"}
 
 def param_rows(ps):
     rows = []

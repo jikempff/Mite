@@ -42,6 +42,7 @@ public class GeodesicNetComponent : MiteComponent
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
     {
         pManager.AddCurveParameter("Geodesics", "G", "Geodesic curves (smooth interpolated curves)", GH_ParamAccess.list);
+        RegisterNetOutput(pManager, "One family (A); combine two Geodesic Nets, or an Asymptotic Net's A with geodesics (the AGH hybrid), with Mite Net's NetB input"); // 1
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -101,6 +102,7 @@ public class GeodesicNetComponent : MiteComponent
         }
 
         List<Vec3d[]> lines;
+        double netSpacing = 0;
         if (autoSpace)
         {
             var opts = new EvenlySpacedNet.Options
@@ -112,6 +114,7 @@ public class GeodesicNetComponent : MiteComponent
             };
             lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], opts);
             ReportTracing(opts, "Geodesics");
+            netSpacing = opts.ResolvedSpacing;
             if (spacing <= 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
         }
@@ -131,5 +134,6 @@ public class GeodesicNetComponent : MiteComponent
         if (lines.Count == 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "No geodesics traced; check the seeds and directions.");
         DA.SetDataList(0, MeshConvert.ToCurves(lines));
+        DA.SetData(1, new MiteNetGoo(new LathNet(data, lines, null, NetKind.Geodesic, netSpacing)));
     }
 }

@@ -509,6 +509,46 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     scenes["kinCat"] = new { wire = Edges(cat, 4), states = catScenes };
 }
 
+// ---------- Mite Net: one value for surface + both families (+ profile); lath-end classification ----------
+{
+    // (1) the saddle's classic (non-continuous) asymptotic net: T-junctions, compared with the bench's own Ends()
+    var saddle = TestMeshes.CreateSaddle(40, 2.0);
+    var pc = PrincipalCurvature.Compute(saddle);
+    var field = AsymptoticCurves.ComputeDirections(pc);
+    var a = EvenlySpacedNet.TraceField(saddle, field.Family1, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.15, Continuous = false }, field.Family2);
+    var b = EvenlySpacedNet.TraceField(saddle, field.Family2, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.15, Continuous = false }, field.Family1);
+    var net = new LathNet(saddle, a, b, NetKind.Asymptotic, 0.15).WithProfiles(LathProfile.Rectangle(0.08, 0.012, true), LathProfile.Rectangle(0.08, 0.012, false));
+    var t = Stopwatch.StartNew();
+    var ends = net.Ends();
+    t.Stop();
+    var bench = Ends(a.Concat(b).ToList(), new MeshProjection(saddle));
+    // the bench counts an end as "border" when it is more than 1e-6 off the mesh; ends that are
+    // off the facets (last chord under the surface) but exactly on another lath are T-junctions
+    var projS = new MeshProjection(saddle);
+    int offMeshT = ends.Count(e => e.Kind == LathEndKind.OnLath && !projS.IsOnBoundary(projS.ClosestPoint(e.Point, projS.NearestVertexGlobal(e.Point)), 1e-4)
+        && (projS.ClosestPoint(e.Point, projS.NearestVertexGlobal(e.Point)).Point - e.Point).Length > 1e-6);
+    var bytes = net.ToBytes(); var back = LathNet.FromBytes(bytes);
+    bool exact = back.ToBytes().SequenceEqual(bytes) && Enumerable.Range(0, net.LathCount).All(i => net.Lath(i).SequenceEqual(back.Lath(i)))
+        && back.ProfileA!.Value.Upright && !back.ProfileB!.Value.Upright;
+    Func<LathEndKind, double[][]> endPts = k => ends.Where(e => e.Kind == k).Select(e => P(e.Point)).ToArray();
+    scenes["miteNet"] = new { wire = SaddleWire(40, 2.0, 5), a = a.Select(l => Line(l, 3)).ToArray(), b = b.Select(l => Line(l, 3)).ToArray(), border = endPts(LathEndKind.Border), onLath = endPts(LathEndKind.OnLath), free = endPts(LathEndKind.Free), label = "saddle · classic fill (Continuous = false)" };
+    int border = ends.Count(e => e.Kind == LathEndKind.Border), onLath = ends.Count(e => e.Kind == LathEndKind.OnLath), free = ends.Count(e => e.Kind == LathEndKind.Free);
+
+    // (2) exact rulings of x² + y² − z² = 1, 16 per family (A at φ = 2πi/16, B half a step apart):
+    // A_φ meets B_ψ once at z = tan((ψ − φ)/2), so 8 joints per ruling inside |z| ≤ 1
+    var hyp = TestMeshes.CreateHyperboloid(1, 1, 1, 64, 32);
+    Vec3d[] Ruling(double ang, double sgn) => Enumerable.Range(0, 21).Select(k => { double z = -1 + 0.1 * k; return new Vec3d(Math.Cos(ang) - sgn * z * Math.Sin(ang), Math.Sin(ang) + sgn * z * Math.Cos(ang), z); }).ToArray();
+    var ha = Enumerable.Range(0, 16).Select(i => Ruling(2 * Math.PI * i / 16, 1)).ToList();
+    var hb = Enumerable.Range(0, 16).Select(j => Ruling(2 * Math.PI * (j + 0.5) / 16, -1)).ToList();
+    var hnet = new LathNet(hyp, ha, hb, NetKind.Asymptotic);
+    var hj = hnet.Joints(); var hends = hnet.Ends(); var htopo = hnet.Topology();
+    double hzErr = hj.Max(x => Math.Abs(x.Point.Z - Math.Tan(Math.IEEERemainder(2 * Math.PI * (x.CurveB + 0.5) / 16 - 2 * Math.PI * x.CurveA / 16, 2 * Math.PI) / 2)));
+    scenes["miteNetHyp"] = new { wire = RevolveWire(z => Math.Sqrt(1 + z * z), -1, 1, 8, 16), a = ha.Select(l => Line(l, 4)).ToArray(), b = hb.Select(l => Line(l, 4)).ToArray(), border = hends.Where(e => e.Kind == LathEndKind.Border).Select(e => P(e.Point)).ToArray(), onLath = Array.Empty<double[]>(), free = hends.Where(e => e.Kind == LathEndKind.Free).Select(e => P(e.Point)).ToArray(), joints = hj.Select(x => P(x.Point)).ToArray(), label = "hyperboloid · 16 + 16 exact rulings" };
+
+    numbers["miteNet"] = new { a = a.Count, b = b.Count, ends = ends.Count, border, onLath, free, benchEnds = bench.ends, benchBorder = bench.boundary, benchOnCurve = bench.onCurve, benchFloating = bench.floating, offMeshT, joints = net.Joints().Count, contacts = net.Contacts().Count, ms = t.ElapsedMilliseconds, bytes = bytes.Length, roundTrip = exact, summary = net.Summary(),
+        hypJoints = hj.Count, hypJointsExpected = 128, hypZErr = hzErr, hypBorder = hends.Count(e => e.Kind == LathEndKind.Border), hypEnds = hends.Count, hypNodes = htopo.Nodes.Length, hypValence4 = htopo.Valence.Count(v => v == 4), hypMembers = htopo.Members.Count, hypLength = R3(hnet.TotalLengthA + hnet.TotalLengthB) };
+}
+
 // ---------- Form finding on a 24x24 grid ----------
 {
     int n = 24;

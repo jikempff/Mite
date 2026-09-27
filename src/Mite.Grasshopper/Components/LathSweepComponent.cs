@@ -29,6 +29,9 @@ public class LathSweepComponent : MiteComponent
         pManager.AddNumberParameter("Offset", "O", "Gap between the surface and the nearest strip face (default 0)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
         RegisterSectionInputs(pManager); // 7 Shape, 8 Section
+        RegisterNetInput(pManager, "Each family is swept with the net's profile for it unless W / T / U / O / Shape / Section are wired"); // 9
+        pManager[0].Optional = true;
+        pManager[1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -40,10 +43,11 @@ public class LathSweepComponent : MiteComponent
 
     protected override void SolveInstance(IGH_DataAccess DA)
     {
-        var input = LoadMesh(DA, 0);
+        var netIn = GetNet(DA, 9);
+        var input = LoadMeshOrNet(DA, 0, netIn);
         if (input == null) return;
         var curves = new List<Curve>();
-        if (!DA.GetDataList(1, curves)) return;
+        if (!ReadCurvesOrNet(DA, 1, netIn, curves, -1, out bool fromNet)) return;
         double width = 0.1, thickness = 0.01, offset = 0.0, sampling = 0.0;
         bool upright = false;
         DA.GetData(2, ref width);
@@ -70,11 +74,13 @@ public class LathSweepComponent : MiteComponent
         var centerlines = new List<Curve?>();
         var frames = new List<Plane?>();
         int failed = 0;
-        foreach (var curve in curves)
+        for (int ci = 0; ci < curves.Count; ci++)
         {
+            var curve = curves[ci];
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
             var line = curve == null ? null : CurveSample.ToPolyline(curve, chord);
-            var result = line == null ? null : StripSweep.Sweep(proj, line, profile);
+            var lathProfile = NetProfile(netIn, fromNet ? ci : 0, 2, 3, 4, 5, 7, 8) ?? profile;
+            var result = line == null ? null : StripSweep.Sweep(proj, line, lathProfile);
             if (result.HasValue)
             {
                 var r = result.Value;

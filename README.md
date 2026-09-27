@@ -31,6 +31,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - **Chebyshev Net** — equal-edge-length nets by the compass method: the kinematics of elastic gridshells bent from flat lattices
 - **Conjugate Net** — both principal families evenly spaced: an approximate conjugate net, the layout for planar-quad (PQ) panelization
 - **Geodesic Path** — shortest geodesic between two points (graph search + on-surface curve shortening)
+- **Mite Net** — one wire for a whole net: surface, family A, family B and a profile per family (A upright / B flat for the asymptotic–geodesic hybrid). Every net component has a `Net` output and the analysis, fabrication and kinetics components take it as their last input; Mite Net builds a net from curves, adds a profile, joins two nets, and classifies every lath end as on the border, on another lath (T-junction) or free. The viewport preview draws family A teal, family B magenta, T-junction ends orange and free ends red, as the web app does
 - Tracing is scale-aware: step, step count and spacing default to values derived from the mesh, so millimetre and metre models behave the same
 - Curves are continuous: with **Continuous** on (default) every traced curve runs border to border or closes on itself, and a curve that merges into a neighbour ends exactly on it as a T-junction — no laths floating in the middle of the surface. Curves meet the mesh border along their own direction (no hook, no crawl along the edge), also on the staircase borders of trimmed or subdivided quad meshes
 
@@ -125,7 +126,7 @@ Components appear under the **Mite** tab:
 
 - **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines, Umbilics
 - **Form Finding** — Planarize Mesh, Minimal Surface, Force Density Method, Dynamic Relaxation
-- **Gridshells** — Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
+- **Gridshells** — Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path, Mite Net (and the Mite Net parameter)
 - **Analysis** — Lath Analysis, Gridshell Analysis, Mesh Isocurves
 - **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview, Net Topology
 - **Kinetics** — Net Kinetics
@@ -135,9 +136,18 @@ A typical gridshell workflow: heal the mesh with **Mesh Cleanup**, trace a **Geo
 or **Asymptotic Net**, check strips with **Lath Analysis** and the whole network with
 **Gridshell Analysis**, extrude with **Lath Sweep**, cut crossings with **Net Joints**,
 split to stock with **Lath Segment**, and produce cutting patterns with **Lath Unroll**
-plus IDs and a BOM from **Lath Labels**.
+plus IDs and a BOM from **Lath Labels**. With the `Net` wire the chain needs one connection per
+component: the net output of the tracing component carries the surface and both families, and
+a **Mite Net** in between adds the lath profile for all of them.
 
 ## Changelog
+
+### Unreleased
+- **Mite Net** data type (`Gridshells/LathNet` in the core, `MiteNetGoo` / `MiteNetParameter` and the **Mite Net** component in Grasshopper): surface + family A + family B + optional per-family `LathProfile`, kind and spacing as one immutable value. `Net` output appended to Asymptotic Net, Geodesic Net (one family), Conjugate Net, Chebyshev Net (node polylines) and Net Kinetics (the state at Fold); optional `Net` input appended to Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels and Net Kinetics. Wired Mesh / Curves / section inputs override that part of the net, so every saved definition behaves as before; the Mesh and Curves inputs of those components became optional. With a Net, Gridshell Analysis couples every contact and supports every border end when Joints / Supports are empty, Lath Segment avoids every contact, Lath Labels numbers per family (LA000…, LB000…) and Net Joints notches each family with its own profile. Laths travel as the traced polylines, not as interpolated curves.
+- Lath ends: `LathNet.Ends` classifies every end as border / on a lath / free (exact hyperboloid rulings: 128 joints at z = tan((ψ − φ)/2) to 4e-16, 64 of 64 ends on the rim, 128 valence-4 nodes, 288 members). The bench's own count called 3 of the 8 T-junction ends of the classic saddle fill "border" because they sit 1.3e-4 off the facets while lying exactly (2e-18) on the lath they stop on.
+- Preview and bake: the Mite Net parameter draws family A teal and B magenta with orange T-junction and red free-end markers (the web app's colours) and bakes each family in its colour as one group; internalised nets are stored with `LathNet.ToBytes()` and restored exactly.
+- `LathProfile.Scaled(factor)` for unit conversion; Net Topology's NodeLaths output gave wrong lath indices for same-family contacts (a B × B T-junction was reported as an A lath) — fixed.
+- Bench: parameter tables regenerated from the sources by `tools/webgen/extract_components.py` (the hand-kept `components.json` had lost Continuous, MinAngle, FromBorder and BorderAngle on four net components); a Mite Net card with end markers on the saddle fill and the exact hyperboloid rulings. Smoke test: 29 components and the parameter icon, and a Mite Net → Net Joints / Lath Labels / Net Topology wire.
 
 ### 1.2.8
 - **Net Kinetics** (new component, Mite > Kinetics) and `Kinetics/ScissorNet` in the core: a scissor-jointed asymptotic net as a semi-compliant grid mechanism. Unknowns are joint positions and unit normals; residuals are constant joint spacing, segment ⟂ normal at both ends (Wan, Crolla & Schling 2025, *Geometry-driven development of semi-compliant kinetic asymptotic structures*, Adv. Eng. Informatics 68), unit normals, and the change of each lath's turning against its rest bend in the moving lath frame (Wan et al.'s plain second difference would straighten curved laths and penalise uneven joint spacing); drivers are fixed nodes, sliding ground nodes, moved nodes and cables; Levenberg–Marquardt on the sparse envelope solver, one state per fold step. Exact ground truth from Schikore, Schling, Oberbichler & Bauer 2020 (*Kinetics and Design of Semi-Compliant Grid Mechanisms*, AAG 2020): the doubly ruled grid of straight rods tangent to a circle, whose joints sit at rod positions ρ tan(πm/n) for every tilt β (`ScissorNet.HyperboloidMechanism`), is reproduced through the whole motion to 2e-12 with zero joint drift; a planar lazy-tongs lattice shears exactly; a traced catenoid net standing on sliding ground nodes follows a 20 % top-ring pull with joint drift 3e-4 and 0.04° asymptotic deviation, rising by 0.52 as it narrows. Bench: Kinetics tab with a fold slider on both. Discrete finding: the hinge constraints alone leave a kink mode at every joint (four coplanar segments, not two straight laths), so the bending stiffness is what makes the discrete grid behave like the smooth mechanism — with stiffness 0 the hyperboloid grid folds along 100° kinks while satisfying every constraint.

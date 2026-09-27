@@ -8,6 +8,7 @@ using Grasshopper.Kernel.Data;
 using Rhino.Geometry;
 using Mite.Core.Fabrication;
 using Mite.Core.Geometry;
+using Mite.Core.Gridshells;
 using Mite.Core.Kinetics;
 
 namespace Mite.Grasshopper.Components;
@@ -71,6 +72,9 @@ public class NetKineticsComponent : MiteComponent
         pManager.AddNumberParameter("Modulus", "Em", "Young's modulus in Pa for the strain energy (default 11 GPa); the shear modulus is taken as E/16", GH_ParamAccess.item, 11e9);
         pManager.AddNumberParameter("Density", "Rho", "Density in kg/m³ for the self-weight potential in the energy diagram (0 = ignore self-weight)", GH_ParamAccess.item, 0.0);
         RegisterSectionInputs(pManager); // 23 Shape, 24 Section — the same profile Lath Sweep builds
+        RegisterNetInput(pManager, "Its laths are the scissor grid, its surface starts the joint normals (unless Mesh is wired) and its profile family A's section is the one read elastically (unless U / W / T / Shape / Section are wired)"); // 25
+        pManager[0].Optional = true;
+        pManager[1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -92,6 +96,7 @@ public class NetKineticsComponent : MiteComponent
         pManager.AddNumberParameter("Energy", "En", "Per state: strain energy Π = ½∫(GJτ² + EI κ²) ds in joules, plus the self-weight potential when Density is set", GH_ParamAccess.list);
         pManager.AddNumberParameter("Natural", "Nf", "Fold parameter of the least-energy state along the motion (Schikore et al.'s natural configuration); NaN when the energy is flat", GH_ParamAccess.item);
         pManager.AddBooleanParameter("Buildable", "Ok", "True when every state stays within MaxStrain", GH_ParamAccess.item);
+        RegisterNetOutput(pManager, "The net at Fold (kind Kinetic, the profile used, no surface — the moved grid no longer lies on the input surface)"); // 17
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -110,8 +115,9 @@ public class NetKineticsComponent : MiteComponent
         var slideNormal = Vector3d.ZAxis;
         bool upright = true; double width = 0.1, thickness = 0.01, maxStrain = 0.005, modulus = 11e9, density = 0.0;
         int shape = 0; Curve? section = null;
-        if (!DA.GetDataList(0, curvesA)) return;
-        if (!DA.GetDataList(1, curvesB)) return;
+        var netIn = GetNet(DA, 25);
+        if (!ReadCurvesOrNet(DA, 0, netIn, curvesA, 0)) return;
+        if (!ReadCurvesOrNet(DA, 1, netIn, curvesB, 1)) return;
         DA.GetDataList(2, fixedPts);
         DA.GetDataList(3, movePts);
         DA.GetDataList(4, toPts);
@@ -142,6 +148,8 @@ public class NetKineticsComponent : MiteComponent
             return;
         }
         if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, 1.0, curvesA.Count + curvesB.Count, out Mite.Core.Fabrication.LathProfile profile)) return;
+        var netProfile = NetProfile(netIn, 0, 17, 18, 19, 23, 24);
+        if (netProfile != null) { profile = netProfile.Value; upright = profile.Upright; width = profile.Width; thickness = profile.Thickness; }
 
         if (movePts.Count > 0 && toPts.Count == 0)
         {
@@ -175,14 +183,11 @@ public class NetKineticsComponent : MiteComponent
         var topo = NetTopology.Build(familyA, familyB, crossings);
 
         Func<Vec3d, Vec3d>? normalAt = null;
-        if (mesh != null)
+        var surface = mesh != null ? MeshConvert.Load(mesh)?.Data : netIn?.Surface;
+        if (surface != null)
         {
-            var input = MeshConvert.Load(mesh);
-            if (input != null)
-            {
-                var proj = new MeshProjection(input.Data);
-                normalAt = p => proj.ClosestPoint(p, -1).SmoothNormal;
-            }
+            var proj = new MeshProjection(surface);
+            normalAt = p => proj.ClosestPoint(p, -1).SmoothNormal;
         }
 
         ScissorNet net;
@@ -310,5 +315,9 @@ public class NetKineticsComponent : MiteComponent
         DA.SetDataList(14, energyPerState);
         DA.SetData(15, naturalFold);
         DA.SetData(16, buildable);
+        var polysA = polys.Take(net.CountA).ToList();
+        var polysB = polys.Skip(net.CountA).ToList();
+        DA.SetData(17, new MiteNetGoo(new LathNet(null, polysA, polysB, NetKind.Kinetic, netIn?.Spacing ?? 0,
+            netProfile == null ? profile : netIn!.ProfileA, netProfile == null ? profile : netIn!.ProfileOf(netIn.CountA))));
     }
 }
