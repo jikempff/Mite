@@ -66,7 +66,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 27 components", IconsLoad());
+        Check("Icons load for all 29 components", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -139,6 +139,17 @@ internal static class Tests
             new Mite.Grasshopper.Components.AsymptoticNetComponent(),
             c => SetInputs(c, (0, saddle.DuplicateMesh()), (2, 0.05), (3, 200), (4, true), (5, 0.3)),
             c => Expect(CurveCount(c, 0) >= 2, $"auto-spaced family A has {CurveCount(c, 0)} curves"));
+
+        TestComponent("Asymptotic Web",
+            new Mite.Grasshopper.Components.AsymptoticWebComponent(),
+            c => SetInputs(c, (0, saddle.DuplicateMesh()), (2, 0.2)),
+            c => Expect(CurveCount(c, 0) >= 3 && CurveCount(c, 1) >= 3 && MeshOut(c, 4) != null && MeshOut(c, 4)!.Faces.Count > 20,
+                $"web: A={CurveCount(c, 0)}, B={CurveCount(c, 1)}, quads={MeshOut(c, 4)?.Faces.Count ?? 0}"));
+
+        TestComponent("Asymptotic Web (AAG)",
+            new Mite.Grasshopper.Components.AsymptoticWebComponent(),
+            c => SetInputs(c, (0, saddle.DuplicateMesh()), (2, 0.25), (4, true)),
+            c => Expect(CurveCount(c, 2) >= 3, $"geodesic diagonals: {CurveCount(c, 2)}"));
 
         TestComponent("Geodesic Net",
             new Mite.Grasshopper.Components.GeodesicNetComponent(),
@@ -487,9 +498,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 27)
+        if (comps.Count != 29)
         {
-            Console.WriteLine($"      expected 27 components, found {comps.Count}");
+            Console.WriteLine($"      expected 29 components, found {comps.Count}");
             return false;
         }
 

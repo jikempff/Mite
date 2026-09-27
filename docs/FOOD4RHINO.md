@@ -1,8 +1,8 @@
-# Food4Rhino listing — Mite 1.2.8
+# Food4Rhino listing — Mite 1.3.0
 
 Paste-ready copy for https://www.food4rhino.com/en/app/mite (edit form). Images
 to upload are listed at the end; the package itself goes up with
-`yak push dist/mite-1.2.8-rh8_0-any.yak`, which also sets the package icon (1.2.7 is on the server already).
+`yak push dist/mite-1.3.0-rh8_0-any.yak`, which also sets the package icon (1.2.8 is on the server already).
 
 ## Title
 Mite — curvature, form finding and gridshell nets for Grasshopper
@@ -12,7 +12,7 @@ Mesh curvature analysis, form finding, asymptotic / geodesic / Chebyshev nets, l
 
 ## Description
 Mite is an open-source Grasshopper toolkit (Rhino 8, Windows and Mac) for
-designing gridshells from meshes: 28 components in seven panels, no external
+designing gridshells from meshes: 29 components in seven panels, no external
 dependencies, MIT licence.
 
 **Curvature.** Principal, Gaussian and mean curvature per vertex (Rusinkiewicz
@@ -22,6 +22,14 @@ one-step colour map.
 **Form finding.** Planarization, minimal surfaces, force density method and
 dynamic relaxation on a built-in sparse solver — tens of thousands of vertices
 in seconds.
+
+**Webs.** Asymptotic webs after Schling: nodes every spacing along the two
+asymptotic curves through a seed, every other node where the curves through
+them cross — clean quad nets with no stubs or T-junctions that keep the
+surface's symmetry (flat points become singular nodes, surfaces of revolution
+rotational webs). An AAG option makes one family of node diagonals geodesic:
+gridshells of three families of straight flat slats, two upright and one
+lying on the surface (Schling, Wang, Hoyer & Pottmann 2022).
 
 **Nets.** Asymptotic nets (both families of zero-normal-curvature curves,
 combed labels, minimum crossing angle), geodesic nets (straightest geodesics
@@ -57,6 +65,12 @@ where the answer is exact. The same library runs in the browser at
 kempffsele.me/mite — try a net on your own OBJ before installing anything.
 
 Source, examples and roadmap: https://github.com/jikempff/Mite
+
+## Version notes — 1.3.0
+- New Asymptotic Web component: Schling's symmetric asymptotic webs — no short stubs, no T-junctions, the surface's symmetry kept (a 3-fold Enneper web is one sector rotated three times around a singular node of six laths; a catenoid web is rotational with geodesic meridian diagonals).
+- AAG webs: one family of node diagonals optimised to exact geodesics with planar node stars — three families of straight flat slats. On a 10 m Enneper web of 60 × 6 mm timber the deflection drops from 1.7 m (quads) to 11 mm (AAG).
+- Gridshell Analysis: every crossing is now its own frame node (dense nets used to collapse into a few nodes); fixed or pinned supports, rigid / hinged / semi-rigid joints, self-weight, area and point loads, reactions with an equilibrium check.
+- Browser app: symmetric webs and AAG, one lath section in millimetres for every curve, supports and joints in the structure check, the net moving as a scissor mechanism, and a black / white / neon look.
 
 ## Version notes — 1.2.8
 - New Net Kinetics component (Mite > Kinetics): a scissor-jointed asymptotic net moved as a mechanism — constant joint spacing, hinges normal to the surface, each lath's bending held against its rest shape; drivers are fixed, sliding and moved nodes and cables, one state per fold step. Checked against the exact doubly ruled hyperboloid mechanism of Schikore et al. (2020) to 2e-12 through the whole motion.

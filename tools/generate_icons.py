@@ -326,6 +326,31 @@ def icon_asymptotic_net():
     finish(img, "AsymptoticNet")
 
 
+def icon_asymptotic_web():
+    """Schling's symmetric web: rays from a singular centre node, each sector a
+    quad web of the curves through the ray nodes, nodes marked."""
+    img, d = canvas()
+    patch(img)
+    cx, cy = 0.5, 0.5
+    for k in range(6):
+        a = math.pi / 6 + k * math.pi / 3
+        uvline(d, lambda t, a=a: (cx + 0.5 * t * math.cos(a), cy + 0.5 * t * math.sin(a)), "surface", 1.0, n=8)
+    for r in (0.2, 0.36):
+        for k in range(6):
+            a0 = math.pi / 6 + k * math.pi / 3
+            a1 = a0 + math.pi / 3
+            uvline(d, lambda t, a0=a0, a1=a1, r=r: (cx + r * math.cos(a0 + t * (a1 - a0)) * (1 - 0.12 * math.sin(math.pi * t)),
+                                                   cy + r * math.sin(a0 + t * (a1 - a0)) * (1 - 0.12 * math.sin(math.pi * t))), "surface", 0.8, n=12)
+    for r in (0.2, 0.36):
+        for k in range(6):
+            a = math.pi / 6 + k * math.pi / 3
+            x, y = uv(cx + r * math.cos(a), cy + r * math.sin(a))
+            dot(d, x, y, 1.1, "surface")
+    x, y = uv(cx, cy)
+    dot(d, x, y, 1.6, "surface")
+    finish(img, "AsymptoticWeb")
+
+
 def icon_geodesic_net():
     img, d = canvas()
     patch(img)
@@ -539,7 +564,7 @@ def icon_tab():
 
 ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics,
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
-       icon_asymptotic_net, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
+       icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
        icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,
        icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics,
        icon_mesh_cleanup, icon_pull_to_mesh, icon_mesh_colour_map, icon_tab]

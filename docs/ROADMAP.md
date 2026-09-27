@@ -17,6 +17,24 @@ Rules for every session
   and a note or self-test in the Mite Bench page generator (`tools/webgen`).
 - Numbers, not adjectives: report measured errors against analytic truth.
 
+Priorities set by José (2026-09-27), in order — they replace the list below
+where they overlap
+1. Schling's symmetric asymptotic and asymptotic-geodesic gridshells: no short,
+   odd or straight stub segments; the math must follow his method (node
+   spacing along the seed curves, symmetry, AAG). First version done
+   2026-09-27 (1.3.0, `AsymptoticWeb`, `AagWeb`); next items in G below.
+2. Structural analysis that can be trusted: chosen supports (done: border /
+   lowest / picked, fixed / pinned), joint model (done: rigid / hinge /
+   semi-rigid), loads (done: self-weight, area, point); next: buckling, joint
+   eccentricity, the AAG erection sequence.
+3. The kinetic behaviour of any web in the browser (done for scissor / lift /
+   spread drives, 1.3.0); next: speed, strain colouring per state, the flat
+   state as the assembly state.
+4. One lath section for every curve (done in the web app 1.3.0; per-family
+   profiles in Grasshopper still open).
+5. Black, white and neon for everything visual (web app done 1.3.0; bench,
+   icons and Food4Rhino images still in the old palette).
+
 Priorities set by José (2026-09-25), in order
 1. Kinetic / adaptive asymptotic gridshells (E): simulate the folding of a
    scissor-jointed asymptotic net (moving canopies), drive it from a "Fold"
@@ -466,6 +484,65 @@ Plan
       (open/closed canopy), find the net whose motion passes through both —
       alternate the kinetic solve with the layout solve.
 
+## G. Asymptotic webs and AAG / AGG gridshells (José's first priority, 2026-09-27)
+
+Literature
+- Schling, Wang, Hoyer & Pottmann 2022, Designing asymptotic geodesic hybrid
+  gridshells (Computer-Aided Design 152, 103378): discrete A-nets (planar
+  vertex stars), G-nets (equal opposite angles), AAG / AGG / AGAG webs as
+  quadratic constraint systems with auxiliary normals and binormals, solved
+  by guided projection; initialisation from rotational surfaces (AAG) or
+  developables (AGG); fairness 5e-4 → 0, proximity 0.1 → 0; singular
+  vertices of valence N ≥ 6 at flat points with diagonals breaking at the
+  rays; strips from C³ quintic splines and rectifying developables.
+- Wang, Schling, Pottmann et al. 2024, Computational design of asymptotic
+  geodesic hybrid gridshells via propagation algorithms (CAD 2024): webs grown
+  from a boundary strip of two neighbouring polylines, row by row, with a
+  global optimisation that may adjust the strip; GGG / AGG / AAG.
+- Schling, Hitrec & Barthel 2017 and Schling 2018 (Repetitive Structures):
+  asymptotic networks drawn by alternating curves through each other's
+  intersections; on minimal surfaces the families cross at 90° (identical
+  nodes), τg = ½(k2 − k1) sin 2α; cookie-cut the boundary from a larger
+  surface, balanced K for a homogeneous net.
+
+Done 2026-09-27 (1.3.0)
+- [x] `AsymptoticWeb`: seed curves with nodes every spacing, all other nodes as
+      crossings; flat-point seeds as singular nodes (rays where the field is
+      radial on a circle around the seed); rotation about the seed normal
+      detected and one sector rotated; surfaces of revolution as rotational
+      webs (N copies, meridian diagonals geodesic = rotational AAG); tails
+      shorter than 0.35 spacing cut at their last node; quads, node
+      neighbours, diagonal chains (topological: opposite quads; broken at
+      rays), diagonal geodesic error per family. Closed-form tests on the
+      catenoid, the Enneper surface, the hyperbolic paraboloid, the 3-fold
+      Enneper (`AsymptoticWebTests`).
+- [x] `AagWeb`: A-net stars, unit normals, geodesic diagonals (the binormal
+      eliminated: n·((va − v) × (vc − v)) normalised by the edge lengths),
+      proximity through tangent planes, fairness, border anchors;
+      Levenberg–Marquardt on the envelope solver. 3-fold Enneper 56.7° →
+      0.08°; classical Enneper does not converge (its curvature-line
+      diagonals cannot all become geodesic near the surface: stays ~60° at the
+      mirror planes) — reported, not hidden.
+- [x] Web app and Grasshopper `Asymptotic Web` component.
+
+Open
+- [ ] AGG webs: a G-net (equal opposite angles) with asymptotic diagonals,
+      initialised from a developable (cylinder web of Graf & Sauer) — the
+      family with more freedom (Schling et al. 2022 §2.3).
+- [ ] Propagation from a boundary strip (Wang et al. 2024) as a second way to
+      start a web: two neighbouring polylines drawn by the user.
+- [ ] Refinement: subdivide the AAG web and re-optimise so the laths between
+      nodes are smooth (now straight node-to-node chords after AAG); then the
+      strip boundaries from the rectifying developables (quintic splines).
+- [ ] Choose the seed spacing per ray (e.g. uniform in the asymptotic
+      parameter instead of arc length) for more homogeneous cells, and a
+      "cookie-cut" option: trace on a larger surface, trim to a boundary.
+- [ ] Speed: the AAG solve is ~2 s natively / ~12 s in the browser for 385
+      nodes (envelope LDLᵀ of 6N unknowns): nested dissection or a
+      supernodal factorisation.
+- [ ] Global family assignment across flat points for the older Asymptotic
+      Net layouts (the web already handles them by rays).
+
 ## F. Food4Rhino release assets
 
 - [x] Bench screenshots (2026-09-25, delivered as `food4rhino/`): page
@@ -483,6 +560,13 @@ Plan
 
 ## Done
 
+- [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
+      Gridshell Analysis joints inserted exactly (the snap had chained joints
+      into a few nodes), supports fixed / pinned, joint stiffness, self-weight,
+      area and point loads, reactions and equilibrium, torsion in the
+      utilisation, unsupported parts reported; web app: symmetric webs, AAG,
+      one section for every lath in mm against a span in m, structure
+      supports and joints, kinetics block, black / white / neon palette.
 - [x] 2026-09-26 (session 1, E): `Kinetics/ScissorNet` and the Net Kinetics
       component — scissor-jointed asymptotic nets as mechanisms with exact
       hyperboloid and lazy-tongs tests, sliding ground supports, cables, and

@@ -27,7 +27,29 @@ automatically; per-vertex outputs always line up with the input mesh.
 Use a doubly-curved mesh. For asymptotic nets it must have anticlastic
 (saddle-shaped, K < 0) regions — a minimal-surface-like shape is ideal.
 
-**Asymptotic Net** (Mite > Gridshells):
+**Asymptotic Web** (Mite > Gridshells) — start here for an asymptotic gridshell:
+
+- `M` — your mesh; `S` — a seed point (leave empty: the point nearest the
+  bounding-box centre, which is the centre of a symmetric surface)
+- `Sp` — the node distance along the two asymptotic curves through the seed.
+  That is the only design variable of an asymptotic web (Schling): every other
+  node is where the curve through a node of one seed curve crosses the curve
+  through a node of the other, so there are no stubs and no T-junctions
+- `Sy` — `−1` detects the symmetry: a rotation about the seed normal (a 3-fold
+  Enneper surface, a saddle) is traced once and rotated, a surface of
+  revolution becomes a rotational web whose meridian diagonals are geodesics
+- `G` (AAG) — `True` makes one family of node diagonals geodesic and keeps
+  every node star planar: three families of straight, flat slats, two upright
+  and one lying on the surface (Schling, Wang, Hoyer & Pottmann 2022). The
+  surface moves slightly; the `R` report says how far and how exact the result is
+
+`A` and `B` are the upright laths, `G` the flat diagonals, `N` the nodes and `Q`
+the net as a quad mesh. A seed on a flat point (the centre of a 3-fold Enneper
+surface) is a singular node where six laths meet. Triangulating with `G` is what
+makes the grid stiff: on a 10 m Enneper web of 60 × 6 mm timber the deflection
+under self-weight and 0.5 kN/m² drops from 1.7 m (quads) to 11 mm (AAG).
+
+**Asymptotic Net** (Mite > Gridshells) — the older evenly spaced layouts:
 
 - `M` — your mesh
 - `A` (AutoSpace) — `True` (the default)
@@ -92,6 +114,15 @@ Wire any net's curves into **Lath Analysis** together with the same mesh:
 `B` tells you per lath whether it can be physically bent into place; `U` is the
 peak strain utilization (over 1 fails). Graft the per-point `u` tree into a
 gradient on the curves to color-code where laths are overstressed.
+
+For the whole network use **Gridshell Analysis**: the same curves, the joints
+(crossing points; T-junctions are found automatically), support points and the
+section. `St` holds the supports fixed (`0`) or pinned (`1`); `Jk` sets the joints
+— `−1` rigid, `0` a free scissor bolt along the normal, or a rotational stiffness
+in N·m/rad for a real bolted joint; `ρ` adds self-weight, `q` an area load in
+N/m², `Lp`/`F` point loads. The `Rp` report must show the reactions equal to the
+load (equilibrium error ≈ 1e-12); laths that no support reaches are listed and
+left out instead of making the frame singular.
 
 Sanity values: on an asymptotic lath `Kn` should sit near 0 (it is measured from
 the surface normal, so mesh facets do not spike it) and `Tg` near √−K of the

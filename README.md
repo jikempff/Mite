@@ -4,7 +4,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 
 ## Try it in the browser
 
-[kempffsele.me/mite](https://kempffsele.me/mite) runs Mite.Core compiled to WebAssembly: analytic shapes, a free-form loft or your own OBJ/STL, every curvature mode, all the nets, lath buildability with cutting patterns and a beam-frame check — the same code as the plugin, nothing uploaded. Source in `src/Mite.Web`.
+[kempffsele.me/mite](https://kempffsele.me/mite) runs Mite.Core compiled to WebAssembly: analytic shapes, a free-form loft or your own OBJ/STL, every curvature mode, all the nets including symmetric asymptotic webs and AAG webs, one lath section for every curve with cutting patterns, a beam-frame check with chosen supports and joints, and the net moving as a scissor mechanism — the same code as the plugin, nothing uploaded. Source in `src/Mite.Web`.
 
 ## Features
 
@@ -26,6 +26,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - All linear systems run on a built-in sparse envelope LDLᵀ solver (reverse Cuthill–McKee ordering): tens of thousands of unknowns solve in seconds
 
 ### Gridshells
+- **Asymptotic Web** — Schling's asymptotic web: nodes every spacing along the two asymptotic curves through a seed, every other node the crossing of the curves through them — a quad net with no stubs and no T-junctions that keeps the surface's symmetry (flat points become singular nodes of valence 2n, one sector is traced and rotated; surfaces of revolution get the rotational web whose meridian diagonals are geodesics). Optional **AAG** optimisation (Schling, Wang, Hoyer & Pottmann 2022): one family of node diagonals made geodesic and every node star kept planar, for gridshells of three families of straight flat slats
 - **Asymptotic Net** — both families of asymptotic curves (zero normal curvature) for asymptotic gridshells, with combed family labels, a minimum crossing angle and evenly-spaced auto-seeding
 - **Geodesic Net** — straightest geodesics for geodesic (lath) gridshells; families grow with Jacobi-field start angles for even strips, from a seed or from a border edge
 - **Chebyshev Net** — equal-edge-length nets by the compass method: the kinematics of elastic gridshells bent from flat lattices
@@ -36,7 +37,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 
 ### Analysis
 - **Lath Analysis** — buildability check for strip laths: Darboux-frame decomposition (geodesic curvature, normal curvature, geodesic torsion) converted to bending strains against a material limit
-- **Gridshell Analysis** — linear statics of the whole lath network as a coupled 3D beam frame: displacements and per-lath stress utilization (validated against Euler-Bernoulli theory)
+- **Gridshell Analysis** — linear statics of the whole lath network as a coupled 3D beam frame: every crossing a node (inserted exactly into the laths), rigid, scissor-hinged or semi-rigid joints about the surface normal, fixed or pinned supports, self-weight, area, line and point loads; displacements, reactions with an equilibrium check, and per-lath stress utilization with torsion (validated against Euler-Bernoulli closed forms)
 
 ### Fabrication
 - **Lath Sweep** — extrudes on-surface curves (geodesic, asymptotic, streamline) into solid laths with a rectangular profile riding in the surface frame; flat mode for geodesic gridshells, upright (egg-crate) mode for asymptotic gridshells, with surface offset
@@ -62,7 +63,7 @@ All Grasshopper components weld coincident vertices on intake (STL imports, Brep
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (28 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (29 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -125,7 +126,7 @@ Components appear under the **Mite** tab:
 
 - **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines, Umbilics
 - **Form Finding** — Planarize Mesh, Minimal Surface, Force Density Method, Dynamic Relaxation
-- **Gridshells** — Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
+- **Gridshells** — Asymptotic Web, Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
 - **Analysis** — Lath Analysis, Gridshell Analysis, Mesh Isocurves
 - **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview, Net Topology
 - **Kinetics** — Net Kinetics
@@ -138,6 +139,12 @@ split to stock with **Lath Segment**, and produce cutting patterns with **Lath U
 plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
+
+### 1.3.0
+- **Asymptotic Web** (new component, Mite > Gridshells; `Gridshells/AsymptoticWeb` in the core). An asymptotic parameterisation of a negatively curved surface is fixed up to u = f(ū), v = g(v̄) (Schling, Wang, Hoyer & Pottmann 2022), so placing nodes every Spacing along the two asymptotic curves through a seed fixes the whole net: every other node is the crossing of the curve of one family through a node of the first seed curve with the curve of the other family through a node of the second — Schling's "alternately drawing each curve and using their intersections as new starting points". No curve is inserted or stopped to keep a spacing, so there are no short stubs and no T-junctions; laths run border to border and the output includes the quad mesh of the nodes. The symmetry of the surface is carried into the net: a seed on a flat point (3-fold Enneper, monkey saddle) becomes a singular node where 2n asymptotic rays meet (found where the field points radially around the seed); a rotation about the seed normal is detected and one sector is traced and rotated; a surface of revolution gets N rotated copies of the two curves through the seed, N = round(2πρ / (√2·Spacing)), whose meridian diagonals are exact geodesics. Checked against the closed forms: catenoid nodes on the u ± v lattice to 0.6 % of Δφ, meridian diagonals planar to 1e-3; classical Enneper nodes on the u ± v lattice through the ray nodes to 3 % of the parameter step; the hyperbolic paraboloid web is its grid of rulings (straight to 0.01); 3-fold Enneper: six rays, 3-fold symmetry, crossings at 90° ± 3°.
+- **AAG webs** (`Gridshells/AagWeb`, the AAG input of Asymptotic Web): the discrete model of Schling et al. 2022 — planar node stars n·(vᵢ − v) = 0 with |n| = 1, geodesic diagonals n·((v_a − v) × (v_c − v)) = 0, proximity to the reference surface through its tangent planes and fairness along the three families — solved by Levenberg–Marquardt on the sparse envelope solver. 3-fold Enneper: diagonal geodesic error 56.7° → 0.08°, star error 2.7° → 0.1°, the nodes move 0.5 % of the spacing on average (2 % at most). Rotational webs are AAG already (0.12° → 0.005°). Structurally the third family is decisive: the same 10 m Enneper web of 60 × 6 mm timber laths under self-weight and 0.5 kN/m² deflects 1.67 m as a quad web and 11 mm as an AAG web.
+- **Gridshell Analysis** made exact at the joints: joints are inserted into every lath that passes through them at their exact position instead of snapping lath samples to them — the snap chained neighbouring joints together, so on a dense net most of the frame collapsed into a few nodes (a 3-fold Enneper net: 556 samples and 431 crossings became 62 nodes). New inputs (appended): SupportType (fixed / pinned), JointStiffness (rigid / scissor hinge / semi-rigid bolt about the surface normal), Density (self-weight), AreaLoad, LoadPoints and Forces; new outputs SupportNodes, Reactions and a Report with the load, the reactions and the equilibrium error. Torsion enters the utilisation (von Mises with τ = T·t/J); parts of the net no support reaches are left out and reported instead of making the frame singular. Closed-form tests: cantilever PL³/3EI to 1e-9, clamped beam qL⁴/384EI within 0.5 %, pinned cross (P/2)L³/48EI to 1e-9, a semi-rigid joint adds exactly PL²/k.
+- Web app: the symmetric web is the default asymptotic layout, with the geodesic diagonals and an AAG optimisation; one section (in millimetres, against a real span in metres) for every lath, swept and checked in one pass; supports on every border end, at the lowest level or picked in the viewport, fixed or pinned, rigid / hinged / semi-rigid joints, self-weight by material and area / line loads, load = reactions; a Kinetics block that moves the current asymptotic net as a scissor mechanism (scissor at the seed, lift the seed, spread the rim) with a fold slider — the 3-fold Enneper web unfolds towards the plane; black, white and neon throughout.
 
 ### 1.2.8
 - **Net Kinetics** (new component, Mite > Kinetics) and `Kinetics/ScissorNet` in the core: a scissor-jointed asymptotic net as a semi-compliant grid mechanism. Unknowns are joint positions and unit normals; residuals are constant joint spacing, segment ⟂ normal at both ends (Wan, Crolla & Schling 2025, *Geometry-driven development of semi-compliant kinetic asymptotic structures*, Adv. Eng. Informatics 68), unit normals, and the change of each lath's turning against its rest bend in the moving lath frame (Wan et al.'s plain second difference would straighten curved laths and penalise uneven joint spacing); drivers are fixed nodes, sliding ground nodes, moved nodes and cables; Levenberg–Marquardt on the sparse envelope solver, one state per fold step. Exact ground truth from Schikore, Schling, Oberbichler & Bauer 2020 (*Kinetics and Design of Semi-Compliant Grid Mechanisms*, AAG 2020): the doubly ruled grid of straight rods tangent to a circle, whose joints sit at rod positions ρ tan(πm/n) for every tilt β (`ScissorNet.HyperboloidMechanism`), is reproduced through the whole motion to 2e-12 with zero joint drift; a planar lazy-tongs lattice shears exactly; a traced catenoid net standing on sliding ground nodes follows a 20 % top-ring pull with joint drift 3e-4 and 0.04° asymptotic deviation, rising by 0.52 as it narrows. Bench: Kinetics tab with a fold slider on both. Discrete finding: the hinge constraints alone leave a kink mode at every joint (four coplanar segments, not two straight laths), so the bending stiffness is what makes the discrete grid behave like the smooth mechanism — with stiffness 0 the hyperboloid grid folds along 100° kinks while satisfying every constraint.

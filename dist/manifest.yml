@@ -1,15 +1,17 @@
 name: mite
-version: 1.2.8
+version: 1.3.0
 authors:
   - Mite Contributors
 description: >-
   Open-source mesh curvature analysis, form-finding and gridshell toolkit.
   Principal, Gaussian, and mean curvature; curvature streamlines, umbilics
   and isocurves. Planarization, minimal surfaces, force density method and
-  dynamic relaxation on a fast sparse solver. Asymptotic, geodesic, Chebyshev
-  and conjugate nets with evenly-spaced auto-seeding, plus shortest geodesic
-  paths. Lath buildability analysis with bending and twist strain checks and
-  frame analysis of the whole network. Turn nets into buildable gridshells:
+  dynamic relaxation on a fast sparse solver. Symmetric asymptotic webs after
+  Schling and asymptotic-asymptotic-geodesic (AAG) webs of straight flat
+  slats; asymptotic, geodesic, Chebyshev and conjugate nets with
+  evenly-spaced auto-seeding, plus shortest geodesic paths. Lath buildability analysis with bending and twist strain checks and
+  frame analysis of the whole network with fixed or pinned supports and
+  rigid, hinged or semi-rigid joints. Turn nets into buildable gridshells:
   one profile (rectangular, round or custom) for every lath — swept, strain-checked and
   used as the beam section — flat or upright; cut half-lap or
   egg-crate joints at every crossing, unroll flat cutting patterns, segment to
