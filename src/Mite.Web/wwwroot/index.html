@@ -193,11 +193,12 @@
       <h2>Kinetics <small>the net as a scissor mechanism</small></h2>
       <div class="gh"><img src="icons/NetKinetics.png" alt="" title="Net Kinetics"><span>Grasshopper <b>Net Kinetics</b></span></div>
       <div class="chips small" id="drives" role="radiogroup">
-        <button data-drive="scissor" class="on" title="The laths through the seed turn about its normal — family A one way, B the other — like opening scissors; everything else follows the joints">scissor at the seed</button>
+        <button data-drive="flatten" class="on" title="The seed is held and every lath end slides on a plane that sinks (or rises) onto the seed's tangent plane: the net folds flat the way it would be assembled — a 3-fold Enneper web closes into a hexagon. Read the fold backwards for the deployment">press flat</button>
+        <button data-drive="scissor" title="The laths through the seed turn about its normal — family A one way, B the other — like opening scissors; everything else follows the joints">scissor at the seed</button>
         <button data-drive="lift" title="The seed node rises; lath ends slide on their ground planes">lift the seed</button>
         <button data-drive="spread" title="The seed is held; every free lath end is pulled outward (or inward)">spread the rim</button>
       </div>
-      <div class="row slider"><label for="kamp">amplitude</label><input id="kamp" type="range" min="-1" max="1" step="0.05" value="0.35"><output for="kamp">0.35</output></div>
+      <div class="row slider"><label for="kamp">amplitude</label><input id="kamp" type="range" min="-1" max="1" step="0.05" value="1"><output for="kamp">1</output></div>
       <div class="row slider"><label for="kstiff">lath stiffness</label><input id="kstiff" type="range" min="0" max="2" step="0.05" value="0.3"><output for="kstiff">0.3</output></div>
       <div class="row slider"><label for="ksteps">states</label><input id="ksteps" type="range" min="4" max="20" step="1" value="8"><output for="ksteps">8</output></div>
       <div class="row"><button id="kinrun" class="btn">Run the motion</button><span class="unit">on the current asymptotic net — use a coarse spacing</span></div>
@@ -207,7 +208,7 @@
         <canvas id="kin-plot" class="plot" height="110"></canvas>
         <div class="caption">along the fold: height (ink), smallest crossing angle (A), peak strain utilization (B)</div>
       </div>
-      <p id="kin-note" class="note">Hinges keep the joint spacing and stay normal to the laths; the laths keep their rest bend as far as the stiffness asks (Schikore et al. 2020; Wan, Crolla &amp; Schling 2025). Low stiffness lets the grid unfold further — a 3-fold Enneper web flattens completely.</p>
+      <p id="kin-note" class="note">Hinges keep the joint spacing and stay normal to the laths; the laths keep their rest bend as far as the stiffness asks (Schikore et al. 2020; Wan, Crolla &amp; Schling 2025). <b>Press flat</b> at amplitude 1 lays the net on the seed's tangent plane: the 3-fold Enneper web folds into a hexagon — the laths bend in the plane around the six rays and the scissors close towards the rim. Scrub the fold back from 1 to 0 to watch the flat grid deploy.</p>
     </section>
 
     <section class="block">

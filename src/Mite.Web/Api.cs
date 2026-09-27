@@ -145,9 +145,9 @@ public class FrameOptions
 
 public class KineticsOptions
 {
-    /// <summary>"scissor" (rotate the laths through the seed about its normal), "lift" (raise the seed node, lath ends slide on the ground), "spread" (rim ends pulled radially, the seed held).</summary>
-    public string Drive { get; set; } = "scissor";
-    /// <summary>−1…1: scissor ±45°, lift ±40 % of the size, spread ±40 %.</summary>
+    /// <summary>"flatten" (the seed held, every lath end slides on a plane that moves onto the seed's tangent plane), "scissor" (rotate the laths through the seed about its normal), "lift" (raise the seed node, lath ends slide on the ground), "spread" (rim ends pulled radially, the seed held).</summary>
+    public string Drive { get; set; } = "flatten";
+    /// <summary>−1…1: flatten 1 = flat (−1 deepens), scissor ±45°, lift ±40 % of the size, spread ±40 %.</summary>
     public double Amplitude { get; set; } = 0.6;
     public double Stiffness { get; set; } = 0.2;
     public int Steps { get; set; } = 10;
@@ -894,6 +894,12 @@ public static partial class MiteApi
                     opts.TargetsAt = f => new[] { c + (0.4 * amp * f * size) * nrm };
                     opts.Sliding = ends;
                     p.Drivers = 1;
+                    break;
+                }
+                case "flatten":
+                {
+                    net.PressFlat(opts, centre, nrm, amp);
+                    p.Drivers = opts.Sliding.Count;
                     break;
                 }
                 case "spread":

@@ -104,7 +104,17 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   await page.click('#kinrun'); await idle(300000);
   const kin = await page.evaluate(() => window.__mite.kin);
   check(kin && !kin.error && kin.states.length >= 5, `kinetics ran (${kin?.error || kin?.states.length + ' states'})`);
-  check(kin && kin.states[kin.states.length - 1].height < 0.95 * kin.states[0].height, `the web unfolds (height ${kin?.states[0].height.toFixed(2)} → ${kin?.states[kin.states.length - 1].height.toFixed(2)})`);
+  const kl = kin?.states[kin.states.length - 1];
+  check(kl && kl.height < 1e-3 * kin.states[0].height && kl.drift < 5e-3 && kl.converged, `the web presses flat (height ${kin?.states[0].height.toFixed(2)} → ${kl?.height.toExponential(1)}, drift ${kl?.drift.toExponential(1)})`);
+  // the flat state is a hexagon: the support function of the flat nodes repeats every 60°
+  const hex = await page.evaluate(() => {
+    const st = window.__mite.kin.states.at(-1), pts = [...st.a, ...st.b].flat();
+    const h = (t) => Math.max(...pts.map((q) => q[0] * Math.cos(t) + q[1] * Math.sin(t)));
+    let worst = 0;
+    for (let d = 0; d < 60; d += 5) { const v = [0, 1, 2, 3, 4, 5].map((k) => h((d + 60 * k) * Math.PI / 180)); worst = Math.max(worst, (Math.max(...v) - Math.min(...v)) / Math.max(...v)); }
+    return worst;
+  });
+  check(hex < 0.04, `the flat web is a hexagon (support function 60°-periodic to ${(hex * 100).toFixed(2)} %)`);
 
   const broken = await page.$$eval('img', (imgs) => imgs.filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.getAttribute('src')));
   check(broken.length === 0, `all icons load (${broken.join(', ') || 'none broken'})`);

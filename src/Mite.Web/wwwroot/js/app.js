@@ -59,7 +59,7 @@ const S = {
   net: 'none', netData: null, seed: -1, seedPoint: null, seedNormal: [0, 0, 1], dir: [1, 0.35, 0],
   loft: null, file: null,
   lath: null, selected: null, lathUtil: null,
-  frame: null, aag: null, kin: null, kinTimer: null, drive: 'scissor', picked: [], picking: false,
+  frame: null, aag: null, kin: null, kinTimer: null, drive: 'flatten', picked: [], picking: false,
   busy: 0, gen: 0, loading: false, layout: 3,
 };
 
@@ -895,6 +895,9 @@ async function main() {
     const b = e.target.closest('button'); if (!b) return;
     $('drives').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
     S.drive = b.dataset.drive;
+    // each drive has its own natural amplitude: 1 = completely flat for the press, ±0.35 for the others
+    const amp = S.drive === 'flatten' ? 1 : 0.35;
+    $('kamp').value = amp; $('kamp').nextElementSibling.value = amp;
   });
   for (const id of ['kamp', 'kstiff', 'ksteps']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
   $('kinrun').addEventListener('click', runKinetics);

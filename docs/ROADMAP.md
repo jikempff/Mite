@@ -28,8 +28,11 @@ where they overlap
    semi-rigid), loads (done: self-weight, area, point); next: buckling, joint
    eccentricity, the AAG erection sequence.
 3. The kinetic behaviour of any web in the browser (done for scissor / lift /
-   spread drives, 1.3.0); next: speed, strain colouring per state, the flat
-   state as the assembly state.
+   spread drives, 1.3.0; the flat state as the assembly state — press flat,
+   the 3-fold Enneper web into a hexagon — 1.3.1); next: speed, strain
+   colouring per state, the deployment driven from the flat grid by pulling
+   the singular node (José's Kangaroo sequence), the physical prototype
+   dimensions.
 4. One lath section for every curve (done in the web app 1.3.0; per-family
    profiles in Grasshopper still open).
 5. Black, white and neon for everything visual (web app done 1.3.0; bench,

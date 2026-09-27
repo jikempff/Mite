@@ -184,7 +184,12 @@ curves of an **Asymptotic Net**, then drive it:
 - `F` fixed points hold the nearest joints; `Sl` ground points let joints slide
   in the plane through their rest position (normal `Sn`, default Z);
 - `Mv` / `To` move the nearest joints to targets; `C` cables (lines between two
-  joints) shorten or lengthen to `Le` at `Fo` = 1.
+  joints) shorten or lengthen to `Le` at `Fo` = 1;
+- `Fl` Flatten = True presses the net flat: the first `F` joint (or the one
+  nearest the centre) is held and every lath end slides onto the plane through
+  it (normal `Sn`). On an **Asymptotic Web** of the 3-fold Enneper, with `F` on
+  the seed, the net lays flat into a hexagon — the flat grid you assemble; read
+  `SA` / `SB` from the last state back to the first for the deployment.
 
 Put `Fo` on a slider (0 = the settled rest state, 1 = drivers at their
 targets) to animate; `St` states are solved in sequence and come out as trees

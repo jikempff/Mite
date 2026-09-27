@@ -112,6 +112,25 @@ public sealed class ScissorNet
         /// <summary>Normal of the sliding planes (default Z: nodes stay on the ground).</summary>
         public Vec3d SlideNormal { get; set; } = new Vec3d(0, 0, 1);
 
+        /// <summary>
+        /// Moving sliding planes: at fold parameter t the plane of sliding node i
+        /// is offset by value[i] along <see cref="SlideNormal"/> from its rest
+        /// position (one per sliding node). Null keeps the planes still. This is
+        /// the press that flattens a net: every plane moves onto one plane.
+        /// </summary>
+        public Func<double, double[]>? SlideOffsetsAt { get; set; }
+
+        /// <summary>
+        /// The laths' stress-free shape. Given: the rest geometry is stress-free,
+        /// so every lath keeps its turning (a net that was designed curved).
+        /// Straight: the laths were cut straight and bent into the net (a lath
+        /// of an asymptotic gridshell unrolls straight), so the weak-axis
+        /// turning relaxes to zero and the net springs towards its flat state
+        /// wherever the hinges let it; the strong-axis turning is zero in both,
+        /// being held by the asymptotic constraint.
+        /// </summary>
+        public LathRest Rest { get; set; } = LathRest.Given;
+
         /// <summary>Actuator cables (node pairs) whose length is prescribed by <see cref="CableLengthsAt"/>.</summary>
         public IReadOnlyList<(int p, int q)> Cables { get; set; } = Array.Empty<(int, int)>();
 
@@ -156,6 +175,8 @@ public sealed class ScissorNet
         /// <summary>Optional per-iteration trace (cost, damping) for debugging.</summary>
         public Action<string>? Log { get; set; }
     }
+
+    public enum LathRest { Given, Straight }
 
     /// <summary>One configuration of the mechanism.</summary>
     public sealed class State
@@ -281,6 +302,28 @@ public sealed class ScissorNet
             }
             if (seq.Count >= 2) { laths.Add(seq.ToArray()); lathIds.Add(l); }
         }
+        // Free tails much shorter than a segment (a lath trimmed just past its last joint) carry no
+        // stiffness worth modelling and ruin the conditioning (their residuals divide by the length):
+        // they are dropped, and the unused end nodes removed.
+        {
+            double sum = 0; int cnt = 0;
+            foreach (var l in laths) for (int i = 0; i + 1 < l.Length; i++) { sum += (nodes[l[i + 1]] - nodes[l[i]]).Length; cnt++; }
+            double minTail = 0.25 * (cnt > 0 ? sum / cnt : 0);
+            int joints = topo.Nodes.Count();
+            for (int k = 0; k < laths.Count; k++)
+            {
+                var l = laths[k].ToList();
+                while (l.Count > 2 && l[0] >= joints && (nodes[l[1]] - nodes[l[0]]).Length < minTail) l.RemoveAt(0);
+                while (l.Count > 2 && l[l.Count - 1] >= joints && (nodes[l[l.Count - 1]] - nodes[l[l.Count - 2]]).Length < minTail) l.RemoveAt(l.Count - 1);
+                laths[k] = l.ToArray();
+            }
+            var used = new bool[nodes.Count];
+            foreach (var l in laths) foreach (int v in l) used[v] = true;
+            var map = new int[nodes.Count]; var kept = new List<Vec3d>();
+            for (int i = 0; i < nodes.Count; i++) map[i] = used[i] ? AddAndIndex(kept, nodes[i]) : -1;
+            for (int k = 0; k < laths.Count; k++) laths[k] = laths[k].Select(v => map[v]).ToArray();
+            nodes = kept;
+        }
         int a = lathIds.Count(id => id < countA);
         Vec3d[]? normals = null;
         if (normalAt != null) normals = nodes.Select(normalAt).ToArray();
@@ -288,6 +331,48 @@ public sealed class ScissorNet
         net.SourceLaths = lathIds.ToArray();
         return net;
     }
+
+    /// <summary>
+    /// Every lath end (first and last node of every lath), without repeats.
+    /// </summary>
+    public int[] LathEnds()
+    {
+        var ends = new List<int>();
+        foreach (var l in Laths)
+            foreach (int v in new[] { l[0], l[l.Length - 1] })
+                if (!ends.Contains(v)) ends.Add(v);
+        return ends.ToArray();
+    }
+
+    /// <summary>
+    /// Sets up the press that flattens the net — the erection of a deployable
+    /// asymptotic gridshell read backwards (Schling's flat-assembled lamella
+    /// grids, Schikore et al. 2020): the anchor joint is held, and every lath
+    /// end slides on a plane of normal <paramref name="normal"/> that moves
+    /// from the end's rest height onto the plane through the anchor as the
+    /// fold goes 0 → amount. Nothing else is prescribed: the interior follows
+    /// the hinges (constant joint spacing, laths perpendicular to the moving
+    /// normal) and the lath stiffness, so the flat state that comes out is the
+    /// one the mechanism reaches — for the 3-fold Enneper web a hexagon: the
+    /// laths bend in the plane around the six rays and the scissors close
+    /// towards the rim (right angles in the curved state, about 65° on
+    /// average in the outer third of the flat one). amount &lt; 0
+    /// pushes the ends the other way (the net deepens).
+    /// </summary>
+    public void PressFlat(Options options, int anchor, Vec3d normal, double amount = 1.0)
+    {
+        var nz = normal.Normalized();
+        var c = Nodes[anchor];
+        options.Fixed = options.Fixed.Concat(new[] { anchor }).Distinct().ToArray();
+        var fixedSet = new HashSet<int>(options.Fixed);
+        var slide = options.Sliding.Concat(LathEnds()).Distinct().Where(i => !fixedSet.Contains(i)).ToArray();
+        var height = slide.Select(i => Vec3d.Dot(Nodes[i] - c, nz)).ToArray();
+        options.Sliding = slide;
+        options.SlideNormal = nz;
+        options.SlideOffsetsAt = t => height.Select(z => -t * amount * z).ToArray();
+    }
+
+    private static int AddAndIndex(List<Vec3d> list, Vec3d p) { list.Add(p); return list.Count - 1; }
 
     /// <summary>For nets built by <see cref="FromTopology"/>: input lath index of every lath (family A first, then B).</summary>
     public int[]? SourceLaths { get; private set; }
@@ -433,7 +518,8 @@ public sealed class ScissorNet
                     var n0 = Normals[v];
                     n0 = (n0 - Vec3d.Dot(n0, t0) * t0).Normalized();
                     var b0 = Vec3d.Cross(n0, t0);
-                    fair.Add(new Bend { Prev = p, Node = v, Next = q, LPrev = lp, LNext = lq, Along = Vec3d.Dot(d0, t0), Normal = Vec3d.Dot(d0, n0), InPlane = Vec3d.Dot(d0, b0) });
+                    bool straight = opt.Rest == LathRest.Straight;
+                    fair.Add(new Bend { Prev = p, Node = v, Next = q, LPrev = lp, LNext = lq, Along = straight ? 0 : Vec3d.Dot(d0, t0), Normal = straight ? 0 : Vec3d.Dot(d0, n0), InPlane = straight ? 0 : Vec3d.Dot(d0, b0) });
                 }
         // uniform twist through nodes that lie on one lath only (subdivision nodes): the normal's rate of
         // change along the lath is the same on both sides — the torsion equilibrium of a rod free between
@@ -459,6 +545,7 @@ public sealed class ScissorNet
             double t = opt.Fold * k / steps;
             var targets = opt.TargetsAt != null && opt.Driven.Count > 0 ? opt.TargetsAt(t) : Array.Empty<Vec3d>();
             var cableLen = opt.CableLengthsAt != null && opt.Cables.Count > 0 ? opt.CableLengthsAt(t) : Array.Empty<double>();
+            _slideOffsets = opt.SlideOffsetsAt != null && opt.Sliding.Count > 0 ? opt.SlideOffsetsAt(t) : null;
 
             var st = SolveState(opt, t, pos, nrm, dof, ndof, freeCount, segs, fair, twistNodes, wF, wT, wC, targets, cableLen);
             result.States.Add(st);
@@ -466,6 +553,9 @@ public sealed class ScissorNet
         }
         return result;
     }
+
+    private double[]? _slideOffsets;
+    private double SlideOffset(int k) => _slideOffsets != null && k < _slideOffsets.Length ? _slideOffsets[k] : 0.0;
 
     private State SolveState(Options opt, double t, Vec3d[] pos, Vec3d[] nrm, int[] dof, int[] ndof, int freeCount,
         List<(int a, int b, double l)> segs, List<Bend> fair, List<(int p, int v, int q, double lp, double lq)> twistNodes,
@@ -583,7 +673,7 @@ public sealed class ScissorNet
         for (int i = 0; i < nCable; i++) cm = Math.Max(cm, Math.Abs((pos[opt.Cables[i].p] - pos[opt.Cables[i].q]).Length - cableLen[i]));
         st.CableMiss = cm;
         double sm = 0;
-        foreach (int v in opt.Sliding) sm = Math.Max(sm, Math.Abs(Vec3d.Dot(pos[v] - Nodes[v], slideN)));
+        for (int k = 0; k < opt.Sliding.Count; k++) sm = Math.Max(sm, Math.Abs(Vec3d.Dot(pos[opt.Sliding[k]] - Nodes[opt.Sliding[k]], slideN) - SlideOffset(k)));
         st.SlideMiss = sm;
         return st;
     }
@@ -686,9 +776,10 @@ public sealed class ScissorNet
             row++;
         }
 
-        foreach (int v in opt.Sliding)
+        for (int k = 0; k < opt.Sliding.Count; k++)
         {
-            r[row] = wT * Vec3d.Dot(pos[v] - Nodes[v], slideN);
+            int v = opt.Sliding[k];
+            r[row] = wT * (Vec3d.Dot(pos[v] - Nodes[v], slideN) - SlideOffset(k));
             AddVec(v, false, wT * slideN);
             row++;
         }

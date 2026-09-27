@@ -1,8 +1,8 @@
-# Food4Rhino listing — Mite 1.3.0
+# Food4Rhino listing — Mite 1.3.1
 
 Paste-ready copy for https://www.food4rhino.com/en/app/mite (edit form). Images
 to upload are listed at the end; the package itself goes up with
-`yak push dist/mite-1.3.0-rh8_0-any.yak`, which also sets the package icon (1.2.8 is on the server already).
+`yak push dist/mite-1.3.1-rh8_0-any.yak`, which also sets the package icon (1.3.0 is on the server already).
 
 ## Title
 Mite — curvature, form finding and gridshell nets for Grasshopper
@@ -65,6 +65,9 @@ where the answer is exact. The same library runs in the browser at
 kempffsele.me/mite — try a net on your own OBJ before installing anything.
 
 Source, examples and roadmap: https://github.com/jikempff/Mite
+
+## Version notes — 1.3.1
+- Net Kinetics presses a net flat (new Flatten input): the lath ends slide onto a plane and the mechanism finds the flat assembly state — a 3-fold Enneper web lays flat into a hexagon with every joint spacing kept. Read backwards, it is the deployment of the flat grid. Also the default motion in the browser app.
 
 ## Version notes — 1.3.0
 - New Asymptotic Web component: Schling's symmetric asymptotic webs — no short stubs, no T-junctions, the surface's symmetry kept (a 3-fold Enneper web is one sector rotated three times around a singular node of six laths; a catenoid web is rotational with geodesic meridian diagonals).

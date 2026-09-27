@@ -27,7 +27,7 @@ public class NetKineticsComponent : MiteComponent
             "The crossings of A and B become scissor hinges: the distance between consecutive joints along every lath " +
             "stays constant, every lath segment stays perpendicular to the (moving) surface normal at its ends — so " +
             "upright laths remain straight-unrollable — and laths keep their rest bend with the given Stiffness. " +
-            "Drive the motion with Fixed points, Slide points (joints kept on the ground plane, free to slide), points moved To targets, or Cables whose Lengths change; Fold 0…1 " +
+            "Drive the motion with Fixed points, Slide points (joints kept on the ground plane, free to slide), points moved To targets, Cables whose Lengths change, or Flatten (press the net onto a plane); Fold 0…1 " +
             "runs the drivers from the rest state to the target in Steps states. Drift, Deviation and Miss tell you " +
             "how well the mechanism can follow (a rigid net cannot follow at all; the exact doubly ruled grids follow to 1e-12). " +
             "Every state is also read elastically (Schikore, Schling, Oberbichler & Bauer 2020): bending and twist strains of the lath section " +
@@ -71,6 +71,8 @@ public class NetKineticsComponent : MiteComponent
         pManager.AddNumberParameter("Modulus", "Em", "Young's modulus in Pa for the strain energy (default 11 GPa); the shear modulus is taken as E/16", GH_ParamAccess.item, 11e9);
         pManager.AddNumberParameter("Density", "Rho", "Density in kg/m³ for the self-weight potential in the energy diagram (0 = ignore self-weight)", GH_ParamAccess.item, 0.0);
         RegisterSectionInputs(pManager); // 23 Shape, 24 Section — the same profile Lath Sweep builds
+        pManager.AddBooleanParameter("Flatten", "Fl", "Press the net flat: the first Fixed joint (or the joint nearest the centre) is held and every lath end slides on a plane of normal SlideNormal that moves from its rest height onto the plane through that joint as Fold goes 0 → 1. " +
+            "The flat state is the one the mechanism reaches — a 3-fold Enneper web closes into a hexagon; read the states backwards for the deployment from the flat grid", GH_ParamAccess.item, false);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -136,6 +138,8 @@ public class NetKineticsComponent : MiteComponent
         DA.GetData(22, ref density);
         DA.GetData(23, ref shape);
         DA.GetData(24, ref section);
+        bool flatten = false;
+        DA.GetData(25, ref flatten);
         if (width <= 0 || thickness <= 0 || maxStrain <= 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness and MaxStrain must be positive.");
@@ -153,7 +157,7 @@ public class NetKineticsComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Cables need target Lengths (at Fold = 1).");
             return;
         }
-        if (movePts.Count == 0 && cables.Count == 0)
+        if (movePts.Count == 0 && cables.Count == 0 && !flatten)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "No driver (Move/To or Cables): the net is only settled onto the hinge constraints.");
 
         if (sampling <= 0)
@@ -235,6 +239,13 @@ public class NetKineticsComponent : MiteComponent
             MaxIterations = Math.Max(1, iterations),
             Cancel = Cancelled,
         };
+        if (flatten)
+        {
+            int anchor = fixedIdx.Count > 0 ? fixedIdx[0] : net.NearestNode(net.Nodes.Aggregate(Vec3d.Zero, (a, b) => a + b) / net.Nodes.Length);
+            net.PressFlat(opt, anchor, MeshConvert.ToVec3d(slideNormal));
+            slideIdx = opt.Sliding.ToList();
+            fixedIdx = opt.Fixed.ToList();
+        }
         var result = net.Solve(opt);
         if (result.Cancelled) AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, the motion is partial.");
 

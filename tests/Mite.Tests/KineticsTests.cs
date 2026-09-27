@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
+using Mite.Core.Curvature;
 using Mite.Core.Fabrication;
 using Mite.Core.Geometry;
+using Mite.Core.Gridshells;
 using Mite.Core.Kinetics;
 
 namespace Mite.Tests;
@@ -464,5 +466,51 @@ public class KineticsTests
             Assert.InRange(len, 2 * Rho * Math.Tan(2 * Math.PI / N) - 1e-6, 2 * Rho * Math.Tan(2 * Math.PI / N) + 1e-6);
         }
         Assert.InRange(last.LengthDrift, 0, 1e-9);
+    }
+
+    [Fact]
+    public void Enneper3Web_PressedFlat_BecomesAHexagon()
+    {
+        // The 3-fold Enneper web (Schling) as a scissor mechanism: holding the flat point and
+        // letting the lath ends slide on planes that sink onto its tangent plane lays the whole
+        // net flat with the joints at their spacing and the laths still asymptotic; the laths bend
+        // in the plane around the six rays and the scissors close towards the rim, so the flat grid
+        // is a hexagon — its support function repeats every 60° — as in the flat-assembled
+        // deployable Enneper prototypes.
+        var mesh = AnalyticShapes.Build("enneper3", 3, 0.9, 0, 48).ToTriangulated();
+        var pc = PrincipalCurvature.Compute(mesh, 2);
+        var w = AsymptoticWeb.Build(mesh, pc, -1, new AsymptoticWeb.Options());
+        var topo = NetTopology.Build(w.A, w.B, NetIntersections.FindAll(w.A, w.B, 0));
+        var proj = new MeshProjection(mesh);
+        var net = ScissorNet.FromTopology(topo, w.A.Count + w.B.Count, w.A.Count, 0, q => proj.ClosestPoint(q, proj.NearestVertexGlobal(q)).SmoothNormal);
+        // no stub tails left from trimming: every segment is a real piece of lath
+        Assert.True(net.RestLengths.SelectMany(r => r).Min() > 0.2 * net.Scale);
+        int centre = net.NearestNode(w.Seed);
+        var opt = new ScissorNet.Options { Fairness = 0.3, Steps = 8, MaxIterations = 60 };
+        net.PressFlat(opt, centre, new Vec3d(0, 0, 1));
+        var res = net.Solve(opt);
+        double h0 = res.States[0].Nodes.Max(p => p.Z) - res.States[0].Nodes.Min(p => p.Z);
+        foreach (var st in res.States)
+        {
+            Assert.True(st.Converged, $"fold {st.Fold}");
+            Assert.InRange(st.LengthDrift, 0, 3e-3);
+            Assert.InRange(st.AsymptoticDeviation, 0, 0.5);
+        }
+        var flat = res.Last;
+        Assert.InRange(flat.Nodes.Max(p => Math.Abs(p.Z)), 0, 1e-3 * h0);
+        double H(double deg) { double t = deg * Math.PI / 180; return flat.Nodes.Max(p => p.X * Math.Cos(t) + p.Y * Math.Sin(t)); }
+        double worst = 0, corner = 0, side = double.MaxValue;
+        for (int d = 0; d < 60; d += 2)
+        {
+            var v = Enumerable.Range(0, 6).Select(k => H(d + 60 * k)).ToArray();
+            worst = Math.Max(worst, (v.Max() - v.Min()) / v.Max());
+            corner = Math.Max(corner, v.Average()); side = Math.Min(side, v.Average());
+        }
+        Assert.InRange(worst, 0, 0.01);
+        // a hexagon, not a disc: corners stand out from the sides (regular hexagon: cos 30° = 0.87)
+        Assert.InRange(side / corner, 0.85, 0.95);
+        // the scissors close: the crossings leave the right angles of the minimal surface
+        var ang = net.CrossingAngles(flat).Where(a => !double.IsNaN(a)).ToArray();
+        Assert.True(ang.Min() < 60, $"smallest crossing {ang.Min():0.#}°");
     }
 }
