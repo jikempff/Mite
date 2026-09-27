@@ -21,7 +21,7 @@ public static class StripSweep
         /// <summary>Closed mesh of the swept strip (one vertex per section point per station, quad sides, capped ends).</summary>
         public readonly MeshData Mesh;
 
-        /// <summary>Strip centerline per station (reference curve lifted by Offset + half the normal depth).</summary>
+        /// <summary>Strip centerline per station (the reference curve moved along the normal by the profile's Lift).</summary>
         public readonly Vec3d[] Centers;
 
         /// <summary>Curve tangent per station.</summary>
@@ -120,11 +120,12 @@ public static class StripSweep
             across[i] = Vec3d.Cross(nv, t);
         }
 
-        // Cross-section in the (a, b) profile plane; the lowest section point
-        // along the normal sits Offset above the surface
+        // Cross-section in the (a, b) profile plane, placed along the normal by
+        // the profile's Align: near face Offset above the surface (outside),
+        // far face Offset below it (inside) or centred on it
         var section = profile.SectionPoints();
         int m = section.Length;
-        double lift = profile.Offset - profile.NormalLow;
+        double lift = profile.Lift;
 
         var verts = new Vec3d[m * n];
         var centers = new Vec3d[n];

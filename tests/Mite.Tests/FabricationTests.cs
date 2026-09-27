@@ -65,6 +65,33 @@ public class FabricationTests
         Assert.Equal(0.1, maxY - minY, 6);
     }
 
+    [Theory]
+    [InlineData(LathAlign.Outside, 0.2, 0.7)]
+    [InlineData(LathAlign.Centred, -0.05, 0.45)]
+    [InlineData(LathAlign.Inside, -0.7, -0.2)]
+    public void StripSweep_Align_PlacesTheLathOutCentredOrIn(LathAlign align, double lo, double hi)
+    {
+        // upright 0.5 × 0.1 lath, offset 0.2: out = [0.2, 0.7], in = [−0.7, −0.2],
+        // centred = the centre line shifted by the offset, [−0.05, 0.45]
+        var proj = PlaneProj();
+        var line = new Vec3d[11];
+        for (int i = 0; i <= 10; i++) line[i] = new Vec3d(5 + i, 10, 0);
+        var profile = new LathProfile(0.5, 0.1, upright: true, offset: 0.2).WithAlign(align);
+        var r = StripSweep.Sweep(proj, line, profile)!.Value;
+        double minZ = double.MaxValue, maxZ = double.MinValue;
+        foreach (var v in r.Mesh.Vertices) { minZ = Math.Min(minZ, v.Z); maxZ = Math.Max(maxZ, v.Z); }
+        Assert.Equal(lo, minZ, 6);
+        Assert.Equal(hi, maxZ, 6);
+        Assert.Equal(lo, profile.FaceLow, 9);
+        Assert.Equal(0.5 * (lo + hi), r.Centers[0].Z, 6);
+
+        // the joint notches follow the lath: A's notch opens on its far face, B's on its near face
+        var pa = profile; var pb = profile;
+        Assert.True(JointGeometry.TryBuildLapNotches(new Vec3d(8, 10, 0), new Vec3d(1, 0, 0), new Vec3d(0, 1, 0), new Vec3d(0, 0, 1), pa, pb, 0.5, 0.0, out var na, out var nb));
+        Assert.InRange(na.Center.Z + na.HalfZ, hi, hi + 0.1);
+        Assert.InRange(nb.Center.Z - nb.HalfZ, lo - 0.1, lo);
+    }
+
     private static double SignedVolume(MeshData m)
     {
         double vol = 0;

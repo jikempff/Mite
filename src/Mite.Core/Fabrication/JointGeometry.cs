@@ -91,12 +91,12 @@ public static class JointGeometry
         double bleedB = 0.05 * stackB + clearance;
 
         // Notch A: cut from the top (far) face of A over the footprint of B
-        Vec3d cA = point + (profileA.Offset + stackA + bleedA - 0.5 * (depthA + bleedA)) * n;
+        Vec3d cA = point + (profileA.FaceLow + stackA + bleedA - 0.5 * (depthA + bleedA)) * n;
         notchA = new NotchSolid(cA, tb, gb, n,
             0.5 * spanA + clearance, 0.5 * footB + clearance, 0.5 * (depthA + bleedA));
 
         // Notch B: cut from the bottom (near) face of B over the footprint of A
-        Vec3d cB = point + (profileB.Offset - bleedB + 0.5 * (depthB + bleedB)) * n;
+        Vec3d cB = point + (profileB.FaceLow - bleedB + 0.5 * (depthB + bleedB)) * n;
         notchB = new NotchSolid(cB, ta, ga, n,
             0.5 * spanB + clearance, 0.5 * footA + clearance, 0.5 * (depthB + bleedB));
         return true;
@@ -133,8 +133,8 @@ public static class JointGeometry
         double depth = 0.5 * stack + clearance;
         double bleed = 0.05 * stack + clearance;
 
-        Vec3d cEnd = cutPoint + (profile.Offset + stack + bleed - 0.5 * (depth + bleed)) * n;
-        Vec3d cStart = cutPoint + (profile.Offset - bleed + 0.5 * (depth + bleed)) * n;
+        Vec3d cEnd = cutPoint + (profile.FaceLow + stack + bleed - 0.5 * (depth + bleed)) * n;
+        Vec3d cStart = cutPoint + (profile.FaceLow - bleed + 0.5 * (depth + bleed)) * n;
 
         endNotch = new NotchSolid(cEnd, t, g, n,
             0.5 * spliceLength + clearance, halfAcross, 0.5 * (depth + bleed));

@@ -34,6 +34,7 @@ public class LathSegmentComponent : MiteComponent
         pManager.AddNumberParameter("Clearance", "Cl", "Fit clearance (default 0)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Offset", "O", "Gap between the surface and the nearest lath face, as in Lath Sweep (default 0)", GH_ParamAccess.item, 0.0);
+        pManager.AddIntegerParameter("Align", "Al", "Where the lath sits along the surface normal: 0 grows from the surface out (default), 1 centred on the surface (its centre line on the curve), 2 grows from the surface in. Offset is the gap to the near face, or the shift of the centre when centred", GH_ParamAccess.item, 0);
         pManager[4].Optional = true;
     }
 
@@ -65,6 +66,8 @@ public class LathSegmentComponent : MiteComponent
         DA.GetData(9, ref clearance);
         DA.GetData(10, ref sampling);
         DA.GetData(11, ref offset);
+        int align = 0;
+        DA.GetData(12, ref align);
 
         if (stock <= 0)
         {
@@ -79,7 +82,7 @@ public class LathSegmentComponent : MiteComponent
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
-        var profile = new LathProfile(width, thickness, upright, offset);
+        var profile = new LathProfile(width, thickness, upright, offset).WithAlign(AlignOf(align));
 
         var jointVecs = new List<Vec3d>();
         foreach (var p in joints) jointVecs.Add(MeshConvert.ToVec3d(p));

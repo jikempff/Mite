@@ -29,12 +29,13 @@ public class LathSweepComponent : MiteComponent
         pManager.AddNumberParameter("Offset", "O", "Gap between the surface and the nearest strip face (default 0)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
         RegisterSectionInputs(pManager); // 7 Shape, 8 Section
+        pManager.AddIntegerParameter("Align", "Al", "Where the lath sits along the surface normal: 0 grows from the surface out (default), 1 centred on the surface (its centre line on the curve), 2 grows from the surface in. Offset is the gap to the near face, or the shift of the centre when centred", GH_ParamAccess.item, 0);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
     {
         pManager.AddMeshParameter("Laths", "L", "Swept lath solids as closed meshes, one per input curve", GH_ParamAccess.list);
-        pManager.AddCurveParameter("Centerlines", "C", "Strip centerline per lath (lifted by the offset and half the depth)", GH_ParamAccess.list);
+        pManager.AddCurveParameter("Centerlines", "C", "Strip centerline per lath (moved along the normal by Align and Offset)", GH_ParamAccess.list);
         pManager.AddPlaneParameter("Frames", "F", "Start frame per lath (X along the lath, Z along the surface normal)", GH_ParamAccess.list);
     }
 
@@ -55,6 +56,8 @@ public class LathSweepComponent : MiteComponent
         DA.GetData(7, ref shape);
         Curve? section = null;
         DA.GetData(8, ref section);
+        int align = 0;
+        DA.GetData(9, ref align);
 
         if (width <= 0 || thickness <= 0)
         {
@@ -65,6 +68,7 @@ public class LathSweepComponent : MiteComponent
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
         if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, offset, 1.0, curves.Count, out LathProfile profile)) return;
+        profile = profile.WithAlign(AlignOf(align));
 
         var laths = new List<Mesh?>();
         var centerlines = new List<Curve?>();

@@ -74,6 +74,7 @@
         <button data-mode="anticlastic" title="Grasshopper: Asymptotic Net → Anticlastic output">K &lt; 0 mask</button>
       </div>
       <div class="gh" id="gh-mode" title="The plugin component behind the active mode"><img src="icons/PrincipalCurvature.png" alt=""><span></span></div>
+      <div class="row slider"><label for="opacity" title="See the laths and curves behind the surface">surface opacity</label><input id="opacity" type="range" min="0" max="1" step="0.05" value="0.55"><output for="opacity">0.55</output></div>
       <div class="row slider"><label for="smooth">smoothing rings</label><input id="smooth" type="range" min="1" max="4" step="1" value="2"><output for="smooth">2</output></div>
       <div class="row toggles">
         <label class="chk" title="Grasshopper: Principal Curvature → D1, D2"><input id="dirs" type="checkbox"> principal directions</label>
@@ -152,9 +153,10 @@
         <div class="row slider"><label for="width">width <span class="unit">mm</span></label><input id="width" type="range" min="10" max="400" step="5" value="60"><output for="width">60</output></div>
         <div class="row slider"><label for="thick">thickness <span class="unit">mm</span></label><input id="thick" type="range" min="2" max="80" step="1" value="6"><output for="thick">6</output></div>
       </div>
+      <div class="row"><label for="align" title="Grasshopper: Lath Sweep / Net Joints / Lath Segment → Align">A / B laths</label><select id="align"><option value="0">grow from the surface out</option><option value="1">centred on the surface</option><option value="2">grow from the surface in</option></select></div>
       <div class="row"><label for="section">section</label><select id="section"><option value="0">rectangle (width × thickness)</option><option value="1">round bar (Ø width)</option></select></div>
       <div class="row toggles">
-        <label class="chk" title="Asymptotic laths stand upright on the surface; geodesic laths (and the G diagonals) lie flat"><input id="upright" type="checkbox" checked> upright A / B</label>
+        <label class="chk" title="Asymptotic laths stand upright on the surface; geodesic laths (and the G diagonals) lie flat, on the outer face of the A / B laths"><input id="upright" type="checkbox" checked> upright A / B</label>
         <label class="chk" title="Grasshopper: Lath Sweep on every curve"><input id="solid" type="checkbox"> all laths as solids</label>
         <label class="chk"><input id="colorutil" type="checkbox"> colour by utilization</label>
       </div>

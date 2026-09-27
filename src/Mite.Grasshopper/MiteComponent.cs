@@ -115,6 +115,14 @@ public abstract class MiteComponent : GH_Component
     }
 
     /// <summary>Chord tolerance for sampling curves onto a mesh (0 = automatic, 2% of the average edge length).</summary>
+    /// <summary>Align input (0 outside, 1 centred, 2 inside) → <see cref="Mite.Core.Fabrication.LathAlign"/>.</summary>
+    protected static Mite.Core.Fabrication.LathAlign AlignOf(int align) => align switch
+    {
+        1 => Mite.Core.Fabrication.LathAlign.Centred,
+        2 => Mite.Core.Fabrication.LathAlign.Inside,
+        _ => Mite.Core.Fabrication.LathAlign.Outside,
+    };
+
     protected static double ResolveSampling(double sampling, MeshProjection proj) =>
         sampling > 0 ? sampling : Math.Max(0.02 * proj.AverageEdgeLength, 1e-9);
 

@@ -27,6 +27,21 @@ public enum SectionKind
 }
 
 /// <summary>
+/// Where the section sits along the surface normal. Outside: it grows from
+/// the surface outward (its near face on the surface, the default). Inside:
+/// it grows from the surface inward. Centred: its centre line lies on the
+/// surface, half the section each side — an asymptotic lamella whose axis is
+/// the traced curve. Offset is the gap between the surface and the near face
+/// (Outside / Inside) or the shift of the centre along the normal (Centred).
+/// </summary>
+public enum LathAlign
+{
+    Outside,
+    Centred,
+    Inside,
+}
+
+/// <summary>
 /// Geometric section properties of a <see cref="LathProfile"/> in its own
 /// (first axis A, second axis B) plane, about the centroid. IA is the second
 /// moment for bending about the A axis (fibres at distance B — "through the
@@ -78,11 +93,15 @@ public readonly struct LathProfile
     /// <summary>Which kind of section this is (rectangle, round bar, custom polygon).</summary>
     public SectionKind Kind { get; }
 
+    /// <summary>Where the section sits along the surface normal (outside, centred on the surface, inside).</summary>
+    public LathAlign Align { get; }
+
     public LathProfile(double width, double thickness, bool upright = false, double offset = 0.0)
         : this(width, thickness, upright, offset, null, SectionKind.Rectangle) { }
 
-    private LathProfile(double width, double thickness, bool upright, double offset, IReadOnlyList<(double, double)>? section, SectionKind kind)
+    private LathProfile(double width, double thickness, bool upright, double offset, IReadOnlyList<(double, double)>? section, SectionKind kind, LathAlign align = LathAlign.Outside)
     {
+        Align = align;
         Width = width;
         Thickness = thickness;
         Upright = upright;
@@ -90,6 +109,12 @@ public readonly struct LathProfile
         Section = section;
         Kind = kind;
     }
+
+    /// <summary>The same profile placed differently along the surface normal.</summary>
+    public LathProfile WithAlign(LathAlign align) => new LathProfile(Width, Thickness, Upright, Offset, Section, Kind, align);
+
+    /// <summary>The same profile with another Offset.</summary>
+    public LathProfile WithOffset(double offset) => new LathProfile(Width, Thickness, Upright, offset, Section, Kind, Align);
 
     /// <summary>The Width × Thickness rectangle (the default).</summary>
     public static LathProfile Rectangle(double width, double thickness, bool upright = false, double offset = 0.0) =>
@@ -241,4 +266,36 @@ public readonly struct LathProfile
             return Upright ? pts.Min(p => p.A) : pts.Min(p => p.B);
         }
     }
+
+    /// <summary>Highest section coordinate along the surface normal.</summary>
+    public double NormalHigh
+    {
+        get
+        {
+            var pts = SectionPoints();
+            return Upright ? pts.Max(p => p.A) : pts.Max(p => p.B);
+        }
+    }
+
+    /// <summary>
+    /// Height above the surface (along its normal) of the section's near face
+    /// under <see cref="Align"/>: Offset when outside, −Offset − depth when
+    /// inside, Offset − depth/2 when centred.
+    /// </summary>
+    public double FaceLow
+    {
+        get
+        {
+            double depth = NormalHigh - NormalLow;
+            return Align switch
+            {
+                LathAlign.Inside => -Offset - depth,
+                LathAlign.Centred => Offset - 0.5 * depth,
+                _ => Offset,
+            };
+        }
+    }
+
+    /// <summary>Shift of the section origin along the surface normal: the sweep places the curve's point + Lift·n at the section origin.</summary>
+    public double Lift => FaceLow - NormalLow;
 }

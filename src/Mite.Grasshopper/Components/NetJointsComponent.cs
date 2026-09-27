@@ -31,6 +31,7 @@ public class NetJointsComponent : MiteComponent
         pManager.AddNumberParameter("Clearance", "Cl", "Fit clearance added to each notch side (default 0)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Tolerance", "X", "Maximum gap accepted as a crossing (0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
+        pManager.AddIntegerParameter("Align", "Al", "Where the lath sits along the surface normal: 0 grows from the surface out (default), 1 centred on the surface (its centre line on the curve), 2 grows from the surface in. Offset is the gap to the near face, or the shift of the centre when centred", GH_ParamAccess.item, 0);
         pManager[2].Optional = true;
     }
 
@@ -63,6 +64,8 @@ public class NetJointsComponent : MiteComponent
         DA.GetData(8, ref clearance);
         DA.GetData(9, ref tolerance);
         DA.GetData(10, ref sampling);
+        int align = 0;
+        DA.GetData(11, ref align);
 
         if (width <= 0 || thickness <= 0)
         {
@@ -72,7 +75,7 @@ public class NetJointsComponent : MiteComponent
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
-        var profile = new LathProfile(width, thickness, upright, offset);
+        var profile = new LathProfile(width, thickness, upright, offset).WithAlign(AlignOf(align));
 
         // Keep curve indices aligned with the inputs: null / degenerate curves become empty polylines
         var familyA = SampleAligned(curvesA, chord);

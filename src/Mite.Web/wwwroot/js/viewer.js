@@ -179,9 +179,16 @@ export class Viewer {
 
   setMeshOpacity(a) {
     if (!this.mesh) return;
-    this.mesh.material.transparent = a < 1;
+    const see = a < 0.999;
+    // a see-through surface must not write depth, or the laths and curves behind it stay hidden;
+    // drawn after the opaque laths (renderOrder) so they show through it
+    this.mesh.material.transparent = see;
     this.mesh.material.opacity = a;
+    this.mesh.material.depthWrite = !see;
+    this.mesh.renderOrder = see ? 10 : 0;
+    this.mesh.visible = a > 0.001;
     this.mesh.material.needsUpdate = true;
+    if (this.wire) this.wire.renderOrder = see ? 11 : 0;
   }
 
   fit() {

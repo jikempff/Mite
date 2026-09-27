@@ -716,7 +716,7 @@ public static partial class MiteApi
     /// optionally all laths swept as one solid.
     /// </summary>
     [JSExport]
-    public static string LathAll(double width, double thickness, bool uprightAB, double maxStrain, int shape, bool sweep)
+    public static string LathAll(double width, double thickness, bool uprightAB, double maxStrain, int shape, bool sweep, int align)
     {
         var sw = Stopwatch.StartNew();
         var p = new LathAllPayload();
@@ -726,10 +726,15 @@ public static partial class MiteApi
         var util = new double[laths.Count];
         var len = new double[laths.Count];
         var sv = new List<double>(); var sf = new List<int>();
+        // A / B laths placed along the normal by align (0 out of the surface, 1 centred on it, 2 into it);
+        // the flat G laths rest on the outer face of the A / B laths, where they cross them (Schling et al. 2022)
+        var alignAB = align == 1 ? LathAlign.Centred : align == 2 ? LathAlign.Inside : LathAlign.Outside;
+        LathProfile Profile(bool upright) => shape == 1 ? LathProfile.Round(width, 24) : new LathProfile(width, thickness, upright);
+        var ab = Profile(uprightAB).WithAlign(alignAB);
+        double gFloor = Math.Max(0, ab.FaceLow + (ab.NormalHigh - ab.NormalLow));
         for (int i = 0; i < laths.Count; i++)
         {
-            bool upright = i < nAB ? uprightAB : false;
-            var profile = shape == 1 ? LathProfile.Round(width, 24) : new LathProfile(width, thickness, upright);
+            var profile = i < nAB ? ab : Profile(false).WithOffset(_famG.Count > 0 ? gFloor : 0);
             var line = laths[i];
             len[i] = ArcLength(line);
             if (line.Length < 2) continue;

@@ -289,6 +289,7 @@ async function applyMode() {
     v.showPoints('umb', flat, NEON.yellow, 8);
   } else v.clearOverlay('umb');
   v.setWireframe($('wire').checked);
+  if (!S.kin && !S.aag) v.setMeshOpacity(surfaceOpacity());
   updateRecipe();
 }
 
@@ -340,7 +341,7 @@ function netOptions() {
 async function traceNet() {
   const v = S.viewer;
   S.lath = null; S.selected = null; S.frame = null; S.lathUtil = null; S.aag = null;
-  stopKinetics(true); S.viewer.setMeshOpacity(1); showUtilLegend(false);
+  stopKinetics(true); S.viewer.setMeshOpacity(surfaceOpacity()); showUtilLegend(false);
   $('lath-result').classList.add('hidden');
   $('frame-stats').textContent = ''; $('laths-stats').textContent = ''; $('aag-stats').classList.add('hidden');
   v.clearOverlay('supports'); v.clearOverlay('deformed'); v.clearOverlay('sweepAll');
@@ -435,7 +436,7 @@ async function runAag() {
     S.aag = r; $('diagonals').checked = true;
     S.lathUtil = null;
     drawNetCurves();
-    S.viewer.setMeshOpacity(0.45); // the optimised nodes sit a few mm off the reference surface
+    S.viewer.setMeshOpacity(Math.min(0.45, surfaceOpacity())); // the optimised nodes sit a few mm off the reference surface
     const good = r.geodesicError < 1 && r.starError < 1;
     el.innerHTML = `AAG web · ${r.iterations} iterations · ${r.ms} ms\n` +
       `geodesic diagonals <b>${fmt(r.initialGeodesicError, 1)}° → ${fmt(r.geodesicError, 2)}°</b> · asymptotic stars <b>${fmt(r.initialStarError, 2)}° → ${fmt(r.starError, 2)}°</b>\n` +
@@ -533,8 +534,10 @@ function showNetParams() {
 // Laths: one section for every curve
 // ---------------------------------------------------------------------------
 
+function surfaceOpacity() { return +($('opacity')?.value ?? 1); }
+
 function lathOpts() {
-  return { width: mmToModel(+$('width').value), thickness: mmToModel(+$('thick').value), upright: $('upright').checked, maxStrain: +$('strain').value / 100, section: +($('section')?.value ?? 0) };
+  return { width: mmToModel(+$('width').value), thickness: mmToModel(+$('thick').value), upright: $('upright').checked, maxStrain: +$('strain').value / 100, section: +($('section')?.value ?? 0), align: +($('align')?.value ?? 0) };
 }
 
 async function analyseSelected() {
@@ -563,7 +566,7 @@ async function runLathAll() {
   const sweep = $('solid').checked;
   let r;
   await withBusy(sweep ? 'sweeping every lath…' : 'checking every lath…', async () => {
-    r = await K('lathAll', o.width, o.thickness, o.upright, o.maxStrain, o.section, sweep);
+    r = await K('lathAll', o.width, o.thickness, o.upright, o.maxStrain, o.section, sweep, o.align);
   });
   if (!r || gen !== S.gen || S.netData !== data || S.aag !== aag) return;
   S.lathUtil = r.utilization;
@@ -650,7 +653,7 @@ function showDeformed() {
 
 function stopKinetics(clear = false) {
   if (S.kinTimer) { clearInterval(S.kinTimer); S.kinTimer = null; $('kplay').textContent = 'play'; }
-  if (clear && S.kin) { S.kin = null; $('kin-result').classList.add('hidden'); S.viewer.setMeshOpacity(1); }
+  if (clear && S.kin) { S.kin = null; $('kin-result').classList.add('hidden'); S.viewer.setMeshOpacity(surfaceOpacity()); }
 }
 
 async function runKinetics() {
@@ -674,7 +677,7 @@ async function runKinetics() {
 function showKinState(k) {
   const r = S.kin; if (!r) return;
   const st = r.states[Math.max(0, Math.min(r.states.length - 1, k))];
-  S.viewer.setMeshOpacity(k === 0 ? 1 : 0.18);
+  S.viewer.setMeshOpacity(k === 0 ? surfaceOpacity() : Math.min(0.18, surfaceOpacity()));
   S.viewer.setCurves(st.a, st.b);
   if ($('colorutil').checked && S.kin.states.some((x) => x.utilization > 0)) {} // per-state colouring is per net only
   $('kfold').nextElementSibling.value = st.fold.toFixed(2);
@@ -820,6 +823,7 @@ async function main() {
   $('smooth').addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
   $('smooth').addEventListener('change', (e) => { S.smooth = +e.target.value; S.curv = null; applyMode(); });
   for (const id of ['dirs', 'umb', 'wire']) $(id).addEventListener('change', applyMode);
+  $('opacity').addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; if (!S.kin || +$('kfold').value === 0) S.viewer.setMeshOpacity(surfaceOpacity()); });
 
   // nets
   $('nets').addEventListener('click', (e) => {
@@ -855,7 +859,7 @@ async function main() {
     inp.addEventListener('input', () => { inp.nextElementSibling.value = inp.value; });
     inp.addEventListener('change', () => { if (S.selected) analyseSelected(); if ($('colorutil').checked || $('solid').checked) runLathAll(); });
   });
-  for (const id of ['upright', 'section']) $(id).addEventListener('change', () => { if (S.selected) analyseSelected(); if ($('colorutil').checked || $('solid').checked) runLathAll(); });
+  for (const id of ['upright', 'section', 'align']) $(id).addEventListener('change', () => { if (S.selected) analyseSelected(); if ($('colorutil').checked || $('solid').checked) runLathAll(); });
   $('solid').addEventListener('change', () => { if ($('solid').checked || $('colorutil').checked) runLathAll(); else S.viewer.clearOverlay('sweepAll'); });
   $('colorutil').addEventListener('change', () => { if ($('colorutil').checked) runLathAll(); else { S.lathUtil = null; S.viewer.colorCurves(null, null, null); showUtilLegend(false); if (S.selected) S.viewer.selectCurve(S.selected); if (S.netData) drawQuality(S.netData, S.stats.boundaryVertices === 0); } });
   $('span').addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
