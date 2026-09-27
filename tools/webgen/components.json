@@ -75,6 +75,22 @@
     "default": "200"
    },
    {
+    "name": "Continuous",
+    "nick": "Ct",
+    "type": "Boolean",
+    "desc": "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout",
+    "access": "item",
+    "default": "true"
+   },
+   {
+    "name": "MinAngle",
+    "nick": "An",
+    "type": "Number",
+    "desc": "Minimum crossing angle between the two families (degrees). Near the K = 0 line the families collapse onto each other; vertices below this angle are left out of the net and of the Anticlastic mask (default 15, 0 = raw K < 0 region)",
+    "access": "item",
+    "default": "15.0"
+   },
+   {
     "name": "Layout",
     "nick": "Ly",
     "type": "Integer",
@@ -106,6 +122,14 @@
     "type": "Boolean",
     "desc": "Per input vertex: true where asymptotic directions exist (K < 0)",
     "access": "list",
+    "default": null
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends",
+    "access": "item",
     "default": null
    }
   ]
@@ -225,6 +249,14 @@
     "desc": "Shear angle between the families at each node (degrees); locking occurs near 0 / 180",
     "access": "tree",
     "default": null
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends. Laths as polylines through the nodes (straight segments of EdgeLength)",
+    "access": "item",
+    "default": null
    }
   ]
  },
@@ -295,6 +327,14 @@
     "default": "200"
    },
    {
+    "name": "Continuous",
+    "nick": "Ct",
+    "type": "Boolean",
+    "desc": "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout",
+    "access": "item",
+    "default": "true"
+   },
+   {
     "name": "Layout",
     "nick": "Ly",
     "type": "Integer",
@@ -318,6 +358,14 @@
     "type": "Curve",
     "desc": "Min-curvature direction family",
     "access": "list",
+    "default": null
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends",
+    "access": "item",
     "default": null
    }
   ]
@@ -577,7 +625,7 @@
   "file": "GeodesicNetComponent.cs",
   "name": "Geodesic Net",
   "nick": "GeoNet",
-  "desc": "Traces straightest geodesics from seeds along given directions for gridshell design. Geodesics extend both ways from each seed; with AutoSpace one family fills the mesh with evenly spaced geodesics grown from the first seed and direction.",
+  "desc": "Traces straightest geodesics from seeds along given directions for gridshell design. Geodesics extend both ways from each seed; with AutoSpace one family fills the mesh with evenly spaced geodesics grown from the first seed and direction. Each new geodesic starts at the angle that keeps the strip to its neighbour closest to constant width (Jacobi field, Pottmann et al. 2010), or the family leaves a border edge (FromBorder).",
   "tab": "Gridshells",
   "icon": "GeodesicNet",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE9",
@@ -657,10 +705,34 @@
     "default": "200"
    },
    {
+    "name": "Continuous",
+    "nick": "Ct",
+    "type": "Boolean",
+    "desc": "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout",
+    "access": "item",
+    "default": "true"
+   },
+   {
+    "name": "FromBorder",
+    "nick": "Bd",
+    "type": "Boolean",
+    "desc": "AutoSpace: start the family on the border edge nearest the first seed (geodesics leave it every Spacing at BorderAngle from the inward normal) instead of growing sideways from the seed alone. Good on vaults and long patches; ignored on closed meshes",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "BorderAngle",
+    "nick": "Ba",
+    "type": "Number",
+    "desc": "FromBorder: angle in degrees between the border geodesics and the inward normal of the border (0 = perpendicular to the edge)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
     "name": "Layout",
     "nick": "Ly",
     "type": "Integer",
-    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
+    "desc": "Layout of the family: 0 = evenly spaced fill (new geodesics beside existing ones, stopped where they converge; T-junctions), 1 = web from the border edge nearest the seed (every geodesic runs until it leaves the mesh, seeds every Spacing along the edge at BorderAngle), 2 = web from the seed cross (seeds every Spacing along the geodesic through the seed perpendicular to Direction, each parallel-transported). Webs never merge; geodesics converge where K > 0 and diverge where K < 0 (Jacobi), so their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
    }
@@ -672,6 +744,14 @@
     "type": "Curve",
     "desc": "Geodesic curves (smooth interpolated curves)",
     "access": "list",
+    "default": null
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends",
+    "access": "item",
     "default": null
    }
   ]
@@ -757,7 +837,7 @@
   "file": "GridshellAnalysisComponent.cs",
   "name": "Gridshell Analysis",
   "nick": "GridFE",
-  "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the profile's section (rectangle, round bar or custom polygon), coupled at net crossings; supports are fixed points. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. A first-order sanity check, not a full FE package.",
+  "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the strip section, coupled at net crossings; supports are fixed points. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. A first-order sanity check, not a full FE package.",
   "tab": "Analysis",
   "icon": "GridshellAnalysis",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF3",
@@ -768,7 +848,8 @@
     "type": "Mesh",
     "desc": "Reference surface the net lies on",
     "access": "item",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Curves",
@@ -776,13 +857,14 @@
     "type": "Curve",
     "desc": "Lath centerlines (net curves)",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Joints",
     "nick": "J",
     "type": "Point",
-    "desc": "Crossing points where laths are coupled (from Net Joints)",
+    "desc": "Crossing points where laths are coupled (from Net Joints or Net Topology nodes). Lath ends lying on another lath (T-junctions) are coupled automatically",
     "access": "list",
     "default": null,
     "optional": true
@@ -793,7 +875,8 @@
     "type": "Point",
     "desc": "Fixed support points",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Load",
@@ -801,7 +884,7 @@
     "type": "Vector",
     "desc": "Force per unit length in N/m applied along every lath (default: 1 kN/m downward)",
     "access": "item",
-    "default": "new Vector3d(0, 0, -1000"
+    "default": "new Vector3d(0, 0, -1000)"
    },
    {
     "name": "E",
@@ -992,7 +1075,8 @@
     "type": "Mesh",
     "desc": "Mesh the laths lie on",
     "access": "item",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Laths",
@@ -1000,7 +1084,8 @@
     "type": "Curve",
     "desc": "Lath curves on the mesh (e.g. from Asymptotic Net or Geodesic Net)",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Upright",
@@ -1063,6 +1148,15 @@
     "nick": "Sc",
     "type": "Curve",
     "desc": "Closed planar section curve for Shape = 2 (drawn around the origin of its own plane, any units of the model)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net. Each family is checked with the net's profile for it unless U / W / T / Shape / Section are wired",
     "access": "item",
     "default": null,
     "optional": true
@@ -1142,13 +1236,14 @@
     "type": "Curve",
     "desc": "Lath centerlines",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Prefix",
     "nick": "P",
     "type": "Text",
-    "desc": "ID prefix (default \\\"L\\\")",
+    "desc": "ID prefix (default \"L\")",
     "access": "item",
     "default": "\"L\""
    },
@@ -1168,6 +1263,15 @@
     "desc": "First ID number (default 0; use e.g. 100 for a second family)",
     "access": "item",
     "default": "0"
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net. With a Net (and no Curves) the IDs carry the family — LA000…, LB000…, numbered from Start in each family — and the report gains a family column",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -1249,7 +1353,8 @@
     "type": "Mesh",
     "desc": "Reference surface",
     "access": "item",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Curves",
@@ -1257,7 +1362,8 @@
     "type": "Curve",
     "desc": "Lath centerlines",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "StockLength",
@@ -1339,6 +1445,15 @@
     "desc": "Gap between the surface and the nearest lath face, as in Lath Sweep (default 0)",
     "access": "item",
     "default": "0.0"
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net. With a Net, empty Joints avoid every contact of the net, and each family's splice notches follow its profile unless W / T / U / O are wired",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -1399,7 +1514,8 @@
     "type": "Mesh",
     "desc": "Reference surface the curves lie on",
     "access": "item",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Curves",
@@ -1407,7 +1523,8 @@
     "type": "Curve",
     "desc": "Lath centerlines on the surface",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Width",
@@ -1453,16 +1570,26 @@
     "name": "Shape",
     "nick": "Sh",
     "type": "Integer",
-    "access": "item",
     "desc": "Section shape applied to every curve: 0 = rectangle W × T, 1 = round bar of diameter W, 2 = custom closed planar Section curve (its plane X = across / Y = surface normal; Upright swaps them)",
+    "access": "item",
     "default": "0"
    },
    {
     "name": "Section",
     "nick": "Sc",
     "type": "Curve",
-    "access": "item",
     "desc": "Closed planar section curve for Shape = 2 (drawn around the origin of its own plane, any units of the model)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net. Each family is swept with the net's profile for it unless W / T / U / O / Shape / Section are wired",
+    "access": "item",
+    "default": null,
     "optional": true
    }
   ],
@@ -1508,7 +1635,8 @@
     "type": "Mesh",
     "desc": "Reference surface the curves lie on",
     "access": "item",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Curves",
@@ -1516,7 +1644,8 @@
     "type": "Curve",
     "desc": "Lath centerlines on the surface",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Width",
@@ -1549,6 +1678,15 @@
     "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
     "access": "item",
     "default": "0.0"
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net. Each family is unrolled at its profile's width and orientation unless W / U are wired",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -1948,7 +2086,8 @@
     "type": "Mesh",
     "desc": "Reference surface the net lies on",
     "access": "item",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "CurvesA",
@@ -1956,7 +2095,8 @@
     "type": "Curve",
     "desc": "First lath family",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "CurvesB",
@@ -2030,6 +2170,15 @@
     "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
     "access": "item",
     "default": "0.0"
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net. Its profiles (per family) shape the notches unless W / T / U / O are wired",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -2095,7 +2244,7 @@
   "file": "NetTopologyComponent.cs",
   "name": "Net Topology",
   "nick": "NetTopo",
-  "desc": "Turns a two-family lath net into a structural graph: unique nodes at the crossings and one member per lath piece between consecutive crossings (free tails included). Feed Nodes / Members to a structural package (e.g. Karamba) or use the node schedule for fabrication.",
+  "desc": "Turns a two-family lath net into a structural graph: unique nodes at the crossings and one member per lath piece between consecutive crossings (free tails included). Same-family crossings and T-junctions (a lath ending on a neighbour) are nodes too. Feed Nodes / Members to a structural package (e.g. Karamba) or use the node schedule for fabrication.",
   "tab": "Fabrication",
   "icon": "NetTopology",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFD",
@@ -2106,7 +2255,8 @@
     "type": "Curve",
     "desc": "First lath family",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "CurvesB",
@@ -2114,7 +2264,8 @@
     "type": "Curve",
     "desc": "Second lath family",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Tolerance",
@@ -2139,6 +2290,15 @@
     "desc": "Drop members (e.g. free tails) shorter than this (default 0)",
     "access": "item",
     "default": "0.0"
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -2534,6 +2694,14 @@
     "default": "200"
    },
    {
+    "name": "Continuous",
+    "nick": "Ct",
+    "type": "Boolean",
+    "desc": "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout",
+    "access": "item",
+    "default": "true"
+   },
+   {
     "name": "Layout",
     "nick": "Ly",
     "type": "Integer",
@@ -2621,7 +2789,8 @@
     "type": "Curve",
     "desc": "First lath family (asymptotic curves)",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "CurvesB",
@@ -2629,7 +2798,8 @@
     "type": "Curve",
     "desc": "Second lath family",
     "access": "list",
-    "default": null
+    "default": null,
+    "optional": true
    },
    {
     "name": "Fixed",
@@ -2822,6 +2992,15 @@
     "access": "item",
     "default": null,
     "optional": true
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net. Its laths are the scissor grid, its surface starts the joint normals (unless Mesh is wired) and its profile family A's section is the one read elastically (unless U / W / T / Shape / Section are wired)",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -2958,6 +3137,218 @@
     "nick": "Ok",
     "type": "Boolean",
     "desc": "True when every state stays within MaxStrain",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends. The net at Fold (kind Kinetic, the profile used, no surface — the moved grid no longer lies on the input surface)",
+    "access": "item",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "MiteNetComponent.cs",
+  "name": "Mite Net",
+  "nick": "Net",
+  "desc": "Builds a Mite Net from a surface and two lath families, or edits one: set the lath profile (per family with UprightB), replace a part, or join two nets (NetB's first family becomes family B — two geodesic webs, or an asymptotic family with geodesics). Also takes the net apart and classifies every lath end: on the border, on another lath (T-junction) or free.",
+  "tab": "Gridshells",
+  "icon": "MiteNet",
+  "guid": "3F6B2D84-9C1E-4A57-B0E3-8D2A61C7F5E9",
+  "inputs": [
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Net to start from (optional): every other input replaces that part of it",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Reference surface",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Family A laths",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Family B laths",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "NetB",
+    "nick": "Nb",
+    "type": "Mite Net",
+    "desc": "A second net whose family A becomes family B (e.g. a second Geodesic Net at another angle)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Lath profile width (default 0.1)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Thickness",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Lath profile thickness (default 0.01)",
+    "access": "item",
+    "default": "0.01"
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "False: laths lie flat on the surface; true: they stand upright (asymptotic gridshells)",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Offset",
+    "nick": "O",
+    "type": "Number",
+    "desc": "Gap between the surface and the nearest lath face (default 0)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Shape",
+    "nick": "Sh",
+    "type": "Integer",
+    "desc": "Section shape applied to every curve: 0 = rectangle W × T, 1 = round bar of diameter W, 2 = custom closed planar Section curve (its plane X = across / Y = surface normal; Upright swaps them)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Section",
+    "nick": "Sc",
+    "type": "Curve",
+    "desc": "Closed planar section curve for Shape = 2 (drawn around the origin of its own plane, any units of the model)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "UprightB",
+    "nick": "Ub",
+    "type": "Boolean",
+    "desc": "Orientation of family B when it differs from A (asymptotic–geodesic hybrid: A upright, B flat); unset = as Upright",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for sampling wired curves (0 = automatic from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Tolerance",
+    "nick": "X",
+    "type": "Number",
+    "desc": "Distance within which a lath end counts as on the border or on another lath (0 = automatic: exact for traced nets, the sampling chord for wired curves)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "The net's surface",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Family A laths (polylines)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Family B laths (polylines)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Joints",
+    "nick": "J",
+    "type": "Point",
+    "desc": "Crossings between the families (the joints)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "BorderEnds",
+    "nick": "Eb",
+    "type": "Point",
+    "desc": "Lath ends on the surface border (supports)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "LathEnds",
+    "nick": "El",
+    "type": "Point",
+    "desc": "Lath ends on another lath (T-junctions; orange in the preview)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "FreeEnds",
+    "nick": "Ef",
+    "type": "Point",
+    "desc": "Lath ends that are neither (red in the preview)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Summary: laths, lengths, joints, ends, profile",
     "access": "item",
     "default": null
    }

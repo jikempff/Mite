@@ -48,5 +48,7 @@
     <EmbeddedResource Include="Resources\NetTopology.png" />
     <EmbeddedResource Include="Resources\NetKinetics.png" />
     <EmbeddedResource Include="Resources\FlatKit.png" />
+    <EmbeddedResource Include="Resources\MiteNet.png" />
+    <EmbeddedResource Include="Resources\MiteNetParam.png" />
   </ItemGroup>
 </Project>

@@ -36,6 +36,7 @@ public class ConjugateNetComponent : MiteComponent
     {
         pManager.AddCurveParameter("CurvesA", "A", "Max-curvature direction family", GH_ParamAccess.list);
         pManager.AddCurveParameter("CurvesB", "B", "Min-curvature direction family", GH_ParamAccess.list);
+        RegisterNetOutput(pManager); // 2
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -73,6 +74,7 @@ public class ConjugateNetComponent : MiteComponent
 
         DA.SetDataList(0, MeshConvert.ToCurves(net.FamilyA));
         DA.SetDataList(1, MeshConvert.ToCurves(net.FamilyB));
+        DA.SetData(2, new MiteNetGoo(new LathNet(data, net.FamilyA, net.FamilyB, NetKind.Conjugate, opts.ResolvedSpacing)));
 
         if (net.FamilyA.Count == 0 && net.FamilyB.Count == 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,

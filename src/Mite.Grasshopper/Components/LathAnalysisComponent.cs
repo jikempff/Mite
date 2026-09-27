@@ -35,6 +35,9 @@ public class LathAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic from the mesh edge length)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Window", "Wn", "Arc length over which curvature is measured (0 = automatic: twice the mesh edge length). Larger windows smooth out facet-scale spikes", GH_ParamAccess.item, 0.0);
         RegisterSectionInputs(pManager); // 8 Shape, 9 Section — the same profile Lath Sweep builds
+        RegisterNetInput(pManager, "Each family is checked with the net's profile for it unless U / W / T / Shape / Section are wired"); // 10
+        pManager[0].Optional = true;
+        pManager[1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -50,10 +53,11 @@ public class LathAnalysisComponent : MiteComponent
 
     protected override void SolveInstance(IGH_DataAccess DA)
     {
-        var input = LoadMesh(DA, 0);
+        var netIn = GetNet(DA, 10);
+        var input = LoadMeshOrNet(DA, 0, netIn);
         if (input == null) return;
         var curves = new List<Curve>();
-        if (!DA.GetDataList(1, curves)) return;
+        if (!ReadCurvesOrNet(DA, 1, netIn, curves, -1, out bool fromNet)) return;
         bool upright = false;
         double width = 0.1, thickness = 0.01, maxStrain = 0.005, sampling = 0.0, window = 0.0;
         DA.GetData(2, ref upright);
@@ -102,7 +106,9 @@ public class LathAnalysisComponent : MiteComponent
                 continue;
             }
 
-            var result = LathAnalysis.Analyze(proj, pts, opts);
+            var netProfile = NetProfile(netIn, fromNet ? c : 0, 2, 3, 4, 8, 9);
+            var result = LathAnalysis.Analyze(proj, pts, netProfile == null ? opts
+                : new LathAnalysis.Options { Profile = netProfile.Value, MaxStrain = maxStrain, Window = window });
             buildable.Add(result.Buildable);
             maxUtil.Add(result.MaxUtilization);
             utilTree.AddRange(result.Utilization, path);

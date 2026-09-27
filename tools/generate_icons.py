@@ -491,6 +491,28 @@ def icon_net_topology():
     finish(img, "NetTopology")
 
 
+def icon_mite_net():
+    """Mite Net: the two lath families on a patch gathered into one wire — a
+    white plug dot on the right edge with a single outgoing lead."""
+    img, d = canvas()
+    q = [(2.5, 7.5), (13.0, 3.0), (18.5, 11.0), (8.0, 20.5)]
+    patch(img, "surface", q)
+    for c in (0.25, 0.5, 0.75):
+        uvline(d, lambda t, c=c: (c, t), "surface", 0.85, quad=q)
+        uvline(d, lambda t, c=c: (t, c), "surface", 0.85, quad=q)
+    stroke(d, [P(18.5, 11.0), P(22.0, 11.0)], "surface", 1.1)
+    dot(d, 18.5, 11.0, 1.9, "surface")
+    finish(img, "MiteNet")
+
+
+def icon_mite_net_param():
+    """The Mite Net parameter: the same lattice in the parameter greys."""
+    img, d = canvas()
+    q = [(3.0, 8.0), (14.0, 3.5), (21.0, 12.0), (10.0, 20.5)]
+    lattice(img, d, "param", 3, 3, nodes=True, quad=q)
+    finish(img, "MiteNetParam")
+
+
 # ================================================================ Kinetics (mesh / form-finding family)
 def icon_net_kinetics():
     """A rhombic scissor lattice sheared by the fold: rods straight, white hinge dots, a fold arrow."""
@@ -581,7 +603,7 @@ ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, i
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
        icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
        icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,
-       icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics, icon_flat_kit,
+       icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics, icon_flat_kit, icon_mite_net, icon_mite_net_param,
        icon_mesh_cleanup, icon_pull_to_mesh, icon_mesh_colour_map, icon_tab]
 
 if __name__ == "__main__":

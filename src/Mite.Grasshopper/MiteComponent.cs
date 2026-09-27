@@ -7,6 +7,8 @@ using Grasshopper.Kernel.Data;
 using Rhino;
 using Rhino.Geometry;
 using Mite.Core.Geometry;
+using System.Linq;
+using Mite.Core.Fabrication;
 using Mite.Core.Gridshells;
 
 namespace Mite.Grasshopper;
@@ -48,6 +50,92 @@ public abstract class MiteComponent : GH_Component
         pManager.AddIntegerParameter("Shape", "Sh", SectionInput.ShapeDescription, GH_ParamAccess.item, 0);
         pManager.AddCurveParameter("Section", "Sc", SectionInput.SectionDescription, GH_ParamAccess.item);
         pManager[pManager.ParamCount - 1].Optional = true;
+    }
+
+    public const string NetInputDescription =
+        "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — " +
+        "the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net";
+
+    /// <summary>Appends the optional Net input (always last, so saved definitions keep their wiring).</summary>
+    protected static void RegisterNetInput(GH_InputParamManager pManager, string? extra = null)
+    {
+        pManager.AddParameter(new MiteNetParameter(), "Net", "Nt",
+            NetInputDescription + (extra != null ? ". " + extra : ""), GH_ParamAccess.item);
+        pManager[pManager.ParamCount - 1].Optional = true;
+    }
+
+    /// <summary>Appends the Net output (always last).</summary>
+    protected static void RegisterNetOutput(GH_OutputParamManager pManager, string? extra = null)
+    {
+        pManager.AddParameter(new MiteNetParameter(), "Net", "Nt",
+            "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, " +
+            "Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends" +
+            (extra != null ? ". " + extra : ""), GH_ParamAccess.item);
+    }
+
+    /// <summary>The net at the given input, or null when nothing is wired.</summary>
+    internal static LathNet? GetNet(IGH_DataAccess DA, int index)
+    {
+        MiteNetGoo? goo = null;
+        return DA.GetData(index, ref goo) && goo?.Value != null ? goo.Value : null;
+    }
+
+    /// <summary>True when the input has a wire (persistent values do not count).</summary>
+    internal bool IsWired(int index) => Params.Input[index].SourceCount > 0;
+
+    /// <summary>
+    /// The net's profile for global lath <paramref name="lath"/> when the net
+    /// carries one and none of the given section inputs is wired; otherwise null
+    /// (the component's own section inputs apply).
+    /// </summary>
+    internal LathProfile? NetProfile(LathNet? net, int lath, params int[] sectionInputs)
+    {
+        if (net == null || net.ProfileA == null) return null;
+        foreach (int i in sectionInputs) if (IsWired(i)) return null;
+        return lath < net.LathCount ? net.ProfileOf(lath) : net.ProfileA;
+    }
+
+    /// <summary>
+    /// The mesh input when wired, else the Net's surface; reports an error
+    /// when neither is there and <paramref name="required"/> is set.
+    /// </summary>
+    internal MeshInput? LoadMeshOrNet(IGH_DataAccess DA, int index, LathNet? net, bool required = true)
+    {
+        var input = LoadMesh(DA, index);
+        if (input != null) return input;
+        if (net?.Surface != null) return MeshConvert.FromData(net.Surface);
+        if (required)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                net != null ? "The Net carries no surface: wire a Mesh." : "Wire a Mesh, or a Mite Net that carries its surface.");
+        return null;
+    }
+
+    /// <summary>
+    /// Curves from the input when wired; else the Net's laths as exact
+    /// polylines (family 0 = A, 1 = B, -1 = A then B). Returns false (with a
+    /// warning when <paramref name="required"/>) when there are none.
+    /// </summary>
+    internal bool ReadCurvesOrNet(IGH_DataAccess DA, int index, LathNet? net, List<Curve> curves, int family, bool required = true) =>
+        ReadCurvesOrNet(DA, index, net, curves, family, out _, required);
+
+    /// <inheritdoc cref="ReadCurvesOrNet(IGH_DataAccess, int, LathNet?, List{Curve}, int, bool)"/>
+    /// <param name="fromNet">True when the curves are the net's laths (so curve i is global lath i for family -1).</param>
+    internal bool ReadCurvesOrNet(IGH_DataAccess DA, int index, LathNet? net, List<Curve> curves, int family, out bool fromNet, bool required = true)
+    {
+        fromNet = false;
+        curves.Clear();
+        if (DA.GetDataList(index, curves) && curves.Count > 0) return true;
+        curves.Clear();
+        if (net != null)
+        {
+            IEnumerable<Vec3d[]> laths = family == 0 ? net.FamilyA : family == 1 ? net.FamilyB : net.Laths();
+            foreach (var l in laths) curves.Add(MeshConvert.ToPolylineCurve(l));
+            fromNet = true;
+            if (curves.Count > 0 || family == 1) return true;
+        }
+        if (required)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Wire the curves, or a Mite Net.");
+        return false;
     }
 
     /// <summary>

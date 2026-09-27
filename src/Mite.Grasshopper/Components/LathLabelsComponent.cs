@@ -23,6 +23,8 @@ public class LathLabelsComponent : MiteComponent
         pManager.AddTextParameter("Prefix", "P", "ID prefix (default \"L\")", GH_ParamAccess.item, "L");
         pManager.AddNumberParameter("Utilization", "U", "Optional per-lath utilization (from Lath Analysis / Gridshell Analysis) for the report", GH_ParamAccess.list);
         pManager.AddIntegerParameter("Start", "N", "First ID number (default 0; use e.g. 100 for a second family)", GH_ParamAccess.item, 0);
+        RegisterNetInput(pManager, "With a Net (and no Curves) the IDs carry the family — LA000…, LB000…, numbered from Start in each family — and the report gains a family column"); // 4
+        pManager[0].Optional = true;
         pManager[2].Optional = true;
     }
 
@@ -40,7 +42,8 @@ public class LathLabelsComponent : MiteComponent
         string prefix = "L";
         int start = 0;
 
-        if (!DA.GetDataList(0, curves)) return;
+        var netIn = GetNet(DA, 4);
+        if (!ReadCurvesOrNet(DA, 0, netIn, curves, -1, out bool fromNet)) return;
         DA.GetData(1, ref prefix);
         DA.GetDataList(2, utils);
         DA.GetData(3, ref start);
@@ -53,17 +56,19 @@ public class LathLabelsComponent : MiteComponent
         var points = new List<Point3d?>();
         var labels = new List<string>();
         var report = new StringBuilder();
-        report.AppendLine(withUtil ? "id,length,utilization" : "id,length");
+        report.AppendLine((fromNet ? "id,family,length" : "id,length") + (withUtil ? ",utilization" : ""));
 
         double totalLength = 0;
         for (int i = 0; i < curves.Count; i++)
         {
-            string id = $"{prefix}{start + i:D3}";
+            string id = fromNet && netIn != null
+                ? (netIn.IsFamilyA(i) ? $"{prefix}A{start + i:D3}" : $"{prefix}B{start + i - netIn.CountA:D3}")
+                : $"{prefix}{start + i:D3}";
             labels.Add(id);
             if (curves[i] == null)
             {
                 points.Add(null);
-                report.Append(id).AppendLine(",");
+                report.Append(id).AppendLine(fromNet ? ",," : ",");
                 continue;
             }
             double length = curves[i].GetLength();
@@ -71,7 +76,9 @@ public class LathLabelsComponent : MiteComponent
 
             points.Add(curves[i].PointAtNormalizedLength(0.5));
 
-            report.Append(id).Append(',')
+            report.Append(id).Append(',');
+            if (fromNet && netIn != null) report.Append(netIn.IsFamilyA(i) ? "A," : "B,");
+            report
                 .Append(length.ToString("F4", System.Globalization.CultureInfo.InvariantCulture));
             if (withUtil)
                 report.Append(',').Append(utils[i].ToString("F3", System.Globalization.CultureInfo.InvariantCulture));

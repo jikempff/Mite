@@ -166,6 +166,21 @@ notches into **Solid Difference** to cut half-lap joints (egg-crate slots when
 Upright is on); `L` sets the lap fraction (0.5 = half-lap), `Cl` the fit
 clearance.
 
+### One wire: the Mite Net
+
+Every net component also has a `Nt` (Net) output: the surface and both families
+in one value. Plug it into the last input (`Nt`) of Net Joints, Net Topology,
+Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath
+Labels or Net Kinetics and leave their Mesh / Curves inputs empty. Put a
+**Mite Net** (Mite > Gridshells) in between to give the net its lath profile
+once — `W`, `T`, `U`, `O`, `Sh`, `Sc`, and `Ub` to lay family B differently
+(asymptotic A upright, geodesic B flat) — and every downstream component uses
+it. Mite Net also joins two nets (`Nb`: its family A becomes family B, e.g. two
+Geodesic Nets) and sorts the lath ends: `Eb` on the border, `El` on another
+lath (T-junction, orange in the viewport), `Ef` free (red). Anything you wire
+next to a Net overrides that part of it. With a Net, Gridshell Analysis needs
+no Joints or Supports (every contact is coupled, every border end supported).
+
 ## 5. From model to workshop (5 minutes)
 
 - **Lath Segment** — splits laths longer than your stock (`St`), keeping cuts

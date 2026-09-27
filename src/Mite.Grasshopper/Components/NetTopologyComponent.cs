@@ -28,6 +28,9 @@ public class NetTopologyComponent : MiteComponent
         pManager.AddNumberParameter("Tolerance", "X", "Maximum gap accepted as a crossing (0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic: 1/500 of the net size)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("MinLength", "Ml", "Drop members (e.g. free tails) shorter than this (default 0)", GH_ParamAccess.item, 0.0);
+        RegisterNetInput(pManager); // 5
+        pManager[0].Optional = true;
+        pManager[1].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -48,8 +51,9 @@ public class NetTopologyComponent : MiteComponent
         var curvesA = new List<Curve>();
         var curvesB = new List<Curve>();
         double tolerance = 0.0, sampling = 0.0, minLength = 0.0;
-        if (!DA.GetDataList(0, curvesA)) return;
-        if (!DA.GetDataList(1, curvesB)) return;
+        var netIn = GetNet(DA, 5);
+        if (!ReadCurvesOrNet(DA, 0, netIn, curvesA, 0)) return;
+        if (!ReadCurvesOrNet(DA, 1, netIn, curvesB, 1)) return;
         DA.GetData(2, ref tolerance);
         DA.GetData(3, ref sampling);
         DA.GetData(4, ref minLength);
@@ -93,8 +97,11 @@ public class NetTopologyComponent : MiteComponent
         for (int i = 0; i < topo.Crossings.Length; i++)
         {
             var path = BranchPath(DA, i);
-            nodeLaths.Add(topo.Crossings[i].CurveA, path);
-            nodeLaths.Add(curvesA.Count + topo.Crossings[i].CurveB, path);
+            // global lath indices (A first, then B); a contact within one
+            // family indexes that family on both sides
+            var x = topo.Crossings[i];
+            nodeLaths.Add(x.FamilyOfA == 0 ? x.CurveA : curvesA.Count + x.CurveA, path);
+            nodeLaths.Add(x.FamilyOfB == 0 ? x.CurveB : curvesA.Count + x.CurveB, path);
         }
 
         DA.SetDataList(0, nodes);
