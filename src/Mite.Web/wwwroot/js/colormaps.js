@@ -6,18 +6,18 @@ function lerp(a, b, t) { return a + (b - a) * t; }
 function mix(c0, c1, t) { return [lerp(c0[0], c1[0], t), lerp(c0[1], c1[1], t), lerp(c0[2], c1[2], t)]; }
 
 // Stops in 0..1 → rgb 0..1
-const DIVERGING = [ // blue – light – red (colour-blind safe, print safe)
-  [0.00, [0.13, 0.31, 0.58]],
-  [0.25, [0.42, 0.62, 0.84]],
-  [0.50, [0.95, 0.95, 0.93]],
-  [0.75, [0.90, 0.50, 0.40]],
-  [1.00, [0.60, 0.10, 0.14]],
+const DIVERGING = [ // neon blue – white – neon red (kempff/seleme)
+  [0.00, [0.10, 0.12, 0.85]],
+  [0.25, [0.45, 0.52, 1.00]],
+  [0.50, [0.97, 0.97, 0.97]],
+  [0.75, [1.00, 0.45, 0.55]],
+  [1.00, [0.85, 0.05, 0.20]],
 ];
-const SEQUENTIAL = [ // deep teal → sand (light theme friendly)
-  [0.00, [0.05, 0.22, 0.30]],
-  [0.35, [0.06, 0.45, 0.50]],
-  [0.65, [0.45, 0.72, 0.60]],
-  [1.00, [0.97, 0.91, 0.70]],
+const SEQUENTIAL = [ // black → neon blue → neon green → white
+  [0.00, [0.04, 0.04, 0.04]],
+  [0.35, [0.16, 0.24, 1.00]],
+  [0.70, [0.00, 0.85, 0.42]],
+  [1.00, [0.96, 1.00, 0.97]],
 ];
 
 export function sample(stops, t) {
@@ -64,13 +64,14 @@ export function sequential(values, lo = null, hi = null, clipPercentile = 0.97) 
   return { colors: out, min, max, stops: SEQUENTIAL, kind: 'sequential' };
 }
 
-/** Utilization: green below 0.7, amber to 1, red above, grey for NaN */
+/** Utilization in neon: green below 0.7, neon yellow at 1, neon red above, grey for NaN */
+export const UTIL_STOPS = [[0, [0.00, 0.85, 0.42]], [0.54, [0.55, 0.95, 0.10]], [0.769, [0.85, 1.00, 0.00]], [0.77, [1.00, 0.12, 0.31]], [1, [0.75, 0.02, 0.18]]]; // over 0 … 1.3
 export function utilizationColor(u) {
   if (!Number.isFinite(u)) return [0.6, 0.6, 0.6];
-  if (u < 0.7) return mix([0.10, 0.55, 0.35], [0.55, 0.75, 0.20], u / 0.7);
-  if (u < 1.0) return mix([0.55, 0.75, 0.20], [0.95, 0.60, 0.10], (u - 0.7) / 0.3);
-  if (u < 1.3) return mix([0.95, 0.60, 0.10], [0.80, 0.15, 0.15], (u - 1.0) / 0.3);
-  return [0.55, 0.05, 0.10];
+  if (u < 0.7) return mix([0.00, 0.85, 0.42], [0.55, 0.95, 0.10], u / 0.7);
+  if (u < 1.0) return mix([0.55, 0.95, 0.10], [0.85, 1.00, 0.00], (u - 0.7) / 0.3);
+  if (u < 1.3) return mix([1.00, 0.12, 0.31], [0.75, 0.02, 0.18], (u - 1.0) / 0.3);
+  return [0.35, 0.00, 0.08];
 }
 
 export function cssRgb(c) { return `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)})`; }

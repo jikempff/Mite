@@ -65,27 +65,45 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   await page.click('#modes [data-mode=shaded]');
   await page.waitForTimeout(300);
   check(await page.$eval('#gh-mode', (e) => e.classList.contains('hidden')), 'mode strip hides for plain shading');
-  // 5. layouts: the default border web has every end on the border and no
-  //    T-junction; the evenly spaced fill still traces; the legend explains markers
+  // 5. layouts: the default symmetric web has every end on the border or at a
+  //    node and no T-junction; the border web and the evenly spaced fill still trace
   await page.selectOption('#shape', 'catenoid'); await idle(180000);
   await page.click('#nets [data-net=asymptotic]'); await idle(180000);
+  const sym = await page.evaluate(() => ({ layout: window.__mite.layout, web: window.__mite.netData?.web, ends: window.__mite.netData?.endClasses || [], t: window.__mite.netData?.crossings?.tJunctions }));
+  check(sym.layout === 3 && sym.web && sym.web.rotational && sym.web.quads > 50, `symmetric web on the catenoid is rotational (${sym.web?.quads} quads)`);
+  check(sym.ends.every((c) => c === 0) && sym.t === 0, 'symmetric web: no T-junctions, no stray ends');
+  check(sym.web.diagonalError[0] < 1e-3, `rotational web: meridian diagonals are geodesic (${sym.web.diagonalError[0].toExponential(1)})`);
+  await page.click("#layouts [data-layout='1']"); await idle(180000);
   const web = await page.evaluate(() => ({ layout: window.__mite.layout, ends: window.__mite.netData?.endClasses || [], n: (window.__mite.netData?.countA || 0) + (window.__mite.netData?.countB || 0) }));
   check(web.layout === 1 && web.n > 20 && web.ends.every((c) => c === 0), `border web: ${web.n} curves, every end on the border (${web.ends.filter((c) => c !== 0).length} not)`);
   await page.click("#layouts [data-layout='0']"); await idle(180000);
   const fill = await page.evaluate(() => ({ layout: window.__mite.layout, n: (window.__mite.netData?.countA || 0) + (window.__mite.netData?.countB || 0), legend: document.getElementById('end-legend').textContent }));
   check(fill.layout === 0 && fill.n > 20, `evenly spaced fill traces (${fill.n} curves)`);
-  check(/seed/.test(fill.legend), 'marker legend names the seed square');
-  await page.click("#layouts [data-layout='1']"); await idle(180000);
+  check(/seed/.test(fill.legend), 'marker legend names the seed');
+  await page.click("#layouts [data-layout='3']"); await idle(180000);
 
-  // 4. the section choice reaches the kernel: a round bar sweeps as a 24-sided tube
-  await page.evaluate(() => { const S = window.__mite; const objs = S.viewer.curveObjects.filter((c) => c.family === 'A'); S.viewer.onPickCurve(objs[Math.floor(objs.length / 2)]); });
-  check(await idle(120000), 'a picked lath is analysed');
-  await page.check('#solid'); await idle(120000);
-  const rectFaces = await page.evaluate(() => window.__mite.lath?.sweepFaces?.length || 0);
-  await page.selectOption('#section', '1'); await idle(120000);
-  const round = await page.evaluate(() => ({ faces: window.__mite.lath?.sweepFaces?.length || 0, util: window.__mite.lath?.maxUtilization }));
-  check(rectFaces > 0 && round.faces > 4 * rectFaces, `round bar sweeps as a tube (${round.faces} vs ${rectFaces} rectangle faces)`);
-  check(Number.isFinite(round.util) && round.util > 0, `round bar utilization computed (${round.util?.toFixed(2)})`);
+  // 6. one section for every lath; the section choice reaches the kernel
+  await page.check('#solid'); await idle(180000);
+  const rect = await page.evaluate(() => ({ faces: window.__mite.viewer.overlayGroup.children.find((c) => c.userData.tag === 'sweepAll')?.geometry.index.count || 0, util: window.__mite.lathUtil?.length }));
+  await page.selectOption('#section', '1'); await idle(180000);
+  const round = await page.evaluate(() => window.__mite.viewer.overlayGroup.children.find((c) => c.userData.tag === 'sweepAll')?.geometry.index.count || 0);
+  check(rect.faces > 0 && rect.util > 20, `every lath swept and checked (${rect.util} laths)`);
+  check(round > 3 * rect.faces, `round bars sweep as tubes (${round} vs ${rect.faces} indices)`);
+  await page.uncheck('#solid'); await page.selectOption('#section', '0'); await idle(180000);
+
+  // 7. structure: equilibrium and the joint model
+  await page.click('#frame'); await idle(180000);
+  const fr = await page.evaluate(() => window.__mite.frame);
+  check(!fr.error && fr.equilibriumError < 1e-8 && Math.abs(fr.reactionSum - fr.totalLoad) < 1e-6 * fr.totalLoad, `frame in equilibrium (${fr.error || fr.equilibriumError?.toExponential(1)})`);
+  check(fr.joints > 50, `every crossing is a frame node (${fr.joints} joints)`);
+
+  // 8. kinetics on the 3-fold Enneper: a coarse symmetric web moves
+  await page.selectOption('#shape', 'enneper3'); await idle(180000);
+  await page.click('.presets [data-sp="8"]'); await idle(180000);
+  await page.click('#kinrun'); await idle(300000);
+  const kin = await page.evaluate(() => window.__mite.kin);
+  check(kin && !kin.error && kin.states.length >= 5, `kinetics ran (${kin?.error || kin?.states.length + ' states'})`);
+  check(kin && kin.states[kin.states.length - 1].height < 0.95 * kin.states[0].height, `the web unfolds (height ${kin?.states[0].height.toFixed(2)} → ${kin?.states[kin.states.length - 1].height.toFixed(2)})`);
 
   const broken = await page.$$eval('img', (imgs) => imgs.filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.getAttribute('src')));
   check(broken.length === 0, `all icons load (${broken.join(', ') || 'none broken'})`);

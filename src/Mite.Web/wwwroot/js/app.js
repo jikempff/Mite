@@ -2,8 +2,8 @@
 // in a Web Worker) and the three.js viewer.
 
 import { Kernel } from './kernel.js';
-import { Viewer, FAMILY_A, FAMILY_B } from './viewer.js';
-import { diverging, sequential, utilizationColor, legendGradient, cssRgb } from './colormaps.js';
+import { Viewer, FAMILY_A, FAMILY_B, FAMILY_G, NEON } from './viewer.js';
+import { diverging, sequential, utilizationColor, legendGradient, cssRgb, UTIL_STOPS } from './colormaps.js';
 import { Loft } from './loft.js';
 import { readMeshFile } from './loaders.js';
 import { drawLathPlot, drawUnroll } from './plots.js';
@@ -27,7 +27,7 @@ const SHAPES = {
   enneper: { label: 'Enneper patch (H = 0)', params: [['extent', 0.5, 1.6, 1.2, 0.05]],
     note: 'Minimal surface with a self-intersecting far field; keep the extent below ~1.4 for a clean patch.' },
   enneper3: { label: 'Enneper, n-fold (H = 0)', params: [['folds', 2, 5, 3, 1], ['radius', 0.4, 1.2, 0.9, 0.05]],
-    note: 'Higher-order Enneper surfaces (Weierstrass g = wⁿ⁻¹). The centre is a flat point where the asymptotic cross turns by 180° per loop, so with 3 or more folds the two families are one family globally and some laths end on their neighbours as T-junctions.' },
+    note: 'Higher-order Enneper surfaces (Weierstrass g = wⁿ⁻¹). The centre is a flat point: 2n asymptotic rays leave it and the families swap across them. The symmetric web makes it a singular node of valence 2n and repeats one sector n times, exactly.' },
   ruled: { label: 'Ruled patch (bilinear)', params: [['size', 1, 4, 2, 0.1], ['twist', 0.1, 2, 0.8, 0.05], ['skew', 0, 1, 0.3, 0.05]],
     note: 'A skew quad spanned bilinearly: doubly ruled, and the two families of straight iso-lines are exactly its asymptotic curves — every asymptotic lath comes out straight.' },
   schwarzd: { label: 'Schwarz D patch (TPMS)', params: [['extent', 0.5, 2, 1, 0.1], ['cells', 12, 40, 24, 2], ['relax', 0, 60, 30, 5]],
@@ -67,7 +67,7 @@ const MODE_NOTES = {
 
 const NET_NOTES = {
   none: '',
-  asymptotic: 'Both families of asymptotic curves (zero normal curvature): laths bend only about their weak axis and twist — stand them upright. Only where K < 0 and the families cross widely enough (min crossing). Web: seeds exactly one spacing apart along the border (or the seed cross), every curve border to border; their distance elsewhere is what the surface dictates — asymptotic curves are never equidistant except on special surfaces (on a catenoid they separate as cosh z). Fill: the evenly spaced layout keeps the spacing by inserting and stopping curves, at the price of T-junctions.',
+  asymptotic: 'Both families of asymptotic curves (zero normal curvature): laths bend only about their weak axis and twist — stand them upright. Symmetric web (Schling): nodes every spacing along the two asymptotic curves through the seed, every other node the crossing of the curves through them — an asymptotic parameterisation is fixed by exactly that, so the web is a clean quad net with no stubs and no T-junctions, and it keeps the surface\'s symmetry. On a minimal surface the laths cross at 90° (identical joints); on a surface of revolution the meridian diagonals are geodesics (an AAG web). Border / seed-cross webs and the evenly spaced fill are the older layouts.',
   conjugate: 'The two principal curvature line families: an approximate conjugate net, the layout for planar-quad panels. Undefined at umbilics.',
   geodesic: 'One family of straightest geodesics. Web: seeded every spacing along the border (or along the perpendicular geodesic through the seed), each run until it leaves the mesh — neighbours converge where K > 0 and diverge where K < 0 (Jacobi), so the strips are only even where the surface allows. Fill: grown sideways from the seed, each new geodesic starting at the angle that keeps its strip closest to constant width (Jacobi field), stopped where strips close. Flat laths follow geodesics without in-plane bending.',
   geodesicBoth: 'Two geodesic families crossing at the family angle at the seed, each grown with Jacobi start angles.',
@@ -79,11 +79,11 @@ const NET_NOTES = {
 
 const END_CLASS = [
   { name: 'on the border', color: null, what: 'the curve reached the mesh border — no marker' },
-  { name: 'at the K = 0 line', color: [0.26, 0.45, 0.80], what: 'the curve stopped where the asymptotic directions cease to exist (K ≥ 0 or the families cross below the minimum angle): there is no asymptotic curve beyond' },
-  { name: 'on a neighbour (T-junction)', color: [0.96, 0.62, 0.05], what: 'the curve stopped on a neighbouring curve of its own family: the evenly spaced fill does this wherever the spacing closes; a web only where the family converges until two laths would touch' },
-  { name: 'step limit', color: [0.80, 0.15, 0.15], what: 'the curve hit the step budget without reaching a border (closed or very long surface)' },
+  { name: 'at the K = 0 line', color: [0.16, 0.24, 1.00], what: 'the curve stopped where the asymptotic directions cease to exist (K ≥ 0 or the families cross below the minimum angle): there is no asymptotic curve beyond' },
+  { name: 'on a neighbour (T-junction)', color: [0.85, 1.00, 0.00], what: 'the curve stopped on a neighbouring curve of its own family: the evenly spaced fill does this wherever the spacing closes; a web only where the family converges until two laths would touch' },
+  { name: 'step limit', color: [1.00, 0.12, 0.31], what: 'the curve hit the step budget without reaching a border (closed or very long surface)' },
 ];
-const SEED_COLOR = [0.96, 0.62, 0.05];
+const SEED_COLOR = [0.00, 0.85, 0.42];
 
 // ---------------------------------------------------------------------------
 // State
@@ -97,8 +97,8 @@ const S = {
   net: 'none', netData: null, seed: -1, seedPoint: null, seedNormal: [0, 0, 1], dir: [1, 0.35, 0],
   loft: null, file: null,
   lath: null, selected: null, lathUtil: null,
-  frame: null,
-  busy: 0, gen: 0, loading: false, layout: 1,
+  frame: null, aag: null, kin: null, kinTimer: null, drive: 'scissor', picked: [], picking: false,
+  busy: 0, gen: 0, loading: false, layout: 3,
 };
 
 function busy(on, text) {
@@ -112,6 +112,9 @@ async function withBusy(text, fn) {
 }
 const fmt = (x, d = 3) => Number.isFinite(x) ? (+x).toFixed(d) : '–';
 const pct = (v) => (v / 100) * S.size;
+// metres per model unit: the real span (Shape block) over the larger horizontal extent
+function toMetres() { if (!S.stats) return 1; const dx = S.stats.max[0] - S.stats.min[0], dy = S.stats.max[1] - S.stats.min[1]; return (+$('span').value) / Math.max(1e-9, dx, dy); }
+const mmToModel = (mm) => mm / 1000 / toMetres();
 const K = (method, ...args) => S.kernel.call(method, ...args);
 
 // ---------------------------------------------------------------------------
@@ -202,7 +205,8 @@ async function applyShapeInner(gen, light) {
   $('mesh-stats').innerHTML = `<b>${stats.vertices}</b> vertices · <b>${stats.faces}</b> triangles · avg edge <b>${fmt(stats.avgEdge)}</b> · border vertices <b>${stats.boundaryVertices}</b>` +
     (stats.welded ? ` · welded <b>${stats.welded}</b>` : '') + (stats.removedFaces ? ` · removed <b>${stats.removedFaces}</b> faces` : '') + ` · ${stats.ms} ms`;
   $('hud-shape').textContent = `${SHAPES[S.shape].label.split('  ')[0]} · ${stats.vertices} v · size ${fmt(S.size, 2)}`;
-  S.curv = null; S.lath = null; S.selected = null; S.frame = null; S.netData = null; S.lathUtil = null;
+  S.curv = null; S.lath = null; S.selected = null; S.frame = null; S.netData = null; S.lathUtil = null; S.aag = null; S.picked = [];
+  stopKinetics(true); S.viewer.clearOverlay('picked'); S.viewer.clearOverlay('supports'); S.viewer.clearOverlay('sweepAll');
   S.viewer.clearCurves(); S.viewer.clearOverlay('ends'); S.viewer.clearOverlay('seed');
   $('lath-result').classList.add('hidden');
   $('frame-stats').textContent = '';
@@ -297,7 +301,7 @@ async function applyMode() {
   if ($('umb').checked && c) {
     const flat = [];
     for (const i of c.umbilics) flat.push(S.vertices[3 * i], S.vertices[3 * i + 1], S.vertices[3 * i + 2]);
-    v.showPoints('umb', flat, 0xf59e0b, 7);
+    v.showPoints('umb', flat, NEON.yellow, 8);
   } else v.clearOverlay('umb');
   v.setWireframe($('wire').checked);
   updateRecipe();
@@ -324,7 +328,7 @@ async function updateSeedHandle() {
   S.seedNormal = c ? [c.normals[3 * idx], c.normals[3 * idx + 1], c.normals[3 * idx + 2]] : [0, 0, 1];
   $('seed-label').textContent = S.seed >= 0 ? `vertex ${S.seed}` : `auto (vertex ${idx})`;
   if (directionRelevant()) v.setDirectionHandle(p, S.seedNormal, S.dir, 0.12 * S.size);
-  else v.showPoints('seed', p, 0xf59e0b, 9);
+  else v.showPoints('seed', p, NEON.green, 11);
 }
 
 // ---------------------------------------------------------------------------
@@ -343,15 +347,18 @@ function netOptions() {
     seed: S.seed, direction: S.dir, edgeLength: pct(+$('edge').value), count: +$('count').value,
     angleDeg: +$('famangle').value, levels: +$('levels').value, field: $('isofield').value,
     minAngle: +$('minangle').value, fromBorder: $('fromborder').checked, borderAngle: +$('borderangle').value, jacobi: $('jacobi').checked,
-    layout: S.layout,
+    layout: S.net === 'asymptotic' ? S.layout : (S.layout === 3 ? 1 : S.layout),
+    symmetry: +$('symmetry').value,
   };
 }
 
 async function traceNet() {
   const v = S.viewer;
-  S.lath = null; S.selected = null; S.frame = null; S.lathUtil = null;
+  S.lath = null; S.selected = null; S.frame = null; S.lathUtil = null; S.aag = null;
+  stopKinetics(true); S.viewer.setMeshOpacity(1); showUtilLegend(false);
   $('lath-result').classList.add('hidden');
-  $('frame-stats').textContent = '';
+  $('frame-stats').textContent = ''; $('laths-stats').textContent = ''; $('aag-stats').classList.add('hidden');
+  v.clearOverlay('supports'); v.clearOverlay('deformed'); v.clearOverlay('sweepAll');
   $('net-note').textContent = NET_NOTES[S.net];
   showComponent('gh-net', GH_NET[S.net]);
   $('famB-row').classList.toggle('hidden', ['geodesic', 'streamMax', 'streamMin', 'isocurves'].includes(S.net));
@@ -370,23 +377,86 @@ async function traceNet() {
     catch (e) { if (gen !== S.gen) return; $('net-warn').textContent = String(e.message || e); $('net-warn').classList.remove('hidden'); v.clearCurves(); return; }
     if (gen !== S.gen) return;
     S.netData = d;
-    v.setCurves(d.a, d.b);
-    v.setFamilyVisible('A', $('famA').checked); v.setFamilyVisible('B', $('famB').checked);
-    if ($('crossings').checked && d.crossings) v.showPoints('crossings', d.crossings.points, 0x475569, 3.5); else v.clearOverlay('crossings');
+    const showG = !!d.web && $('diagonals').checked && d.g?.length > 0;
+    await K('useDiagonals', showG);
+    drawNetCurves();
+    if ($('crossings').checked && d.crossings) v.showPoints('crossings', d.crossings.points, v.ink(), 3.5); else v.clearOverlay('crossings');
     showEndMarkers();
-    const e = d.ends;
     const closed = S.stats.boundaryVertices === 0;
-    let s = `A <b>${d.countA}</b>${d.countB ? ` · B <b>${d.countB}</b>` : ''} curves · length <b>${fmt(d.minLength, 2)} … ${fmt(d.maxLength, 2)}</b>` +
-      (d.resolvedSpacing ? ` · spacing <b>${fmt(d.resolvedSpacing, 3)}</b>` : '') + ` · ${d.ms} ms`;
+    let s = `A <b>${d.countA}</b>${d.countB ? ` · B <b>${d.countB}</b>` : ''} laths · length <b>${fmt(d.minLength, 2)} … ${fmt(d.maxLength, 2)}</b>` +
+      (d.resolvedSpacing ? ` · spacing <b>${fmt(d.resolvedSpacing, 3)}</b> (${fmt(d.resolvedSpacing * toMetres(), 2)} m)` : '') + ` · ${d.ms} ms`;
     if (d.crossings) s += `\ncrossings <b>${d.crossings.count}</b> · angles <b>${fmt(d.crossings.minAngle, 1)}° … ${fmt(d.crossings.maxAngle, 1)}°</b> · T-junctions <b>${d.crossings.tJunctions}</b>`;
+    if (d.web) {
+      const w = d.web;
+      const sym = w.rotational ? 'surface of revolution (rotational AAG web)' : w.symmetry > 1 ? `${w.symmetry}-fold — one sector traced, the rest rotated (nodes repeat within ${fmt(w.symmetryError * toMetres() * 1000, 1)} mm)` : 'none used';
+      s += `\nweb: <b>${w.nodes}</b> nodes · <b>${w.quads}</b> quads · ${w.singular ? `singular seed with <b>${w.rays}</b> rays` : 'regular seed'} · symmetry: <b>${sym}</b>`;
+      s += `\ndiagonals: geodesic error ${fmt(w.diagonalError[0], 3)} (G) / ${fmt(w.diagonalError[1], 3)} — |kg|·spacing, 0 = geodesic`;
+    }
     $('net-stats').innerHTML = s;
-    $('spacing-count').textContent = `${d.countA + d.countB} curves`;
-    $('net-warn').textContent = d.warnings.join(' ');
-    $('net-warn').classList.toggle('hidden', d.warnings.length === 0);
-    $('hud-net').textContent = `${S.net} · ${d.countA + d.countB} curves · ${d.ms} ms`;
+    $('spacing-count').textContent = `${d.countA + d.countB} laths`;
+    const warns = [...d.warnings, ...(d.web?.notes || [])];
+    $('net-warn').textContent = warns.join(' ');
+    $('net-warn').classList.toggle('hidden', warns.length === 0);
+    $('hud-net').textContent = `${S.net}${d.web ? ' web' : ''} · ${d.countA + d.countB} laths · ${d.ms} ms`;
     drawQuality(d, closed);
     await updateSeedHandle();
-    if ($('colorutil').checked) await colourByUtilization();
+    showNetParams();
+    if ($('colorutil').checked || $('solid').checked) await runLathAll();
+    updateRecipe();
+  });
+}
+
+function traceNetStatsOnly() {
+  const d = S.netData; if (!d) return;
+  if (S.lath && S.selected) analyseSelected();
+}
+
+function currentFamilies() {
+  const d = S.netData; if (!d) return { a: [], b: [], g: [] };
+  if (S.aag) return { a: S.aag.a, b: S.aag.b, g: S.aag.g };
+  const showG = !!d.web && $('diagonals').checked;
+  return { a: d.a, b: d.b, g: showG ? (d.g || []) : [] };
+}
+
+function drawNetCurves() {
+  const v = S.viewer, f = currentFamilies();
+  v.setCurves(f.a, f.b, { familyG: f.g });
+  v.setFamilyVisible('A', $('famA').checked); v.setFamilyVisible('B', $('famB').checked); v.setFamilyVisible('G', $('famG').checked);
+  $('famG-row').classList.toggle('hidden', !f.g.length);
+  if (S.lathUtil) colourLaths(S.lathUtil);
+}
+
+function showUtilLegend(on, title = 'lath utilization · 1 = limit') {
+  $('ulegend').classList.toggle('hidden', !on);
+  if (on) { $('ulegend-bar').style.background = legendGradient(UTIL_STOPS); $('ulegend-title').textContent = title; }
+}
+
+function colourLaths(utils, title) {
+  showUtilLegend(true, title);
+  const f = currentFamilies();
+  const na = f.a.length, nb = f.b.length;
+  S.viewer.colorCurves(utils.slice(0, na).map(utilizationColor), utils.slice(na, na + nb).map(utilizationColor), utils.slice(na + nb).map(utilizationColor));
+  if (S.selected) S.viewer.selectCurve(S.selected);
+}
+
+async function runAag() {
+  if (!S.netData?.web) { $('aag-stats').textContent = 'Trace a symmetric asymptotic web first.'; $('aag-stats').classList.remove('hidden'); return; }
+  const gen = S.gen;
+  await withBusy('optimising the AAG web…', async () => {
+    const r = await K('aag', { iterations: 16, proximity: 0.3, family: 0 });
+    if (gen !== S.gen) return;
+    const el = $('aag-stats'); el.classList.remove('hidden');
+    if (r.error) { el.innerHTML = `<span class="bad">${r.error}</span>`; return; }
+    S.aag = r; $('diagonals').checked = true;
+    S.lathUtil = null;
+    drawNetCurves();
+    S.viewer.setMeshOpacity(0.45); // the optimised nodes sit a few mm off the reference surface
+    const good = r.geodesicError < 1 && r.starError < 1;
+    el.innerHTML = `AAG web · ${r.iterations} iterations · ${r.ms} ms\n` +
+      `geodesic diagonals <b>${fmt(r.initialGeodesicError, 1)}° → ${fmt(r.geodesicError, 2)}°</b> · asymptotic stars <b>${fmt(r.initialStarError, 2)}° → ${fmt(r.starError, 2)}°</b>\n` +
+      `surface moved <b>${fmt(r.meanDeviation * toMetres() * 1000, 1)} mm</b> mean · <b>${fmt(r.maxDeviation * toMetres() * 1000, 1)} mm</b> max` +
+      (good ? ' <span class="ok">✓ every slat straight and flat</span>' : ' <span class="bad">— this surface carries no AAG web close to it; try a surface of revolution or a coarser spacing</span>');
+    if ($('colorutil').checked || $('solid').checked) await runLathAll();
     updateRecipe();
   });
 }
@@ -402,8 +472,8 @@ function renderEndLegend(d) {
     for (const c of d.endClasses) counts[c] = (counts[c] || 0) + 1;
     for (let k = 1; k < END_CLASS.length; k++) if (counts[k]) items.push(`<div><i style="background:${cssRgb(END_CLASS[k].color)}"></i><b>${counts[k]} end${counts[k] > 1 ? 's' : ''} ${END_CLASS[k].name}</b> — ${END_CLASS[k].what}</div>`);
   }
-  if (seedRelevant()) items.push(`<div><i class="knob" style="background:${cssRgb(SEED_COLOR)}"></i><b>seed</b> — the orange square is where the net starts (shift-click the surface to move it)${directionRelevant() ? '; the knob on the ring sets the first direction (drag it)' : ''}</div>`);
-  if ($('crossings').checked && d?.crossings) items.push('<div><i style="background:#475569"></i><b>crossings</b> — where the two families meet (joints)</div>');
+  if (seedRelevant()) items.push(`<div><i class="knob" style="background:${cssRgb(SEED_COLOR)}"></i><b>seed</b> — the green dot is where the net starts (shift-click the surface to move it)${directionRelevant() ? '; the knob on the ring sets the first direction (drag it)' : ''}</div>`);
+  if ($('crossings').checked && d?.crossings) items.push('<div><i style="background:var(--ink)"></i><b>crossings</b> — where the two families meet (joints)</div>');
   el.innerHTML = items.join('');
   el.classList.toggle('hidden', items.length === 0);
 }
@@ -458,20 +528,28 @@ function showNetParams() {
   document.querySelectorAll('#net-params [data-for]').forEach((el) => {
     el.classList.toggle('hidden', !el.dataset.for.split(' ').includes(S.net));
   });
+  // the symmetric web is an asymptotic layout
+  document.querySelectorAll('#layouts [data-only]').forEach((b) => b.classList.toggle('hidden', !b.dataset.only.split(' ').includes(S.net)));
+  const effLayout = S.net === 'asymptotic' ? S.layout : (S.layout === 3 ? 1 : S.layout);
+  document.querySelectorAll('#layouts button').forEach((b) => b.classList.toggle('on', +b.dataset.layout === effLayout));
+  const web = S.net === 'asymptotic' && S.layout === 3;
+  $('sym-row').classList.toggle('hidden', !web);
+  $('aag-row').classList.toggle('hidden', !web);
   const geo = ['geodesic', 'geodesicBoth'].includes(S.net);
-  $('borderangle-row').classList.toggle('hidden', !(geo && ($('fromborder').checked || S.layout === 1)));
+  $('borderangle-row').classList.toggle('hidden', !(geo && ($('fromborder').checked || effLayout === 1)));
   // the seed row only when a seed is used; "from the border" and Jacobi angles belong to the fill
   const seedRow = $('seed-label')?.closest('.row'); if (seedRow) seedRow.classList.toggle('hidden', !seedRelevant());
-  $('fromborder').closest('.chk').classList.toggle('dim', S.layout !== 0);
-  $('jacobi').closest('.chk').classList.toggle('dim', S.layout !== 0);
+  $('fromborder').closest('.chk').classList.toggle('dim', effLayout !== 0);
+  $('jacobi').closest('.chk').classList.toggle('dim', effLayout !== 0);
+  $('continuous-row').classList.toggle('dim', effLayout !== 0);
 }
 
 // ---------------------------------------------------------------------------
-// Lath
+// Laths: one section for every curve
 // ---------------------------------------------------------------------------
 
 function lathOpts() {
-  return { width: pct(+$('width').value), thickness: pct(+$('thick').value), upright: $('upright').checked, maxStrain: +$('strain').value / 100, section: +($('section')?.value ?? 0) };
+  return { width: mmToModel(+$('width').value), thickness: mmToModel(+$('thick').value), upright: $('upright').checked, maxStrain: +$('strain').value / 100, section: +($('section')?.value ?? 0) };
 }
 
 async function analyseSelected() {
@@ -479,57 +557,95 @@ async function analyseSelected() {
   if (!sel) return;
   const o = lathOpts();
   const gen = S.gen;
-  const L = await K('lath', sel.points.flat(), o.width, o.thickness, o.upright, o.maxStrain, $('solid').checked, o.section);
+  const upright = sel.family === 'G' ? false : o.upright;
+  const L = await K('lath', sel.points.flat(), o.width, o.thickness, upright, o.maxStrain, false, o.section);
   if (gen !== S.gen || S.selected !== sel) return;
   S.lath = L;
   $('lath-result').classList.remove('hidden');
   const mk = (arr) => { let m = 0; for (const x of arr) if (Number.isFinite(x)) m = Math.max(m, Math.abs(x)); return m; };
-  $('lath-stats').innerHTML = `family ${sel.family} #${sel.index} · length <b>${fmt(L.length)}</b> · flat <b>${fmt(L.flatLength)}</b> · bow <b>${fmt(L.bow)}</b>\n` +
-    `max |kn| <b>${fmt(mk(L.kn), 2)}</b> · max |kg| <b>${fmt(mk(L.kg), 2)}</b> · max |tg| <b>${fmt(mk(L.tg), 2)}</b> · peak utilization <b class="${L.buildable ? 'ok' : 'bad'}">${fmt(L.maxUtilization, 2)} ${L.buildable ? '✓ buildable' : '✗ over the strain limit'}</b>`;
+  const m = toMetres();
+  $('lath-stats').innerHTML = `family ${sel.family} #${sel.index} (${upright ? 'upright' : 'flat'}) · length <b>${fmt(L.length * m, 2)} m</b> · flat <b>${fmt(L.flatLength * m, 2)} m</b> · bow <b>${fmt(L.bow * m * 1000, 0)} mm</b>\n` +
+    `max |kn| <b>${fmt(mk(L.kn) / m, 3)}</b> · max |kg| <b>${fmt(mk(L.kg) / m, 3)}</b> · max |tg| <b>${fmt(mk(L.tg) / m, 3)}</b> 1/m · peak utilization <b class="${L.buildable ? 'ok' : 'bad'}">${fmt(L.maxUtilization, 2)} ${L.buildable ? '✓ buildable' : '✗ over the strain limit'}</b>`;
   drawLathPlot($('plot'), L);
   drawUnroll($('unroll'), L);
-  if ($('solid').checked && L.sweepVertices.length) S.viewer.showSolid('sweep', L.sweepVertices, L.sweepFaces, 0xf59e0b); else S.viewer.clearOverlay('sweep');
   updateRecipe();
 }
 
-async function colourByUtilization() {
+async function runLathAll() {
   if (!S.netData) return;
   const o = lathOpts();
-  const gen = S.gen, data = S.netData;
-  const utils = [];
-  await withBusy('checking every lath…', async () => {
-    for (const pts of [...data.a, ...data.b]) {
-      const r = await K('lath', pts.flat(), o.width, o.thickness, o.upright, o.maxStrain, false, o.section);
-      if (gen !== S.gen || S.netData !== data) return;
-      utils.push(r.maxUtilization);
-    }
+  const gen = S.gen, data = S.netData, aag = S.aag;
+  const sweep = $('solid').checked;
+  let r;
+  await withBusy(sweep ? 'sweeping every lath…' : 'checking every lath…', async () => {
+    r = await K('lathAll', o.width, o.thickness, o.upright, o.maxStrain, o.section, sweep);
   });
-  if (gen !== S.gen || S.netData !== data) return;
-  S.lathUtil = utils;
-  const na = data.a.length;
-  S.viewer.colorCurves(utils.slice(0, na).map(utilizationColor), utils.slice(na).map(utilizationColor));
-  if (S.selected) S.viewer.selectCurve(S.selected);
+  if (!r || gen !== S.gen || S.netData !== data || S.aag !== aag) return;
+  S.lathUtil = r.utilization;
+  if ($('colorutil').checked) colourLaths(r.utilization, 'lath strain utilization · 1 = limit'); else { S.viewer.colorCurves(null, null, null); showUtilLegend(false); }
+  if (sweep && r.sweepVertices.length) S.viewer.showSolid('sweepAll', r.sweepVertices, r.sweepFaces, S.viewer.dark ? 0xe6e6e6 : 0x1a1a1a); else S.viewer.clearOverlay('sweepAll');
+  const n = r.utilization.length, m = toMetres();
+  $('laths-stats').innerHTML = `<b>${n}</b> laths · total <b>${fmt(r.totalLength * m, 1)} m</b> of ${$('width').value} × ${$('thick').value} mm · buildable <b class="${r.buildable === n ? 'ok' : 'bad'}">${r.buildable} / ${n}</b> · peak utilization <b>${fmt(r.maxUtilization, 2)}</b> · ${r.ms} ms`;
   drawQuality(data, S.stats.boundaryVertices === 0);
 }
 
 // ---------------------------------------------------------------------------
-// Frame
+// Structure
 // ---------------------------------------------------------------------------
+
+function supportCandidates() {
+  // lath ends and crossings of the current net
+  const f = currentFamilies(), pts = [];
+  for (const l of [...f.a, ...f.b, ...f.g]) { if (l.length) { pts.push(l[0], l[l.length - 1]); } }
+  const x = S.netData?.crossings?.points; if (x) for (let i = 0; i < x.length; i += 3) pts.push([x[i], x[i + 1], x[i + 2]]);
+  const w = S.netData?.web?.nodePoints; if (w) for (let i = 0; i < w.length; i += 3) pts.push([w[i], w[i + 1], w[i + 2]]);
+  return pts;
+}
+
+function togglePicked(p) {
+  const cands = supportCandidates();
+  let best = null, bd = Infinity;
+  for (const c of cands) { const d = Math.hypot(c[0] - p[0], c[1] - p[1], c[2] - p[2]); if (d < bd) { bd = d; best = c; } }
+  if (!best || bd > 0.06 * S.size) return;
+  const i = S.picked.findIndex((q) => Math.hypot(q[0] - best[0], q[1] - best[1], q[2] - best[2]) < 1e-9);
+  if (i >= 0) S.picked.splice(i, 1); else S.picked.push(best);
+  showPicked();
+}
+
+function showPicked() {
+  $('pick-count').textContent = S.picked.length ? `${S.picked.length} picked` : '';
+  if (S.picked.length) S.viewer.showPoints('picked', S.picked.flat(), NEON.green, 12); else S.viewer.clearOverlay('picked');
+}
+
+function frameOptions() {
+  const o = lathOpts();
+  const jsel = $('joints').value;
+  return {
+    width: o.width, thickness: o.thickness, shape: o.section, toMetres: toMetres(),
+    lineLoad: +$('load').value * 1000, areaLoad: +$('area').value * 1000, density: +$('material').value,
+    supports: $('supports').value, lowestBand: +$('band').value / 100, picked: S.picked.flat(),
+    supportType: +$('suptype').value, jointStiffness: jsel === 'k' ? +$('jk').value * 1000 : +jsel,
+  };
+}
 
 async function runFrame() {
   if (!S.netData) { $('frame-stats').textContent = 'Trace a net first.'; return; }
   await withBusy('solving frame…', async () => {
-    const o = lathOpts();
-    const metres = +$('scale').value / S.size;
+    const opts = frameOptions();
     const gen = S.gen;
-    const r = await K('frame', o.width, o.thickness, o.upright, +$('load').value * 1000, metres, 0, o.section);
+    const r = await K('frame', opts);
     if (gen !== S.gen) return;
     S.frame = r;
-    if (r.error) { $('frame-stats').innerHTML = `<span class="bad">${r.error}</span>`; return; }
-    $('frame-stats').innerHTML = `nodes <b>${r.nodes}</b> · elements <b>${r.elements}</b> · supports <b>${r.supports}</b> · ${r.ms} ms\n` +
-      `max deflection <b>${(r.maxDisplacement * 1000).toFixed(1)} mm</b> · peak utilization <b class="${r.maxUtilization <= 1 ? 'ok' : 'bad'}">${fmt(r.maxUtilization, 2)}</b>`;
-    const na = S.netData.countA;
-    S.viewer.colorCurves(r.lathUtilization.slice(0, na).map(utilizationColor), r.lathUtilization.slice(na).map(utilizationColor));
+    if (r.error) { $('frame-stats').innerHTML = `<span class="bad">${r.error}</span>`; S.viewer.clearOverlay('supports'); S.viewer.clearOverlay('deformed'); return; }
+    const jointTxt = opts.jointStiffness < 0 ? 'rigid' : opts.jointStiffness === 0 ? 'hinged' : `k = ${fmt(opts.jointStiffness / 1000, 1)} kN·m/rad`;
+    $('frame-stats').innerHTML = `nodes <b>${r.nodes}</b> · joints <b>${r.joints}</b> (${jointTxt}) · elements <b>${r.elements}</b> · supports <b>${r.supports}</b> (${opts.supportType ? 'pinned' : 'fixed'}) · ${r.ms} ms\n` +
+      `load <b>${fmt(r.totalLoad / 1000, 2)} kN</b> = reactions <b>${fmt(r.reactionSum / 1000, 2)} kN</b> (equilibrium ${r.equilibriumError.toExponential(0)})\n` +
+      `max deflection <b>${(r.maxDisplacement * 1000).toFixed(1)} mm</b> · peak utilization <b class="${r.maxUtilization <= 1 ? 'ok' : 'bad'}">${fmt(r.maxUtilization, 2)}</b> · max torsion <b>${fmt(r.maxTorsion, 1)} N·m</b>` +
+      (r.floatingLaths ? `\n<span class="bad">${r.floatingLaths} lath${r.floatingLaths > 1 ? 's' : ''} reach no support through the net and were left out</span>` : '');
+    S.viewer.showPoints('supports', r.supportPoints, S.viewer.ink(), 10);
+    colourLaths(r.lathUtilization, 'frame stress utilization · 1 = allowable');
+    // deformed at a readable scale: largest displacement drawn as 5 % of the size
+    if (r.maxDisplacement > 0) { const k = 0.05 * S.size / (r.maxDisplacement / toMetres()); $('defscale').value = k >= 10 ? Math.round(k) : +k.toPrecision(2); }
     showDeformed();
     updateRecipe();
   });
@@ -539,28 +655,72 @@ function showDeformed() {
   const v = S.viewer;
   if (!S.frame || S.frame.error || !$('deformed').checked) { v.clearOverlay('deformed'); return; }
   const k = +$('defscale').value || 1;
-  const laths = [...S.netData.a, ...S.netData.b];
-  const curves = S.frame.deformed.map((disp, c) => {
-    const pts = resample(laths[c], disp.length);
-    return pts.map((p, i) => [p[0] + k * disp[i][0], p[1] + k * disp[i][1], p[2] + k * disp[i][2]]);
-  });
-  v.showPolylines('deformed', curves, 0x64748b, 1.4, true);
+  const curves = S.frame.deformed.map((pts) => pts.map((q) => [q[0] + k * q[3], q[1] + k * q[4], q[2] + k * q[5]]));
+  v.showPolylines('deformed', curves, v.ink(), 1.1, false);
 }
 
-function resample(pts, n) {
-  const arc = [0];
-  for (let i = 1; i < pts.length; i++) arc.push(arc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]));
-  const L = arc[arc.length - 1];
-  const out = [];
-  let j = 0;
-  for (let k = 0; k < n; k++) {
-    const t = (L * k) / Math.max(1, n - 1);
-    while (j + 1 < arc.length - 1 && arc[j + 1] < t) j++;
-    const seg = Math.max(1e-12, arc[j + 1] - arc[j]);
-    const u = Math.min(1, Math.max(0, (t - arc[j]) / seg));
-    out.push([0, 1, 2].map((d) => pts[j][d] + (pts[j + 1][d] - pts[j][d]) * u));
+// ---------------------------------------------------------------------------
+// Kinetics
+// ---------------------------------------------------------------------------
+
+function stopKinetics(clear = false) {
+  if (S.kinTimer) { clearInterval(S.kinTimer); S.kinTimer = null; $('kplay').textContent = 'play'; }
+  if (clear && S.kin) { S.kin = null; $('kin-result').classList.add('hidden'); S.viewer.setMeshOpacity(1); }
+}
+
+async function runKinetics() {
+  if (!S.netData || S.net !== 'asymptotic') { $('kin-note').textContent = 'Kinetics needs an asymptotic net (two families): pick Asymptotic in the Net block.'; return; }
+  stopKinetics();
+  const o = lathOpts();
+  const opts = { drive: S.drive, amplitude: +$('kamp').value, stiffness: +$('kstiff').value, steps: +$('ksteps').value, width: o.width, thickness: o.thickness, maxStrain: o.maxStrain, toMetres: toMetres() };
+  const gen = S.gen;
+  await withBusy('moving the mechanism…', async () => {
+    const r = await K('kinetics', opts);
+    if (gen !== S.gen) return;
+    if (r.error) { $('kin-note').innerHTML = `<span class="bad">${r.error}</span>`; return; }
+    S.kin = r;
+    $('kin-result').classList.remove('hidden');
+    $('kfold').max = r.states.length - 1; $('kfold').value = r.states.length - 1;
+    showKinState(r.states.length - 1);
+    drawKinPlot();
+  });
+}
+
+function showKinState(k) {
+  const r = S.kin; if (!r) return;
+  const st = r.states[Math.max(0, Math.min(r.states.length - 1, k))];
+  S.viewer.setMeshOpacity(k === 0 ? 1 : 0.18);
+  S.viewer.setCurves(st.a, st.b);
+  if ($('colorutil').checked && S.kin.states.some((x) => x.utilization > 0)) {} // per-state colouring is per net only
+  $('kfold').nextElementSibling.value = st.fold.toFixed(2);
+  const m = toMetres();
+  $('kin-stats').innerHTML = `${r.nodes} nodes · ${r.joints} joints · ${r.laths} laths · ${r.drivers} driven · ${r.ms} ms\n` +
+    `fold <b>${st.fold.toFixed(2)}</b> · height <b>${fmt(st.height * m, 2)} m</b> · span <b>${fmt(st.span * m, 2)} m</b> · crossing <b>${fmt(st.minAngle, 0)}° … ${fmt(st.maxAngle, 0)}°</b>\n` +
+    `joint drift <b>${st.drift.toExponential(1)}</b> · off asymptotic <b>${fmt(st.asymptotic, 2)}°</b> · driver miss <b>${fmt(st.miss * m * 1000, 0)} mm</b>` +
+    (st.utilization > 0 ? ` · strain utilization <b class="${st.utilization <= 1 ? 'ok' : 'bad'}">${fmt(st.utilization, 2)}</b>` : '') + (r.natural === k ? ' · <b>natural state</b> (least energy)' : '') + (st.converged ? '' : ' · <span class="bad">not converged</span>');
+}
+
+function drawKinPlot() {
+  const r = S.kin, c = $('kin-plot'); if (!r) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const n = r.states.length, X = (i) => 8 + (i / Math.max(1, n - 1)) * (w - 16);
+  const series = [
+    [r.states.map((s) => s.height), css('--ink')],
+    [r.states.map((s) => s.minAngle), css('--famA')],
+    [r.states.map((s) => s.utilization), css('--famB')],
+  ];
+  for (const [vals, col] of series) {
+    const lo = Math.min(...vals), hi = Math.max(...vals), span = Math.max(1e-12, hi - lo);
+    ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.beginPath();
+    vals.forEach((v, i) => { const y = h - 8 - ((v - lo) / span) * (h - 16); if (i) ctx.lineTo(X(i), y); else ctx.moveTo(X(i), y); });
+    ctx.stroke();
   }
-  return out;
+  const k = +$('kfold').value;
+  ctx.strokeStyle = css('--muted'); ctx.setLineDash([3, 2]); ctx.beginPath(); ctx.moveTo(X(k), 0); ctx.lineTo(X(k), h); ctx.stroke(); ctx.setLineDash([]);
 }
 
 // ---------------------------------------------------------------------------
@@ -579,20 +739,24 @@ function updateRecipe() {
     let p = `${comp}: `;
     if (S.net === 'chebyshev') p += `L = ${fmt(o.edgeLength)}, Count = ${o.count}, Angle = ${o.angleDeg}°`;
     else if (S.net === 'isocurves') p += `field ${o.field}, ${o.levels} levels`;
+    else if (o.layout === 3) p = `Asymptotic Web: Spacing = ${fmt(o.spacing)}, Symmetry = ${o.symmetry} (−1 detect), Seed = ${S.seed >= 0 ? S.seed : 'auto'}` + (S.aag ? ' → AAG Web (Iterations 16, Proximity 0.3)' : $('diagonals').checked ? ' → Diagonals (G)' : '');
     else p += `AutoSpace = True, Spacing = ${fmt(o.spacing)}, Layout = ${o.layout} (${["evenly spaced fill", "web from the border", "web from the seed cross"][o.layout]}), Continuous = ${o.continuous}, Step = 0 (auto)`;
-    if (S.net === 'asymptotic') p += `, MinAngle = ${o.minAngle}`;
+    if (S.net === 'asymptotic' && o.layout !== 3) p += `, MinAngle = ${o.minAngle}`;
     if (S.seed >= 0) p += `, Seed = ${S.seed}`;
     if (directionRelevant()) p += `, Direction = (${o.direction.map((x) => x.toFixed(2)).join(', ')})`;
     if ((S.net === 'geodesic' || S.net === 'geodesicBoth') && o.fromBorder) p += `, FromBorder = True, BorderAngle = ${o.borderAngle}`;
     lines.push(p);
   }
-  if (S.lath) {
+  if (S.lathUtil || S.lath) {
     const o = lathOpts();
-    lines.push(`Lath Analysis: Width = ${fmt(o.width)}, Thickness = ${fmt(o.thickness)}, Upright = ${o.upright}, MaxStrain = ${o.maxStrain}`);
-    lines.push(`Lath Sweep: Width = ${fmt(o.width)}, Thickness = ${fmt(o.thickness)}, Upright = ${o.upright}, Shape = ${o.section} (0 rectangle, 1 round bar)`);
+    lines.push(`every lath (model units, span ${$('span').value} m): Lath Analysis / Lath Sweep: Width = ${fmt(o.width, 4)} (${$('width').value} mm), Thickness = ${fmt(o.thickness, 4)} (${$('thick').value} mm), Upright = ${o.upright} (G flat), MaxStrain = ${o.maxStrain}, Shape = ${o.section}`);
     lines.push('Lath Unroll: same Width / Upright → Patterns');
   }
-  if (S.frame && !S.frame.error) lines.push(`Gridshell Analysis: Supports = border ends, Load = (0,0,-${$('load').value} kN/m), model ${$('scale').value} m across`);
+  if (S.frame && !S.frame.error) {
+    const f = frameOptions();
+    lines.push(`Gridshell Analysis: Supports = ${f.supports === 'border' ? 'lath ends on the border' : f.supports === 'lowest' ? `lath ends in the lowest ${$('band').value} %` : `${S.picked.length} picked points`}, SupportType = ${f.supportType}, JointStiffness = ${f.jointStiffness < 0 ? -1 : f.jointStiffness} N·m/rad, Density = ${f.density}, AreaLoad = ${f.areaLoad} N/m², Load = (0,0,−${f.lineLoad}) N/m`);
+  }
+  if (S.kin) lines.push(`Net Kinetics: drive ${S.drive}, amplitude ${$('kamp').value}, Stiffness = ${$('kstiff').value}, Steps = ${$('ksteps').value}`);
   $('recipe').textContent = lines.join('\n');
 }
 
@@ -614,6 +778,8 @@ async function main() {
     S.viewer?.setTheme(!d);
     if (S.lath) { drawLathPlot($('plot'), S.lath); drawUnroll($('unroll'), S.lath); }
     if (S.netData) drawQuality(S.netData, S.stats.boundaryVertices === 0);
+    if (S.kin) drawKinPlot();
+    if (S.frame && !S.frame.error) { S.viewer.showPoints('supports', S.frame.supportPoints, S.viewer.ink(), 10); showDeformed(); }
   });
 
   S.viewer = new Viewer($('gl'));
@@ -634,6 +800,7 @@ async function main() {
 
   // viewer interactions
   S.viewer.onPickCurve = (o) => {
+    if (S.picking) return;
     S.selected = o;
     S.viewer.selectCurve(o);
     if (o) analyseSelected(); else { $('lath-result').classList.add('hidden'); S.viewer.clearOverlay('sweep'); }
@@ -641,10 +808,12 @@ async function main() {
   S.viewer.onHover = (o) => {
     if (!o) { $('hud-hover').textContent = ''; return; }
     const pts = o.points; let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]);
-    const u = S.lathUtil?.[(o.family === 'A' ? 0 : S.netData.a.length) + o.index];
+    const f = currentFamilies();
+    const u = S.lathUtil?.[(o.family === 'A' ? 0 : o.family === 'B' ? f.a.length : f.a.length + f.b.length) + o.index];
     $('hud-hover').textContent = `family ${o.family} #${o.index} · length ${fmt(L, 3)}` + (u != null ? ` · utilization ${fmt(u, 2)}` : '') + ' · click for the lath';
   };
   S.viewer.onPickVertex = async (p, shift) => {
+    if (S.picking && !shift) { togglePicked(p); return; }
     if (!shift) return;
     S.seed = await K('nearestVertex', p[0], p[1], p[2]);
     await updateSeedHandle();
@@ -679,11 +848,9 @@ async function main() {
     const b = e.target.closest('button'); if (!b) return;
     $('layouts').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
     S.layout = +b.dataset.layout;
-    $('continuous-row').classList.toggle('dim', S.layout !== 0);
     showNetParams();
     if (S.net !== 'none') traceNet();
   });
-  $('continuous-row').classList.add('dim');
   document.querySelectorAll('#net-params input[type=range]').forEach((inp) => {
     inp.addEventListener('input', () => { if (inp.nextElementSibling?.tagName === 'OUTPUT' && !inp.nextElementSibling.id) inp.nextElementSibling.value = inp.value; updateSpacingReadout(); });
     inp.addEventListener('change', () => { if (S.net !== 'none') traceNet(); });
@@ -693,26 +860,71 @@ async function main() {
   for (const id of ['continuous', 'jacobi']) $(id).addEventListener('change', () => { if (S.net !== 'none') traceNet(); });
   $('fromborder').addEventListener('change', () => { showNetParams(); if (S.net !== 'none') traceNet(); });
   $('crossings').addEventListener('change', () => {
-    if (S.netData?.crossings && $('crossings').checked) S.viewer.showPoints('crossings', S.netData.crossings.points, 0x475569, 3.5); else S.viewer.clearOverlay('crossings');
+    if (S.netData?.crossings && $('crossings').checked) S.viewer.showPoints('crossings', S.netData.crossings.points, S.viewer.ink(), 3.5); else S.viewer.clearOverlay('crossings');
   });
   $('famA').addEventListener('change', () => S.viewer.setFamilyVisible('A', $('famA').checked));
   $('famB').addEventListener('change', () => S.viewer.setFamilyVisible('B', $('famB').checked));
 
-  // lath
+  // laths
   document.querySelectorAll('#lath-block input[type=range]').forEach((inp) => {
     inp.addEventListener('input', () => { inp.nextElementSibling.value = inp.value; });
-    inp.addEventListener('change', () => { if (S.selected) analyseSelected(); if ($('colorutil').checked) colourByUtilization(); });
+    inp.addEventListener('change', () => { if (S.selected) analyseSelected(); if ($('colorutil').checked || $('solid').checked) runLathAll(); });
   });
-  $('upright').addEventListener('change', () => { if (S.selected) analyseSelected(); if ($('colorutil').checked) colourByUtilization(); });
-  $('section')?.addEventListener('change', () => { if (S.selected) analyseSelected(); });
-  $('solid').addEventListener('change', () => { if (S.selected) analyseSelected(); });
-  $('colorutil').addEventListener('change', () => { if ($('colorutil').checked) colourByUtilization(); else { S.lathUtil = null; S.viewer.colorCurves(null, null); if (S.selected) S.viewer.selectCurve(S.selected); if (S.netData) drawQuality(S.netData, S.stats.boundaryVertices === 0); } });
+  for (const id of ['upright', 'section']) $(id).addEventListener('change', () => { if (S.selected) analyseSelected(); if ($('colorutil').checked || $('solid').checked) runLathAll(); });
+  $('solid').addEventListener('change', () => { if ($('solid').checked || $('colorutil').checked) runLathAll(); else S.viewer.clearOverlay('sweepAll'); });
+  $('colorutil').addEventListener('change', () => { if ($('colorutil').checked) runLathAll(); else { S.lathUtil = null; S.viewer.colorCurves(null, null, null); showUtilLegend(false); if (S.selected) S.viewer.selectCurve(S.selected); if (S.netData) drawQuality(S.netData, S.stats.boundaryVertices === 0); } });
+  $('span').addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
+  $('span').addEventListener('change', () => { if (S.netData) { traceNetStatsOnly(); if ($('colorutil').checked || $('solid').checked) runLathAll(); } });
 
-  // frame
+  // web / AAG
+  $('diagonals').addEventListener('change', async () => {
+    if (!S.netData?.web) return;
+    if (!$('diagonals').checked) S.aag = null;
+    await K('useDiagonals', $('diagonals').checked && !S.aag);
+    S.lathUtil = null; drawNetCurves();
+    if ($('colorutil').checked || $('solid').checked) runLathAll();
+  });
+  $('aag').addEventListener('click', runAag);
+  $('symmetry').addEventListener('change', () => { if (S.net === 'asymptotic') traceNet(); });
+  $('famG').addEventListener('change', () => S.viewer.setFamilyVisible('G', $('famG').checked));
+
+  // structure
   $('frame').addEventListener('click', runFrame);
   $('deformed').addEventListener('change', showDeformed);
   $('defscale').addEventListener('change', showDeformed);
-  for (const id of ['load', 'scale']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
+  for (const id of ['load', 'area', 'band', 'jk']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
+  const structRows = () => {
+    $('band-row').classList.toggle('hidden', $('supports').value !== 'lowest');
+    $('pick-row').classList.toggle('hidden', $('supports').value !== 'picked');
+    $('jk-row').classList.toggle('hidden', $('joints').value !== 'k');
+    if ($('supports').value !== 'picked' && S.picking) { S.picking = false; $('pick').classList.remove('on'); }
+  };
+  $('supports').addEventListener('change', structRows);
+  $('joints').addEventListener('change', structRows);
+  structRows();
+  $('pick').addEventListener('click', () => { S.picking = !S.picking; $('pick').classList.toggle('on', S.picking); $('pick').textContent = S.picking ? 'picking… (click again to stop)' : 'pick supports'; showPicked(); });
+  $('pick-clear').addEventListener('click', () => { S.picked = []; showPicked(); });
+
+  // kinetics
+  $('drives').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $('drives').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    S.drive = b.dataset.drive;
+  });
+  for (const id of ['kamp', 'kstiff', 'ksteps']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
+  $('kinrun').addEventListener('click', runKinetics);
+  $('kfold').addEventListener('input', () => { stopKinetics(); showKinState(+$('kfold').value); drawKinPlot(); });
+  $('kplay').addEventListener('click', () => {
+    if (S.kinTimer) { stopKinetics(); return; }
+    if (!S.kin) return;
+    let k = +$('kfold').value, dir = 1;
+    $('kplay').textContent = 'pause';
+    S.kinTimer = setInterval(() => {
+      const n = S.kin.states.length;
+      k += dir; if (k >= n - 1) { k = n - 1; dir = -1; } else if (k <= 0) { k = 0; dir = 1; }
+      $('kfold').value = k; showKinState(k); drawKinPlot();
+    }, 140);
+  });
 
   // file
   const loadFile = async (file) => {
@@ -745,6 +957,7 @@ async function main() {
   const first = $('nets').querySelector('[data-net=asymptotic]');
   $('nets').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === first));
   S.net = 'asymptotic'; showNetParams(); $('upright').checked = true;
+  $('band-row').classList.add('hidden');
   window.__mite = S; // for tests
   await loadShape();
 }

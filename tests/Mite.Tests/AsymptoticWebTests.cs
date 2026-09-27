@@ -120,7 +120,7 @@ public class AsymptoticWebTests
         Assert.True(w.Singular);
         Assert.Equal(6, w.Rays);
         Assert.Equal(3, w.SymmetryOrder);
-        Assert.InRange(w.SymmetryError, 0, 1e-9);
+        Assert.InRange(w.SymmetryError, 0, 0.02 * w.Spacing); // the copies are projected onto the (not quite symmetric) facets
         // minimal surface: the two families cross at 90° at every node
         var xs = NetIntersections.Find(w.A, w.B);
         double worstAngle = 0;

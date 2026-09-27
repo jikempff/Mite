@@ -366,13 +366,16 @@ public static class AsymptoticWeb
 
     private static void FinishNet(MeshProjection proj, Result res, double h, Options options)
     {
-        var xs = NetIntersections.Find(res.A, res.B);
+        // rotated copies sit on the exact symmetric surface, a sagitta off the
+        // facets the traced curves lie on: accept crossings within a third of an edge
+        double xTol = 0.3 * proj.AverageEdgeLength;
+        var xs = NetIntersections.Find(res.A, res.B, xTol);
         // tails shorter than TrimTails × h beyond the last node are cut at the node
         if (options.TrimTails > 0 && xs.Count > 0)
         {
             TrimTails(res.A, xs.Select(x => (x.CurveA, x.SegmentA + x.ParamA)).ToList(), options.TrimTails * h);
             TrimTails(res.B, xs.Select(x => (x.CurveB, x.SegmentB + x.ParamB)).ToList(), options.TrimTails * h);
-            xs = NetIntersections.Find(res.A, res.B);
+            xs = NetIntersections.Find(res.A, res.B, xTol);
         }
         // nodes: crossings, merged when two crossings coincide (the seed of a regular web)
         double mergeTol = 0.05 * h;
@@ -635,13 +638,16 @@ public static class AsymptoticWeb
         var fwd = FieldTracer.Trace(proj, hs.Point, hs.NearestVertex, f1, f2, exists, step, maxSteps, false, null, out _,
             options.MinFieldMagnitude, dir);
         var pts = new List<Vec3d>();
-        if ((start - P).LengthSquared > 1e-24)
+        double r = (start - P).Length;
+        if (r > 1e-12)
         {
-            // straight chord from the flat point to the circle, projected
-            int n = Math.Max(1, (int)Math.Ceiling((start - P).Length / step));
+            // flat point: the field is undefined at the seed and unreliable in the
+            // first rings around it, so the ray runs as a chord from the seed to
+            // the circle point where the field points exactly along it (radially)
+            int n = Math.Max(1, (int)Math.Ceiling(r / step));
             for (int i = 0; i < n; i++)
             {
-                var q = P + (double)i / n * (start - P);
+                var q = P + (double)i / n * (hs.Point - P);
                 pts.Add(i == 0 ? P : proj.ClosestPoint(q, proj.NearestVertexGlobal(q)).Point);
             }
         }
@@ -703,7 +709,8 @@ public static class AsymptoticWeb
         return Vec3d.Cross(n, a).Normalized();
     }
 
-    internal static Vec3d Rotate(Vec3d p, Vec3d c, Vec3d axis, double angle)
+    /// <summary>Rotates p about the axis through c (Rodrigues).</summary>
+    public static Vec3d Rotate(Vec3d p, Vec3d c, Vec3d axis, double angle)
     {
         var k = axis.Normalized();
         var v = p - c;
@@ -718,10 +725,12 @@ public static class AsymptoticWeb
         for (int i = 0; i < line.Length; i++)
         {
             var q = Rotate(line[i], c, axis, angle);
+            // projected onto the facets, so every curve lies on the mesh and the
+            // copies meet the traced curves within the usual crossing tolerance
+            // (the symmetry then holds to the mesh's faceting, not to rounding)
             var hq = proj.ClosestPoint(q, hint >= 0 ? hint : proj.NearestVertexGlobal(q));
             hint = hq.NearestVertex;
-            // keep the rotated point when the projection clamps it at a border (it lies off the mesh)
-            o[i] = (hq.Point - q).Length < 0.25 * proj.AverageEdgeLength ? hq.Point : q;
+            o[i] = (hq.Point - q).Length < 0.5 * proj.AverageEdgeLength ? hq.Point : q;
         }
         return o;
     }

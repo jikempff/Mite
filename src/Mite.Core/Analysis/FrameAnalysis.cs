@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Mite.Core.Numerics;
 using Mite.Core.Fabrication;
 using Mite.Core.Geometry;
@@ -148,20 +149,24 @@ public static class FrameAnalysis
         /// <summary>Number of joint nodes (where two or more laths meet).</summary>
         public readonly int JointCount;
 
+        /// <summary>Laths (by index) that no support reaches through the net; they are left out of the solve (zero displacement, zero utilization).</summary>
+        public readonly int[] FloatingLaths;
+
         public Result(Vec3d[] nodes, List<(int, int)>[] nodeMap, Vec3d[] displacements,
             double maxDisplacement, (int, int)[] elementSource,
             double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
             int supportNodeCount = 0)
             : this(nodes, nodeMap, displacements, maxDisplacement, elementSource, axial, bendY, bendZ,
                 utilization, maxUtilization, supportNodeCount, new double[axial.Length], Array.Empty<int>(),
-                new Vec3d[nodes.Length], Vec3d.Zero, 0.0, Array.Empty<Vec3d[]>(), 0) { }
+                new Vec3d[nodes.Length], Vec3d.Zero, 0.0, Array.Empty<Vec3d[]>(), 0, Array.Empty<int>()) { }
 
         public Result(Vec3d[] nodes, List<(int, int)>[] nodeMap, Vec3d[] displacements,
             double maxDisplacement, (int, int)[] elementSource,
             double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
             int supportNodeCount, double[] torsion, int[] supportNodes, Vec3d[] reactions,
-            Vec3d totalLoad, double equilibriumError, Vec3d[][] laths, int jointCount)
+            Vec3d totalLoad, double equilibriumError, Vec3d[][] laths, int jointCount, int[] floatingLaths)
         {
+            FloatingLaths = floatingLaths;
             SupportNodeCount = supportNodeCount;
             Nodes = nodes;
             NodeMap = nodeMap;
@@ -256,6 +261,28 @@ public static class FrameAnalysis
                     if (onOther) allJoints.Add(end);
                 }
             }
+        }
+
+        // joints closer than half the joint tolerance are one joint (three laths
+        // through one node give three pairwise crossings a hair apart; inserted
+        // separately they would leave near-zero elements between them)
+        if (allJoints.Count > 1)
+        {
+            double mergeJ = 0.5 * jointTol;
+            var jGrid = new PointGrid(allJoints, Math.Max(mergeJ, 1e-12));
+            var jParent = new int[allJoints.Count];
+            for (int i = 0; i < jParent.Length; i++) jParent[i] = i;
+            int JFind(int x) { while (jParent[x] != x) { jParent[x] = jParent[jParent[x]]; x = jParent[x]; } return x; }
+            for (int i = 0; i < allJoints.Count; i++)
+                foreach (int j in jGrid.Within(allJoints[i], mergeJ)) if (j != i) jParent[JFind(i)] = JFind(j);
+            var sum = new Dictionary<int, (Vec3d S, int N)>();
+            for (int i = 0; i < allJoints.Count; i++)
+            {
+                int r = JFind(i);
+                sum.TryGetValue(r, out var acc);
+                sum[r] = (acc.S + allJoints[i], acc.N + 1);
+            }
+            allJoints = sum.Values.Select(v => v.S / v.N).ToList();
         }
 
         // insertions: per lath, (segment, t, point); each joint goes into each
@@ -441,6 +468,27 @@ public static class FrameAnalysis
             }
         }
 
+        // Parts of the net that no support reaches (a lath crossing nothing, a
+        // patch cut off by a K = 0 line) would make the stiffness matrix
+        // singular; they are left out of the solve and reported instead.
+        var comp = new int[nodes.Count];
+        for (int i = 0; i < comp.Length; i++) comp[i] = i;
+        int CFind(int x) { while (comp[x] != x) { comp[x] = comp[comp[x]]; x = comp[x]; } return x; }
+        for (int e = 0; e < ne; e++) comp[CFind(elemA[e])] = CFind(elemB[e]);
+        var anchored = new HashSet<int>();
+        foreach (int sn in supportNodes) anchored.Add(CFind(sn));
+        var floatingCurves = new HashSet<int>();
+        for (int e = 0; e < ne; e++)
+            if (!anchored.Contains(CFind(elemA[e]))) floatingCurves.Add(elemCurve[e]);
+        for (int n = 0; n < nodes.Count; n++)
+        {
+            if (anchored.Contains(CFind(n))) continue;
+            for (int d = 0; d < 3; d++) fixedDof[transBase[n] + d] = true;
+            foreach (int rb in rotBlocks[n]) for (int d = 0; d < 3; d++) fixedDof[rb + d] = true;
+        }
+        if (anchored.Count == 0)
+            throw new ArgumentException("No support point lies on a lath: nothing holds the net.", nameof(supports));
+
         // ---- Section properties ------------------------------------------
         // From the profile's section (rectangle, round bar or custom polygon,
         // see LathProfile.SectionProperties): the same profile Lath Sweep
@@ -595,7 +643,8 @@ public static class FrameAnalysis
 
         Vec3d totalLoad = Vec3d.Zero;
         for (int n = 0; n < nodes.Count; n++)
-            totalLoad = totalLoad + new Vec3d(F[transBase[n]], F[transBase[n] + 1], F[transBase[n] + 2]);
+            if (anchored.Contains(CFind(n)))
+                totalLoad = totalLoad + new Vec3d(F[transBase[n]], F[transBase[n] + 1], F[transBase[n] + 2]);
 
         // ---- Solve ---------------------------------------------------------
         var freeDofs = new List<int>();
@@ -711,7 +760,7 @@ public static class FrameAnalysis
 
         return new Result(nodes.ToArray(), nodeMap.ToArray(), displacements, maxDisp,
             elemSrc.ToArray(), axial, bendY, bendZ, utilization, maxUtil, supportNodes.Count,
-            torsion, supportNodes.ToArray(), reactions, totalLoad, eqErr, lathsW, jointCount);
+            torsion, supportNodes.ToArray(), reactions, totalLoad, eqErr, lathsW, jointCount, floatingCurves.OrderBy(c => c).ToArray());
     }
 
     private static int NearestNode(PointGrid grid, List<Vec3d> nodes, Vec3d p, double radius)

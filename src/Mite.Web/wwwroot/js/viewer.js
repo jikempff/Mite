@@ -11,9 +11,11 @@ import { LineGeometry } from '../vendor/lines/LineGeometry.js';
 import { LineSegments2 } from '../vendor/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from '../vendor/lines/LineSegmentsGeometry.js';
 
-export const FAMILY_A = 0x0f766e; // teal
-export const FAMILY_B = 0x9d2f6b; // plum
-const SELECT = 0xf59e0b;
+// kempff/seleme palette: black, white and neon
+export const FAMILY_A = 0x2a3cff; // neon blue
+export const FAMILY_B = 0xff1f4f; // neon red
+export const FAMILY_G = 0x00d86b; // neon green (geodesic diagonals)
+export const NEON = { blue: 0x2a3cff, red: 0xff1f4f, green: 0x00d86b, yellow: 0xd9ff00 };
 
 export class Viewer {
   constructor(canvas) {
@@ -69,6 +71,9 @@ export class Viewer {
     this.resize();
     this.renderer.setAnimationLoop(() => this.render());
   }
+
+  /** Ink of the current theme: black on white, white on black (selection, seed, supports). */
+  ink() { return this.dark ? 0xffffff : 0x0a0a0a; }
 
   setTheme(dark) {
     this.dark = dark;
@@ -220,7 +225,7 @@ export class Viewer {
     return m;
   }
 
-  setCurves(familyA, familyB, { widthA = 2.2, widthB = 2.2 } = {}) {
+  setCurves(familyA, familyB, { widthA = 2.2, widthB = 2.2, familyG = null } = {}) {
     this.clearCurves();
     const add = (curves, family, color, width) => {
       curves.forEach((pts, index) => {
@@ -238,11 +243,13 @@ export class Viewer {
     };
     add(familyA || [], 'A', FAMILY_A, widthA);
     add(familyB || [], 'B', FAMILY_B, widthB);
+    add(familyG || [], 'G', FAMILY_G, 1.8);
   }
 
-  colorCurves(colorsA, colorsB) { // arrays of [r,g,b] per curve, or null to reset
+  colorCurves(colorsA, colorsB, colorsG = null) { // arrays of [r,g,b] per curve, or null to reset
+    this.colorsG = colorsG;
     for (const o of this.curveObjects) {
-      const c = o.family === 'A' ? colorsA?.[o.index] : colorsB?.[o.index];
+      const c = o.family === 'A' ? colorsA?.[o.index] : o.family === 'B' ? colorsB?.[o.index] : this.colorsG?.[o.index];
       if (c) o.line.material.color.setRGB(c[0], c[1], c[2]); else o.line.material.color.setHex(o.color);
       o.line.material.needsUpdate = true;
     }
@@ -251,7 +258,7 @@ export class Viewer {
   selectCurve(obj) {
     if (this.selected) { const s = this.selected; s.line.material.color.setHex(s.color); s.line.material.linewidth = 2.2; }
     this.selected = obj;
-    if (obj) { obj.line.material.color.setHex(SELECT); obj.line.material.linewidth = 4; }
+    if (obj) { obj.line.material.color.setHex(this.ink()); obj.line.material.linewidth = 4.5; }
   }
 
   // ---- overlays -----------------------------------------------------------------
@@ -291,14 +298,14 @@ export class Viewer {
     let d = new THREE.Vector3(...dir); d.addScaledVector(n, -d.dot(n)); if (d.lengthSq() < 1e-12) d.set(1, 0, 0).addScaledVector(n, -n.x); d.normalize();
     const tip = p.clone().addScaledVector(d, length);
     const g = new LineGeometry(); g.setPositions([p.x, p.y, p.z, tip.x, tip.y, tip.z]);
-    const m = this._lineMaterial(0xf59e0b, 3); m.userData.keep = true;
+    const m = this._lineMaterial(this.ink(), 3); m.userData.keep = true;
     const line = new Line2(g, m); line.computeLineDistances(); line.userData.tag = 'dirline';
     this.overlayGroup.add(line);
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(length * 0.12, 16, 12), new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4, emissive: 0x000000 }));
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(length * 0.12, 16, 12), new THREE.MeshStandardMaterial({ color: NEON.green, roughness: 0.4, emissive: 0x000000 }));
     knob.position.copy(tip);
     knob.userData = { handle: -1, kind: 'dir', origin: p, normal: n, length };
     this.handlesGroup.add(knob);
-    const base = new THREE.Mesh(new THREE.SphereGeometry(length * 0.08, 12, 10), new THREE.MeshStandardMaterial({ color: 0x1f2937 }));
+    const base = new THREE.Mesh(new THREE.SphereGeometry(length * 0.08, 12, 10), new THREE.MeshStandardMaterial({ color: this.ink() }));
     base.position.copy(p); base.userData.tag = 'dirbase';
     this.overlayGroup.add(base);
     this.dirHandle = knob;
@@ -423,7 +430,7 @@ export class Viewer {
         this.dragging = { obj: hit.object, plane, offset: isDir ? new THREE.Vector3() : hit.object.position.clone().sub(hit.point) };
         this.controls.enabled = false;
         this.canvas.setPointerCapture(e.pointerId);
-        hit.object.material.emissive.setHex(0xf59e0b);
+        hit.object.material.emissive.setHex(0x00ff85);
       }
     });
     this.canvas.addEventListener('pointermove', (e) => {

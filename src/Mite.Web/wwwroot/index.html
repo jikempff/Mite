@@ -38,6 +38,7 @@
     <div class="hud hud-hover" id="hud-hover"></div>
     <div class="hud hud-bl">
       <div id="legend" class="legend hidden"><span id="legend-min"></span><i id="legend-bar"></i><span id="legend-max"></span><b id="legend-title"></b></div>
+      <div id="ulegend" class="legend hidden"><span>0</span><i id="ulegend-bar"></i><span>1.3+</span><b id="ulegend-title">lath utilization · 1 = limit</b></div>
       <div class="hint">drag orbit · right-drag pan · scroll zoom · hover / click a curve · shift-click the surface to move the seed · drag the orange knob to turn the seed direction</div>
     </div>
     <div class="hud hud-tr" id="hud-net"></div>
@@ -53,6 +54,7 @@
       <div class="row"><select id="shape" aria-label="Shape"></select></div>
       <div id="shape-params"></div>
       <div class="row slider"><label for="res">resolution</label><input id="res" type="range" min="12" max="96" step="4" value="40"><output for="res">40</output></div>
+      <div class="row slider"><label for="span">real span <span class="unit">m</span></label><input id="span" type="range" min="2" max="60" step="1" value="10"><output for="span">10</output></div>
       <div id="file-row" class="row hidden"><label class="btn file">Choose file… <input id="file" type="file" accept=".obj,.stl,.ply"></label><label class="chk"><input id="weld" type="checkbox" checked> weld vertices</label></div>
       <p id="shape-note" class="note"></p>
       <p id="mesh-stats" class="stats"></p>
@@ -98,7 +100,8 @@
       <div id="net-params">
         <div class="row" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin"><label>layout</label>
           <div class="chips small" id="layouts" role="radiogroup">
-            <button data-layout="1" class="on" title="Grasshopper: Layout = 1 — seeds every Spacing along the border; every curve runs border to border, none stops on a neighbour">web · border</button>
+            <button data-layout="3" class="on" data-only="asymptotic" title="Schling: nodes placed every spacing along the two asymptotic curves through the seed; every other node is the crossing of the curves through them. A quad net — no stubs, no T-junctions — that carries the surface's symmetry (flat points become singular nodes, surfaces of revolution a rotational web)">symmetric web</button>
+            <button data-layout="1" title="Grasshopper: Layout = 1 — seeds every Spacing along the border; every curve runs border to border, none stops on a neighbour">web · border</button>
             <button data-layout="2" title="Grasshopper: Layout = 2 — seeds every Spacing along the crossing curve through the seed; every curve runs border to border">web · seed cross</button>
             <button data-layout="0" title="Grasshopper: Layout = 0 — evenly spaced streamlines (Jobard–Lefer): curves inserted where the spacing opens and stopped where it closes, ending on a neighbour as a T-junction">fill · evenly spaced</button>
           </div>
@@ -108,6 +111,12 @@
         <div class="row slider" data-for="chebyshev"><label for="edge">edge length</label><input id="edge" type="range" min="2" max="20" step="0.5" value="6"><output for="edge" id="edge-out">–</output></div>
         <div class="row slider" data-for="chebyshev"><label for="count">nodes per side</label><input id="count" type="range" min="2" max="24" step="1" value="8"><output for="count">8</output></div>
         <div class="row slider" data-for="geodesicBoth chebyshev"><label for="famangle">family angle <span class="unit">°</span></label><input id="famangle" type="range" min="30" max="150" step="5" value="90"><output for="famangle">90</output></div>
+        <div class="row" data-for="asymptotic" id="sym-row"><label for="symmetry">symmetry</label><select id="symmetry"><option value="-1">detect</option><option value="0">none</option><option value="2">2-fold</option><option value="3">3-fold</option><option value="4">4-fold</option><option value="6">6-fold</option></select></div>
+        <div class="row toggles" data-for="asymptotic" id="aag-row">
+          <label class="chk" title="The quad diagonals of the web that come closest to geodesics: a third family of flat slats (Schling, Wang, Hoyer & Pottmann 2022)"><input id="diagonals" type="checkbox"> <i class="sw swG"></i> geodesic diagonals (AAG)</label>
+          <button id="aag" class="btn" title="Optimise the web so that the diagonals are exact geodesics and every node star stays planar (asymptotic): a small change of the surface">optimise AAG</button>
+        </div>
+        <p id="aag-stats" class="stats hidden"></p>
         <div class="row slider" data-for="asymptotic"><label for="minangle">min crossing <span class="unit">°</span></label><input id="minangle" type="range" min="0" max="45" step="1" value="15"><output for="minangle">15</output></div>
         <div class="row slider" data-for="isocurves"><label for="levels">levels</label><input id="levels" type="range" min="3" max="40" step="1" value="12"><output for="levels">12</output></div>
         <div class="row" data-for="isocurves"><label for="isofield">field</label><select id="isofield"><option value="K">Gaussian K</option><option value="H">Mean H</option><option value="k1">k1</option><option value="k2">k2</option><option value="z">height z</option></select></div>
@@ -121,7 +130,7 @@
         </div>
         <div class="row slider" data-for="geodesic geodesicBoth" id="borderangle-row"><label for="borderangle">border angle <span class="unit">° from normal</span></label><input id="borderangle" type="range" min="-60" max="60" step="5" value="0"><output for="borderangle">0</output></div>
         <div class="row" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin chebyshev"><label>seed</label><span id="seed-label" class="mono">auto</span><button id="seed-clear" class="ghost small">reset</button><span class="unit">shift-click the surface to move</span></div>
-        <div class="row toggles"><label class="chk"><input id="famA" type="checkbox" checked> <i class="sw swA"></i> family A</label><label class="chk" id="famB-row"><input id="famB" type="checkbox" checked> <i class="sw swB"></i> family B</label></div>
+        <div class="row toggles"><label class="chk"><input id="famA" type="checkbox" checked> <i class="sw swA"></i> family A</label><label class="chk" id="famB-row"><input id="famB" type="checkbox" checked> <i class="sw swB"></i> family B</label><label class="chk hidden" id="famG-row"><input id="famG" type="checkbox" checked> <i class="sw swG"></i> geodesic G</label></div>
       </div>
       <p id="net-note" class="note"></p>
       <p id="net-stats" class="stats"></p>
@@ -136,20 +145,22 @@
     </section>
 
     <section class="block" id="lath-block">
-      <h2>Lath <small>click a curve</small></h2>
+      <h2>Laths <small>one section for every curve</small></h2>
       <div class="gh"><img src="icons/LathAnalysis.png" alt="" title="Lath Analysis"><img src="icons/LathSweep.png" alt="" title="Lath Sweep"><img src="icons/LathUnroll.png" alt="" title="Lath Unroll"><span>Grasshopper <b>Lath Analysis</b> · <b>Sweep</b> · <b>Unroll</b></span></div>
       <div class="grid2">
-        <div class="row slider"><label for="width">width <span class="unit">% of size</span></label><input id="width" type="range" min="0.5" max="6" step="0.25" value="2"><output for="width">2</output></div>
-        <div class="row slider"><label for="thick">thickness <span class="unit">% of size</span></label><input id="thick" type="range" min="0.05" max="1.5" step="0.05" value="0.4"><output for="thick">0.4</output></div>
+        <div class="row slider"><label for="width">width <span class="unit">mm</span></label><input id="width" type="range" min="10" max="400" step="5" value="60"><output for="width">60</output></div>
+        <div class="row slider"><label for="thick">thickness <span class="unit">mm</span></label><input id="thick" type="range" min="2" max="80" step="1" value="6"><output for="thick">6</output></div>
       </div>
       <div class="row"><label for="section">section</label><select id="section"><option value="0">rectangle (width × thickness)</option><option value="1">round bar (Ø width)</option></select></div>
       <div class="row toggles">
-        <label class="chk"><input id="upright" type="checkbox" checked> upright (asymptotic)</label>
-        <label class="chk" title="Grasshopper: Lath Sweep"><input id="solid" type="checkbox"> show solid</label>
-        <label class="chk"><input id="colorutil" type="checkbox"> colour all laths by utilization</label>
+        <label class="chk" title="Asymptotic laths stand upright on the surface; geodesic laths (and the G diagonals) lie flat"><input id="upright" type="checkbox" checked> upright A / B</label>
+        <label class="chk" title="Grasshopper: Lath Sweep on every curve"><input id="solid" type="checkbox"> all laths as solids</label>
+        <label class="chk"><input id="colorutil" type="checkbox"> colour by utilization</label>
       </div>
       <div class="row slider"><label for="strain">allowable strain <span class="unit">%</span></label><input id="strain" type="range" min="0.1" max="2" step="0.05" value="0.5"><output for="strain">0.5</output></div>
+      <p id="laths-stats" class="stats"></p>
       <div id="lath-result" class="hidden">
+        <p class="note">Selected lath (click a curve):</p>
         <p id="lath-stats" class="stats"></p>
         <canvas id="plot" class="plot" height="150"></canvas>
         <div class="caption">kn out of surface · kg in surface · tg twist · bar = utilization along the lath</div>
@@ -158,16 +169,44 @@
       </div>
     </section>
 
-    <section class="block">
+    <section class="block" id="structure-block">
       <h2>Structure <small>beam frame of the net</small></h2>
       <div class="gh"><img src="icons/GridshellAnalysis.png" alt="" title="Gridshell Analysis"><span>Grasshopper <b>Gridshell Analysis</b></span></div>
+      <div class="row"><label for="supports">supports</label><select id="supports"><option value="border">every lath end on the border</option><option value="lowest">lath ends at the lowest level</option><option value="picked">picked in the viewport</option></select></div>
+      <div class="row slider" id="band-row"><label for="band">lowest band <span class="unit">% of height</span></label><input id="band" type="range" min="1" max="50" step="1" value="15"><output for="band">15</output></div>
+      <div class="row" id="pick-row"><button id="pick" class="btn" title="Click lath ends or nodes in the viewport to add or remove supports">pick supports</button><span id="pick-count" class="unit"></span><button id="pick-clear" class="ghost small">clear</button></div>
+      <div class="row"><label for="suptype">held</label><select id="suptype"><option value="0">fixed (clamped)</option><option value="1">pinned (rotations free)</option></select></div>
+      <div class="row"><label for="joints">joints</label><select id="joints"><option value="-1">rigid</option><option value="0">scissor hinge (bolt along the normal)</option><option value="k">semi-rigid bolt</option></select></div>
+      <div class="row slider" id="jk-row"><label for="jk">joint stiffness <span class="unit">kN·m/rad</span></label><input id="jk" type="range" min="0.1" max="50" step="0.1" value="2"><output for="jk">2</output></div>
+      <div class="row"><label for="material">self-weight</label><select id="material"><option value="0">none</option><option value="450" selected>timber 450 kg/m³</option><option value="1900">GFRP 1900 kg/m³</option><option value="7850">steel 7850 kg/m³</option></select></div>
       <div class="grid2">
-        <div class="row slider"><label for="load">load <span class="unit">kN/m</span></label><input id="load" type="range" min="0.1" max="5" step="0.1" value="0.5"><output for="load">0.5</output></div>
-        <div class="row slider"><label for="scale">model size <span class="unit">m across</span></label><input id="scale" type="range" min="2" max="40" step="1" value="10"><output for="scale">10</output></div>
+        <div class="row slider"><label for="area">area load <span class="unit">kN/m²</span></label><input id="area" type="range" min="0" max="5" step="0.05" value="0.5"><output for="area">0.5</output></div>
+        <div class="row slider"><label for="load">line load <span class="unit">kN/m</span></label><input id="load" type="range" min="0" max="5" step="0.05" value="0"><output for="load">0</output></div>
       </div>
-      <div class="row"><button id="frame" class="btn" title="Grasshopper: Gridshell Analysis">Analyse</button><label class="chk"><input id="deformed" type="checkbox" checked> show deformed ×</label><input id="defscale" type="number" min="1" max="1000" value="50" class="num"></div>
-      <p class="note">Laths become beams with the section above (timber: E = 11 GPa, allowable 20 MPa), coupled at crossings and T-junctions, fixed where they meet the border, loaded vertically.</p>
+      <div class="row"><button id="frame" class="btn" title="Grasshopper: Gridshell Analysis">Analyse</button><label class="chk"><input id="deformed" type="checkbox" checked> show deformed ×</label><input id="defscale" type="number" min="1" max="1000" value="20" class="num"></div>
+      <p class="note">Laths become beams with the section above (E = 11 GPa, allowable 20 MPa, von Mises with torsion), every crossing a node — rigid, or a bolt that lets the laths turn about the normal. The span in the Shape block sets the metres.</p>
       <p id="frame-stats" class="stats"></p>
+    </section>
+
+    <section class="block" id="kinetics-block">
+      <h2>Kinetics <small>the net as a scissor mechanism</small></h2>
+      <div class="gh"><img src="icons/NetKinetics.png" alt="" title="Net Kinetics"><span>Grasshopper <b>Net Kinetics</b></span></div>
+      <div class="chips small" id="drives" role="radiogroup">
+        <button data-drive="scissor" class="on" title="The laths through the seed turn about its normal — family A one way, B the other — like opening scissors; everything else follows the joints">scissor at the seed</button>
+        <button data-drive="lift" title="The seed node rises; lath ends slide on their ground planes">lift the seed</button>
+        <button data-drive="spread" title="The seed is held; every free lath end is pulled outward (or inward)">spread the rim</button>
+      </div>
+      <div class="row slider"><label for="kamp">amplitude</label><input id="kamp" type="range" min="-1" max="1" step="0.05" value="0.35"><output for="kamp">0.35</output></div>
+      <div class="row slider"><label for="kstiff">lath stiffness</label><input id="kstiff" type="range" min="0" max="2" step="0.05" value="0.3"><output for="kstiff">0.3</output></div>
+      <div class="row slider"><label for="ksteps">states</label><input id="ksteps" type="range" min="4" max="20" step="1" value="8"><output for="ksteps">8</output></div>
+      <div class="row"><button id="kinrun" class="btn">Run the motion</button><span class="unit">on the current asymptotic net — use a coarse spacing</span></div>
+      <div id="kin-result" class="hidden">
+        <div class="row slider"><label for="kfold">fold</label><input id="kfold" type="range" min="0" max="10" step="1" value="0"><output for="kfold">0</output><button id="kplay" class="ghost small">play</button></div>
+        <p id="kin-stats" class="stats"></p>
+        <canvas id="kin-plot" class="plot" height="110"></canvas>
+        <div class="caption">along the fold: height (ink), smallest crossing angle (A), peak strain utilization (B)</div>
+      </div>
+      <p id="kin-note" class="note">Hinges keep the joint spacing and stay normal to the laths; the laths keep their rest bend as far as the stiffness asks (Schikore et al. 2020; Wan, Crolla &amp; Schling 2025). Low stiffness lets the grid unfold further — a 3-fold Enneper web flattens completely.</p>
     </section>
 
     <section class="block">

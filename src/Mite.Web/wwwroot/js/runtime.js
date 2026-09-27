@@ -53,6 +53,10 @@ export async function bootMite(onProgress) {
     curvature: (radius, umbilicTol) => J(api.Curvature(radius, umbilicTol)),
     net: (kind, opts) => J(api.Net(kind, JSON.stringify(opts))),
     lath: (poly, width, thickness, upright, maxStrain, sweep, shape) => J(api.Lath(Array.from(poly), width, thickness, !!upright, maxStrain, !!sweep, shape | 0)),
-    frame: (width, thickness, upright, load, toMetres, sampling, shape) => J(api.Frame(width, thickness, !!upright, load, toMetres, sampling, shape | 0)),
+    lathAll: (width, thickness, upright, maxStrain, shape, sweep) => J(api.LathAll(width, thickness, !!upright, maxStrain, shape | 0, !!sweep)),
+    useDiagonals: (on) => api.UseDiagonals(!!on),
+    aag: (opts) => J(api.Aag(JSON.stringify(opts))),
+    frame: (opts) => J(api.Frame(JSON.stringify(opts))),
+    kinetics: (opts) => J(api.Kinetics(JSON.stringify(opts))),
   };
 }
