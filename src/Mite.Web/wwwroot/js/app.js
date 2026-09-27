@@ -7,6 +7,7 @@ import { diverging, sequential, utilizationColor, legendGradient, cssRgb, UTIL_S
 import { Loft } from './loft.js';
 import { readMeshFile } from './loaders.js';
 import { drawLathPlot, drawUnroll } from './plots.js';
+import { SHAPES, GROUPS, CLASSES, symbolSVG } from './shapes.js';
 import { meshToOBJ, curvesToOBJ, unrollToSVG, save } from './export.js';
 
 const $ = (id) => document.getElementById(id);
@@ -14,45 +15,6 @@ const $ = (id) => document.getElementById(id);
 // ---------------------------------------------------------------------------
 // Catalogue
 // ---------------------------------------------------------------------------
-
-const SHAPES = {
-  saddle: { label: 'Saddle  z = a·x² − b·y²', params: [['size', 1, 4, 2, 0.1], ['a', 0.2, 2, 1, 0.05], ['b', 0.2, 2, 1, 0.05]],
-    note: 'K < 0 everywhere. The asymptotic curves are the straight lines x = ±y·√(b/a) + c, so every asymptotic lath is straight and runs border to border.' },
-  hyperboloid: { label: 'Hyperboloid of one sheet', params: [['a (waist)', 0.4, 2, 1, 0.05], ['c', 0.4, 2, 1, 0.05], ['height', 0.4, 1.5, 1, 0.05]],
-    note: 'A ruled surface: its asymptotic curves are exactly the two families of straight rulings — the sharpest test of the asymptotic tracer (kn = 0, twist only).' },
-  monkey: { label: 'Monkey saddle  z = k(x³ − 3xy²)', params: [['size', 1, 4, 2, 0.1], ['k', 0.2, 2, 1, 0.05]],
-    note: 'A flat umbilic at the origin with three asymptotic directions: families must swap cleanly around it.' },
-  catenoid: { label: 'Catenoid (H = 0)', params: [['c', 0.5, 2, 1, 0.05], ['height', 0.4, 2, 1.2, 0.05]],
-    note: 'Minimal surface: H = 0 so k1 = −k2 and the asymptotic families cross at exactly 90°, the ideal asymptotic gridshell.' },
-  enneper: { label: 'Enneper patch (H = 0)', params: [['extent', 0.5, 1.6, 1.2, 0.05]],
-    note: 'Minimal surface with a self-intersecting far field; keep the extent below ~1.4 for a clean patch.' },
-  enneper3: { label: 'Enneper, n-fold (H = 0)', params: [['folds', 2, 5, 3, 1], ['radius', 0.4, 1.2, 0.9, 0.05]],
-    note: 'Higher-order Enneper surfaces (Weierstrass g = wⁿ⁻¹). The centre is a flat point: 2n asymptotic rays leave it and the families swap across them. The symmetric web makes it a singular node of valence 2n and repeats one sector n times, exactly.' },
-  ruled: { label: 'Ruled patch (bilinear)', params: [['size', 1, 4, 2, 0.1], ['twist', 0.1, 2, 0.8, 0.05], ['skew', 0, 1, 0.3, 0.05]],
-    note: 'A skew quad spanned bilinearly: doubly ruled, and the two families of straight iso-lines are exactly its asymptotic curves — every asymptotic lath comes out straight.' },
-  schwarzd: { label: 'Schwarz D patch (TPMS)', params: [['extent', 0.5, 2, 1, 0.1], ['cells', 12, 40, 24, 2], ['relax', 0, 60, 30, 5]],
-    note: 'The diamond surface of Schling\'s asymptotic pavilion: cut from its nodal approximation and relaxed to a soap film (H ≈ 0), so the asymptotic families cross at ~90°. Slower at high cell counts.' },
-  gyroid: { label: 'Gyroid patch (TPMS)', params: [['extent', 0.5, 2, 1, 0.1], ['cells', 12, 40, 24, 2], ['relax', 0, 60, 30, 5]],
-    note: 'Gyroid patch from its nodal approximation, relaxed to H ≈ 0. Like the Schwarz D, a minimal surface with an asymptotic net of nearly right angles.' },
-  wave: { label: 'Wave  z = A·sin(fx)·cos(fy)', params: [['size', 1, 4, 2, 0.1], ['amplitude', 0.05, 0.8, 0.3, 0.01], ['frequency', 0.5, 4, 2, 0.1]],
-    note: 'Mixed curvature: elliptic caps and anticlastic saddles between them, separated by K = 0 lines where asymptotic curves fade out.' },
-  sphere: { label: 'Sphere', params: [['radius', 0.5, 2, 1, 0.05]],
-    note: 'k1 = k2 = 1/r everywhere: every point is an umbilic, so principal directions and curvature lines are undefined; geodesics are great circles.' },
-  dome: { label: 'Dome cap', params: [['radius', 0.5, 2, 1, 0.05], ['half-angle °', 20, 90, 60, 5]],
-    note: 'K > 0: no asymptotic curves. Geodesic nets and Chebyshev nets are the layouts that apply; geodesics converge towards the top, which Jacobi seeding compensates.' },
-  ellipsoid: { label: 'Ellipsoid', params: [['a', 0.5, 2, 1.5, 0.05], ['b', 0.5, 2, 1, 0.05], ['c', 0.3, 2, 0.7, 0.05]],
-    note: 'Exactly four umbilics on the a–c section; curvature lines form the classic lemon pattern around them.' },
-  torus: { label: 'Torus', params: [['R', 1.5, 4, 3, 0.1], ['r', 0.3, 1.4, 1, 0.05]],
-    note: 'K > 0 outside, K < 0 inside, K = 0 on the top and bottom circles. Curvature lines are meridians and parallels; asymptotic curves live on the inner half only.' },
-  vault: { label: 'Barrel vault (K = 0)', params: [['R', 0.8, 3, 1.5, 0.05], ['width', 1, 4, 2, 0.1], ['length', 1, 6, 4, 0.1]],
-    note: 'Developable: k2 = 0 along the rulings. Curvature lines are rulings and arcs; geodesics are helices — try "from the border" with a border angle.' },
-  cone: { label: 'Cone (K = 0)', params: [['radius', 0.5, 2, 1, 0.05], ['height', 0.5, 3, 1.5, 0.05], ['top radius', 0.05, 0.9, 0.15, 0.01]],
-    note: 'Developable with a near-singular apex: a projection and tracing stress test.' },
-  annulus: { label: 'Annular saddle', params: [['inner r', 0.1, 0.9, 0.4, 0.05], ['outer r', 1, 2, 1.2, 0.05], ['k', 0.2, 2, 1, 0.05]],
-    note: 'An inner border: curves must end cleanly on both boundaries.' },
-  loft: { label: 'Free-form loft — drag the points', params: [], note: 'Drag the control points in the viewport; the surface, its curvature and the current net follow.' },
-  file: { label: 'Your mesh (.obj / .stl / .ply)', params: [], note: 'Export from Rhino with _Export (OBJ, weld on) or drop a Weaverbird mesh; n-gons are triangulated and vertices welded here.' },
-};
 
 const MODE_NOTES = {
   shaded: 'Plain shading.',
@@ -121,14 +83,35 @@ const K = (method, ...args) => S.kernel.call(method, ...args);
 // Shape
 // ---------------------------------------------------------------------------
 
+function shapeCard(key, big = false) {
+  const sh = SHAPES[key], c = CLASSES[sh.cls];
+  return `<span class="sym${big ? ' big' : ''}">${symbolSVG(key, big ? 56 : 44)}</span>` +
+    `<span class="txt"><span class="nm">${sh.name}<i class="cls ${c.dot}" title="${c.tag}"></i><em>${c.tag}</em></span>` +
+    sh.formula.map((f) => `<span class="fx">${f}</span>`).join('') + '</span>';
+}
+
 function buildShapeUI() {
-  const sel = $('shape');
-  sel.innerHTML = Object.entries(SHAPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
-  sel.value = S.shape;
-  sel.addEventListener('change', () => { S.shape = sel.value; S.seed = -1; renderShapeParams(); loadShape(); });
+  const cur = $('shape-current'), list = $('shape-list');
+  list.innerHTML = GROUPS.map((g) => `<div class="sgroup"><h3>${g.title}${g.sub ? `<small>${g.sub}</small>` : ''}</h3>` +
+    g.keys.map((k) => `<button class="sitem" role="option" data-shape="${k}">${shapeCard(k)}</button>`).join('') + '</div>').join('');
+  const open = (on) => { list.classList.toggle('hidden', !on); cur.setAttribute('aria-expanded', on ? 'true' : 'false'); cur.classList.toggle('open', on); };
+  cur.addEventListener('click', () => open(list.classList.contains('hidden')));
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-shape]'); if (!b) return;
+    open(false);
+    selectShape(b.dataset.shape);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') open(false); });
   $('res').addEventListener('input', (e) => { $('res').nextElementSibling.value = e.target.value; });
   $('res').addEventListener('change', (e) => { S.res = +e.target.value; loadShape(); });
   renderShapeParams();
+}
+
+function selectShape(key) {
+  if (!SHAPES[key]) return;
+  S.shape = key; S.seed = -1;
+  renderShapeParams();
+  loadShape();
 }
 
 function renderShapeParams() {
@@ -146,6 +129,8 @@ function renderShapeParams() {
     inp.addEventListener('change', () => { S.params[i] = +inp.value; loadShape(); });
     box.appendChild(row);
   });
+  $('shape-current').innerHTML = shapeCard(S.shape, true) + '<span class="chev" aria-hidden="true">▾</span>';
+  document.querySelectorAll('#shape-list [data-shape]').forEach((b) => b.classList.toggle('on', b.dataset.shape === S.shape));
   $('file-row').classList.toggle('hidden', S.shape !== 'file');
   $('res').closest('.row').classList.toggle('hidden', S.shape === 'file');
   $('shape-note').textContent = def.note;
@@ -204,7 +189,7 @@ async function applyShapeInner(gen, light) {
   if (S.shape === 'loft') S.viewer.setHandles(S.loft.flatControls(), 0.012 * S.size); else S.viewer.clearHandles();
   $('mesh-stats').innerHTML = `<b>${stats.vertices}</b> vertices · <b>${stats.faces}</b> triangles · avg edge <b>${fmt(stats.avgEdge)}</b> · border vertices <b>${stats.boundaryVertices}</b>` +
     (stats.welded ? ` · welded <b>${stats.welded}</b>` : '') + (stats.removedFaces ? ` · removed <b>${stats.removedFaces}</b> faces` : '') + ` · ${stats.ms} ms`;
-  $('hud-shape').textContent = `${SHAPES[S.shape].label.split('  ')[0]} · ${stats.vertices} v · size ${fmt(S.size, 2)}`;
+  $('hud-shape').textContent = `${SHAPES[S.shape].name} · ${stats.vertices} v · size ${fmt(S.size, 2)}`;
   S.curv = null; S.lath = null; S.selected = null; S.frame = null; S.netData = null; S.lathUtil = null; S.aag = null; S.picked = [];
   stopKinetics(true); S.viewer.clearOverlay('picked'); S.viewer.clearOverlay('supports'); S.viewer.clearOverlay('sweepAll');
   S.viewer.clearCurves(); S.viewer.clearOverlay('ends'); S.viewer.clearOverlay('seed');
@@ -728,7 +713,7 @@ function drawKinPlot() {
 // ---------------------------------------------------------------------------
 
 function updateRecipe() {
-  const lines = ['Mite for Grasshopper — reproduce this view', `mesh: ${SHAPES[S.shape].label}` + (S.shape !== 'loft' && S.shape !== 'file' ? ` (${SHAPES[S.shape].params.map((p, i) => `${p[0]} = ${S.params[i]}`).join(', ')})` : '')];
+  const lines = ['Mite for Grasshopper — reproduce this view', `mesh: ${SHAPES[S.shape].name} (${SHAPES[S.shape].formula.join(' ')})` + (S.shape !== 'loft' && S.shape !== 'file' ? ` (${SHAPES[S.shape].params.map((p, i) => `${p[0]} = ${S.params[i]}`).join(', ')})` : '')];
   if (S.mode !== 'shaded' && S.mode !== 'zebra') {
     const comp = { K: 'Gaussian Curvature → K', H: 'Mean Curvature → H', k1: 'Principal Curvature → K1', k2: 'Principal Curvature → K2', radius: 'Principal Curvature → K1, K2 (1/max)', anticlastic: 'Asymptotic Net → Anticlastic (K)' }[S.mode];
     lines.push(`analysis: ${comp} → Mesh Colour Map (Radius = ${S.smooth})`);
@@ -931,7 +916,7 @@ async function main() {
     try {
       const g = await readMeshFile(file);
       S.file = g; S.seed = -1;
-      $('shape').value = 'file'; S.shape = 'file'; renderShapeParams();
+      S.shape = 'file'; renderShapeParams();
       await loadShape();
     } catch (err) { alert(err.message); }
   };
@@ -959,6 +944,7 @@ async function main() {
   S.net = 'asymptotic'; showNetParams(); $('upright').checked = true;
   $('band-row').classList.add('hidden');
   window.__mite = S; // for tests
+  window.__miteSelectShape = (k) => selectShape(k);
   await loadShape();
 }
 

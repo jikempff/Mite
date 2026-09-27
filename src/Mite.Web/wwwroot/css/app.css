@@ -146,3 +146,27 @@ button, input, select { font: inherit; color: inherit; }
 .btn.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .chk.dim { opacity: 0.45; }
 .chk.dim { opacity: 0.45; }
+
+/* shape picker: symbol · name · formula, grouped by curvature class */
+.shape-current, .sitem { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; width: 100%; text-align: left; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; color: var(--ink); }
+.shape-current { grid-template-columns: auto 1fr auto; padding: 10px 12px; }
+.shape-current:hover, .sitem:hover { border-color: var(--ink); }
+.shape-current.open { border-color: var(--ink); }
+.shape-current .chev { color: var(--muted); font-size: 12px; transition: transform 0.15s; }
+.shape-current.open .chev { transform: rotate(180deg); }
+.sym { display: grid; place-items: center; color: var(--ink); }
+.sym svg { display: block; }
+.txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nm { font-size: 14px; font-weight: 500; letter-spacing: 0.01em; display: flex; align-items: center; gap: 6px; }
+.nm em { font-style: normal; font-weight: 400; font-size: 10.5px; letter-spacing: 0.04em; color: var(--muted); margin-left: auto; white-space: nowrap; }
+.fx { font-size: 12px; font-weight: 300; color: var(--muted); font-feature-settings: "tnum" 1; overflow-wrap: anywhere; line-height: 1.35; }
+.cls { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.cls.neg { background: var(--famA); } .cls.pos { background: var(--famB); } .cls.zero { background: var(--famG); }
+.cls.mixed { background: linear-gradient(90deg, var(--famA) 50%, var(--famB) 50%); } .cls.free { background: none; border: 1px solid var(--muted); }
+.shape-list { margin-top: 8px; max-height: 60vh; overflow-y: auto; padding-right: 2px; }
+.sgroup { margin: 10px 0 4px; }
+.sgroup h3 { margin: 0 0 6px; font-size: 10.5px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); }
+.sgroup h3 small { display: block; margin-top: 2px; font-size: 11px; font-weight: 300; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.sitem { border-color: transparent; margin: 1px 0; padding: 6px 10px; }
+.sitem.on { border-color: var(--ink); background: var(--surface); }
+.sitem.on .nm { font-weight: 500; }

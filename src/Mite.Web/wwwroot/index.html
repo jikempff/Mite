@@ -51,7 +51,8 @@
   <aside class="panel" id="panel">
     <section class="block">
       <h2>Shape</h2>
-      <div class="row"><select id="shape" aria-label="Shape"></select></div>
+      <button id="shape-current" class="shape-current" aria-haspopup="listbox" aria-expanded="false" title="Choose a surface"></button>
+      <div id="shape-list" class="shape-list hidden" role="listbox" aria-label="Shapes"></div>
       <div id="shape-params"></div>
       <div class="row slider"><label for="res">resolution</label><input id="res" type="range" min="12" max="96" step="4" value="40"><output for="res">40</output></div>
       <div class="row slider"><label for="span">real span <span class="unit">m</span></label><input id="span" type="range" min="2" max="60" step="1" value="10"><output for="span">10</output></div>

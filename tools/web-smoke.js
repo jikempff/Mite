@@ -34,12 +34,13 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   });
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const errors = [];
+  const pickShape = async (k) => { await page.click('#shape-current'); await page.click(`#shape-list [data-shape=${k}]`); };
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`${base}/index.html?v=${Date.now()}`);
   await page.waitForFunction(() => document.getElementById('boot').classList.contains('hidden'), null, { timeout: 180000 });
 
   // 1. shape change during the first load
-  await page.selectOption('#shape', 'catenoid');
+  await pickShape('catenoid');
   const idle = async (ms) => page.waitForFunction(() => document.getElementById('busy').classList.contains('hidden'), null, { timeout: ms }).then(() => true, () => false);
   check(await idle(120000), 'shape change during the first load finishes (no boot race)');
   const st = await page.evaluate(() => ({ spacing: window.__mite.netData?.resolvedSpacing, size: window.__mite.size, net: window.__mite.net, curves: (window.__mite.netData?.countA || 0) + (window.__mite.netData?.countB || 0) }));
@@ -47,9 +48,9 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   check(st.spacing > 0.03 * st.size && st.spacing < 0.05 * st.size, `spacing scales with the loaded mesh (${st.spacing?.toFixed(3)} of size ${st.size?.toFixed(2)})`);
 
   // 2. switch mid-trace
-  await page.selectOption('#shape', 'hyperboloid');
+  await pickShape('hyperboloid');
   await page.waitForTimeout(1200);
-  await page.selectOption('#shape', 'torus');
+  await pickShape('torus');
   check(await idle(180000), 'switching the shape mid-trace resolves');
   check((await page.evaluate(() => window.__mite.shape)) === 'torus', 'last shape wins');
 
@@ -67,7 +68,7 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   check(await page.$eval('#gh-mode', (e) => e.classList.contains('hidden')), 'mode strip hides for plain shading');
   // 5. layouts: the default symmetric web has every end on the border or at a
   //    node and no T-junction; the border web and the evenly spaced fill still trace
-  await page.selectOption('#shape', 'catenoid'); await idle(180000);
+  await pickShape('catenoid'); await idle(180000);
   await page.click('#nets [data-net=asymptotic]'); await idle(180000);
   const sym = await page.evaluate(() => ({ layout: window.__mite.layout, web: window.__mite.netData?.web, ends: window.__mite.netData?.endClasses || [], t: window.__mite.netData?.crossings?.tJunctions }));
   check(sym.layout === 3 && sym.web && sym.web.rotational && sym.web.quads > 50, `symmetric web on the catenoid is rotational (${sym.web?.quads} quads)`);
@@ -98,7 +99,7 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   check(fr.joints > 50, `every crossing is a frame node (${fr.joints} joints)`);
 
   // 8. kinetics on the 3-fold Enneper: a coarse symmetric web moves
-  await page.selectOption('#shape', 'enneper3'); await idle(180000);
+  await pickShape('enneper3'); await idle(180000);
   await page.click('.presets [data-sp="8"]'); await idle(180000);
   await page.click('#kinrun'); await idle(300000);
   const kin = await page.evaluate(() => window.__mite.kin);
