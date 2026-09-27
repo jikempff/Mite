@@ -14,8 +14,9 @@ public class GridshellAnalysisComponent : MiteComponent
     public GridshellAnalysisComponent()
         : base("Gridshell Analysis", "GridFE",
             "Linear static analysis of a lath network as a 3D beam frame. Laths become " +
-            "Euler-Bernoulli beams with the strip section, coupled at net crossings; " +
-            "supports are fixed points. Geometry is converted from the document units to " +
+            "Euler-Bernoulli beams with the strip section, coupled at net crossings (rigid, " +
+            "scissor hinge or semi-rigid about the surface normal); supports are fixed or pinned points; " +
+            "loads per metre of lath, self-weight, area load and point loads. Geometry is converted from the document units to " +
             "metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. " +
             "A first-order sanity check, not a full FE package.",
             "Analysis", "GridshellAnalysis") { }
@@ -38,7 +39,15 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("Sampling", "Sa", "Chord deviation for curve sampling (0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddNumberParameter("MaxSegment", "Ms", "Beam element size in model units (0 = automatic: twice the mesh edge length)", GH_ParamAccess.item, 0.0);
         RegisterSectionInputs(pManager); // 13 Shape, 14 Section — beam section properties follow the profile
+        pManager.AddIntegerParameter("SupportType", "St", "0 = fixed (all six degrees of freedom), 1 = pinned (translations held, rotations free)", GH_ParamAccess.item, 0);
+        pManager.AddNumberParameter("JointStiffness", "Jk", "Rotational stiffness of the joints about the surface normal in N·m/rad: −1 = rigid (default), 0 = free scissor hinge (a bolt along the normal), > 0 semi-rigid bolted joint", GH_ParamAccess.item, -1.0);
+        pManager.AddNumberParameter("Density", "ρ", "Material density in kg/m³ for self-weight (0 = none; timber ≈ 450, steel 7850)", GH_ParamAccess.item, 0.0);
+        pManager.AddNumberParameter("AreaLoad", "q", "Vertical area load in N/m² on the mesh area (snow, cladding), shared by the laths per metre of length (0 = none)", GH_ParamAccess.item, 0.0);
+        pManager.AddPointParameter("LoadPoints", "Lp", "Points where concentrated forces act (attached to the nearest node)", GH_ParamAccess.list);
+        pManager.AddVectorParameter("Forces", "F", "Force in N per load point (one per point, or one for all)", GH_ParamAccess.list);
         pManager[2].Optional = true;
+        pManager[19].Optional = true;
+        pManager[20].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -51,6 +60,9 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddPointParameter("Nodes", "N", "Frame nodes after merging", GH_ParamAccess.list);
         pManager.AddVectorParameter("Displacements", "Dv", "Displacement vector per node (model units)", GH_ParamAccess.list);
         pManager.AddNumberParameter("Axial", "Nx", "Axial force per element in N (tension positive), one branch per lath", GH_ParamAccess.tree);
+        pManager.AddPointParameter("SupportNodes", "Sn", "The frame nodes the supports hold", GH_ParamAccess.list);
+        pManager.AddVectorParameter("Reactions", "R", "Reaction force in N at each support node", GH_ParamAccess.list);
+        pManager.AddTextParameter("Report", "Rp", "Totals: applied load, reactions, equilibrium error, joints, supports", GH_ParamAccess.item);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -79,6 +91,14 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.GetData(13, ref shape);
         Curve? section = null;
         DA.GetData(14, ref section);
+        int supportType = 0; double jointK = -1, density = 0, areaLoad = 0;
+        DA.GetData(15, ref supportType);
+        DA.GetData(16, ref jointK);
+        DA.GetData(17, ref density);
+        DA.GetData(18, ref areaLoad);
+        var loadPts = new List<Point3d>(); var forces = new List<Vector3d>();
+        DA.GetDataList(19, loadPts);
+        DA.GetDataList(20, forces);
 
         if (supports.Count == 0)
         {
@@ -135,13 +155,28 @@ public class GridshellAnalysisComponent : MiteComponent
         var supportPts = new List<Vec3d>();
         foreach (var p in supports) supportPts.Add(s * MeshConvert.ToVec3d(p));
 
+        List<(Vec3d, Vec3d)>? pointLoads = null;
+        if (loadPts.Count > 0 && forces.Count > 0)
+        {
+            pointLoads = new List<(Vec3d, Vec3d)>();
+            for (int i = 0; i < loadPts.Count; i++)
+                pointLoads.Add((s * MeshConvert.ToVec3d(loadPts[i]), MeshConvert.ToVec3d(forces[Math.Min(i, forces.Count - 1)])));
+        }
+
         FrameAnalysis.Result result;
         try
         {
             result = FrameAnalysis.Compute(meshM, laths, jointPts, supportPts,
                 profile,
                 MeshConvert.ToVec3d(load),
-                new FrameAnalysis.Options { E = e, AllowableStress = allowable });
+                new FrameAnalysis.Options
+                {
+                    E = e, AllowableStress = allowable,
+                    Support = supportType == 1 ? FrameAnalysis.SupportKind.Pinned : FrameAnalysis.SupportKind.Fixed,
+                    JointRotationalStiffness = jointK < 0 ? double.PositiveInfinity : jointK,
+                    Density = Math.Max(0, density), AreaLoad = areaLoad,
+                    PointLoads = pointLoads,
+                });
         }
         catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
         {
@@ -205,6 +240,14 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.SetDataList(5, nodes);
         DA.SetDataList(6, disps);
         DA.SetDataTree(7, axialTree);
+        var supNodes = new List<Point3d>(); var reacts = new List<Vector3d>();
+        foreach (int n in result.SupportNodes) { supNodes.Add(MeshConvert.ToRhinoPoint(inv * result.Nodes[n])); reacts.Add(MeshConvert.ToRhinoVector(result.Reactions[n])); }
+        DA.SetDataList(8, supNodes);
+        DA.SetDataList(9, reacts);
+        var sumR = Vec3d.Zero; foreach (int n in result.SupportNodes) sumR = sumR + result.Reactions[n];
+        DA.SetData(10, $"load {result.TotalLoad.Z / 1000:0.###} kN (vertical) · reactions {sumR.Z / 1000:0.###} kN · equilibrium error {result.EquilibriumError:E1}\n" +
+            $"{result.Nodes.Length} nodes · {result.Utilization.Length} elements · {result.JointCount} joints · {result.SupportNodeCount} supports ({(supportType == 1 ? "pinned" : "fixed")}) · joints {(jointK < 0 ? "rigid" : jointK == 0 ? "hinged" : $"k = {jointK:G3} N·m/rad")}\n" +
+            $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}");
 
         if (result.MaxUtilization > 1.0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,

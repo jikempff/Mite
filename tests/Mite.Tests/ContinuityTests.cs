@@ -250,7 +250,8 @@ public class ContinuityTests
             new FrameAnalysis.Options { CoupleEndsOnLaths = false });
 
         // Uncoupled, B is a 5 m cantilever; coupled, its tip rests on A
-        Assert.True(coupled.Nodes.Length < loose.Nodes.Length, "coupling merges B's end into A");
+        Assert.Equal(1, coupled.JointCount); // B's end is inserted into A: one shared node
+        Assert.Equal(0, loose.JointCount);
         Assert.True(coupled.MaxDisplacement < 0.5 * loose.MaxDisplacement,
             $"coupled {coupled.MaxDisplacement:E3} vs loose {loose.MaxDisplacement:E3}");
     }

@@ -279,7 +279,7 @@ internal static class FieldTracer
     /// with the reference direction is chosen, then the picks are blended with
     /// the hit's barycentric weights and flattened into the local tangent plane.
     /// </summary>
-    private static Vec3d SampleLineField(
+    internal static Vec3d SampleLineField(
         MeshProjection proj, in MeshProjection.Hit hit, Vec3d[] dirsA, Vec3d[]? dirsB, Vec3d reference)
     {
         var face = proj.Mesh.Faces[hit.Face];
