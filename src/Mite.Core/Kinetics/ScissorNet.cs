@@ -71,6 +71,14 @@ public sealed class ScissorNet
     /// <summary>Per node: the laths passing through it.</summary>
     public IReadOnlyList<int[]> NodeLaths { get; }
 
+    /// <summary>
+    /// Arc length of every segment along the lath it was cut from (per lath,
+    /// per consecutive pair): the strip length between two nodes, of which
+    /// <see cref="RestLengths"/> is the chord. Equal to the chords for nets
+    /// built from explicit nodes.
+    /// </summary>
+    public IReadOnlyList<double[]> RestArcs { get; private set; }
+
     /// <summary>Mean segment rest length (the length scale of the residuals).</summary>
     public double Scale { get; }
 
@@ -236,6 +244,7 @@ public sealed class ScissorNet
             rest.Add(r);
         }
         RestLengths = rest;
+        RestArcs = rest;
         Scale = count > 0 ? sum / count : 1.0;
 
         var nodeLaths = new List<int>[Nodes.Length];
@@ -274,33 +283,33 @@ public sealed class ScissorNet
             if (m.Lath >= 0 && m.Lath < lathCount) perLath[m.Lath].Add((m.NodeStart, m.NodeEnd, m.Points));
 
         var laths = new List<int[]>();
+        var lathArcs = new List<double[]>();
         var lathIds = new List<int>();
         for (int l = 0; l < lathCount; l++)
         {
             var seq = new List<int>();
+            var arcs = new List<double>();   // arc length along the lath of every step of seq
+            void Step(int node, double arc) { if (seq.Count > 0) arcs.Add(arc); seq.Add(node); }
             var members = perLath[l];
             for (int k = 0; k < members.Count; k++)
             {
                 var (start, end, pts) = members[k];
                 int s = start;
                 if (s < 0) { s = nodes.Count; nodes.Add(pts[0]); }
-                if (seq.Count == 0 || seq[seq.Count - 1] != s) seq.Add(s);
+                if (seq.Count == 0 || seq[seq.Count - 1] != s) Step(s, seq.Count == 0 ? 0 : (nodes[s] - nodes[seq[seq.Count - 1]]).Length);
                 // interior subdivision nodes along the member polyline
                 double len = 0; for (int i = 1; i < pts.Length; i++) len += (pts[i] - pts[i - 1]).Length;
-                if (maxSegment > 0 && len > maxSegment * 1.0001)
+                int pieces = maxSegment > 0 && len > maxSegment * 1.0001 ? (int)Math.Ceiling(len / maxSegment - 1e-9) : 1;
+                for (int p = 1; p < pieces; p++)
                 {
-                    int pieces = (int)Math.Ceiling(len / maxSegment - 1e-9);
-                    for (int p = 1; p < pieces; p++)
-                    {
-                        var q = PointAtArc(pts, len * p / pieces);
-                        seq.Add(nodes.Count); nodes.Add(q);
-                    }
+                    var q = PointAtArc(pts, len * p / pieces);
+                    nodes.Add(q); Step(nodes.Count - 1, len / pieces);
                 }
                 int e = end;
                 if (e < 0) { e = nodes.Count; nodes.Add(pts[pts.Length - 1]); }
-                seq.Add(e);
+                Step(e, len / pieces);
             }
-            if (seq.Count >= 2) { laths.Add(seq.ToArray()); lathIds.Add(l); }
+            if (seq.Count >= 2) { laths.Add(seq.ToArray()); lathArcs.Add(arcs.ToArray()); lathIds.Add(l); }
         }
         // Free tails much shorter than a segment (a lath trimmed just past its last joint) carry no
         // stiffness worth modelling and ruin the conditioning (their residuals divide by the length):
@@ -312,10 +321,10 @@ public sealed class ScissorNet
             int joints = topo.Nodes.Count();
             for (int k = 0; k < laths.Count; k++)
             {
-                var l = laths[k].ToList();
-                while (l.Count > 2 && l[0] >= joints && (nodes[l[1]] - nodes[l[0]]).Length < minTail) l.RemoveAt(0);
-                while (l.Count > 2 && l[l.Count - 1] >= joints && (nodes[l[l.Count - 1]] - nodes[l[l.Count - 2]]).Length < minTail) l.RemoveAt(l.Count - 1);
-                laths[k] = l.ToArray();
+                var l = laths[k].ToList(); var ar = lathArcs[k].ToList();
+                while (l.Count > 2 && l[0] >= joints && (nodes[l[1]] - nodes[l[0]]).Length < minTail) { l.RemoveAt(0); ar.RemoveAt(0); }
+                while (l.Count > 2 && l[l.Count - 1] >= joints && (nodes[l[l.Count - 1]] - nodes[l[l.Count - 2]]).Length < minTail) { l.RemoveAt(l.Count - 1); ar.RemoveAt(ar.Count - 1); }
+                laths[k] = l.ToArray(); lathArcs[k] = ar.ToArray();
             }
             var used = new bool[nodes.Count];
             foreach (var l in laths) foreach (int v in l) used[v] = true;
@@ -329,6 +338,7 @@ public sealed class ScissorNet
         if (normalAt != null) normals = nodes.Select(normalAt).ToArray();
         var net = new ScissorNet(nodes.ToArray(), laths, a, normals);
         net.SourceLaths = lathIds.ToArray();
+        net.RestArcs = lathArcs;
         return net;
     }
 

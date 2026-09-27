@@ -33,6 +33,11 @@ where they overlap
    colouring per state, the deployment driven from the flat grid by pulling
    the singular node (José's Kangaroo sequence), the physical prototype
    dimensions.
+6. The kit to build it (done 1.3.1: Flat Kit — flat assembly 1 : 1, strips
+   with slots / holes / hub on laser sheets, deployment sequence, cut list,
+   SVG / DXF / CSV); next: a physical prototype of the 3-fold Enneper to
+   check slot play and the deployment against the model, hub plate design,
+   supports, and the G laths in the kit.
 4. One lath section for every curve (done in the web app 1.3.0; per-family
    profiles in Grasshopper still open).
 5. Black, white and neon for everything visual (web app done 1.3.0; bench,

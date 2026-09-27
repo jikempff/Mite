@@ -170,3 +170,7 @@ button, input, select { font: inherit; color: inherit; }
 .sitem { border-color: transparent; margin: 1px 0; padding: 6px 10px; }
 .sitem.on { border-color: var(--ink); background: var(--surface); }
 .sitem.on .nm { font-weight: 500; }
+
+.kitview { margin-top: 8px; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.kitview img { width: 100%; display: block; }
+#ksheetw, #ksheeth { width: 5.5em; }

@@ -187,6 +187,12 @@ curves of an **Asymptotic Net**, then drive it:
   joints) shorten or lengthen to `Le` at `Fo` = 1;
 - (Lath Sweep, Net Joints and Lath Segment take `Al` Align: 0 the lath grows
   from the surface out, 1 centred on it, 2 grows in.)
+- **Flat Kit** (Mite > Fabrication) takes the same `A` / `B` (and the web's
+  seed as `P`) and gives the kit to build it: the flat assembly with joints
+  numbered, the strips laid out on sheets with their slots or holes, the
+  deployment states and a cut list; set `F` to a folder and `Wr` = True for
+  the SVG / DXF / CSV files. `W` / `T` are the strip width and sheet thickness
+  in model units; the files are in millimetres.
 - `Fl` Flatten = True presses the net flat: the first `F` joint (or the one
   nearest the centre) is held and every lath end slides onto the plane through
   it (normal `Sn`). On an **Asymptotic Web** of the 3-fold Enneper, with `F` on

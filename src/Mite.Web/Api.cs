@@ -281,6 +281,48 @@ public class FramePayload
     public long Ms { get; set; }
 }
 
+public class KitOptions
+{
+    /// <summary>Strip width and thickness in model units.</summary>
+    public double Width { get; set; }
+    public double Thickness { get; set; }
+    public bool Upright { get; set; } = true;
+    /// <summary>0 auto (slots for upright laths, holes for flat), 1 slots, 2 holes.</summary>
+    public int Joint { get; set; }
+    /// <summary>Pin hole diameter and fit clearance in model units (0 = defaults).</summary>
+    public double Hole { get; set; }
+    public double Clearance { get; set; }
+    /// <summary>Millimetres per model unit.</summary>
+    public double ToMm { get; set; } = 1000;
+    public double SheetWidth { get; set; } = 600;
+    public double SheetHeight { get; set; } = 400;
+    public double Stiffness { get; set; } = 0.3;
+    public int Steps { get; set; } = 8;
+}
+
+public class KitPayload
+{
+    public int Strips { get; set; }
+    public int Joints { get; set; }
+    public int Hubs { get; set; }
+    public int Sheets { get; set; }
+    public int TooLong { get; set; }
+    public double TotalLength { get; set; }
+    public double LongestStrip { get; set; }
+    public double Flatness { get; set; }
+    public double Drift { get; set; }
+    public double MinAngle { get; set; }
+    public double SlotMin { get; set; }
+    public double SlotMax { get; set; }
+    public string AssemblySvg { get; set; } = "";
+    public string DeploymentSvg { get; set; } = "";
+    public string FirstSheetSvg { get; set; } = "";
+    /// <summary>Every file of the kit as a zip, base64.</summary>
+    public string Zip { get; set; } = "";
+    public string? Error { get; set; }
+    public long Ms { get; set; }
+}
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(MeshStats))]
 [JsonSerializable(typeof(CurvaturePayload))]
@@ -296,6 +338,8 @@ public class FramePayload
 [JsonSerializable(typeof(FrameOptions))]
 [JsonSerializable(typeof(KineticsOptions))]
 [JsonSerializable(typeof(KineticsPayload))]
+[JsonSerializable(typeof(KitOptions))]
+[JsonSerializable(typeof(KitPayload))]
 internal partial class MiteJson : JsonSerializerContext { }
 
 // ---------------------------------------------------------------------------
@@ -970,6 +1014,51 @@ public static partial class MiteApi
         catch (Exception ex) { p.Error = ex.Message; }
         p.Ms = sw.ElapsedMilliseconds;
         return JsonSerializer.Serialize(p, MiteJson.Default.KineticsPayload);
+    }
+
+    // ---- Flat kit: cut, assemble flat, deploy -----------------------------------
+
+    [JSExport]
+    public static string Kit(string optionsJson)
+    {
+        var sw = Stopwatch.StartNew();
+        var p = new KitPayload();
+        var o = JsonSerializer.Deserialize(optionsJson, MiteJson.Default.KitOptions) ?? new KitOptions();
+        if (_mesh == null || _proj == null || _famA.Count == 0 || _famB.Count == 0) { p.Error = "Trace an asymptotic net (two families) first."; return JsonSerializer.Serialize(p, MiteJson.Default.KitPayload); }
+        try
+        {
+            var proj = _proj;
+            var (mn, mx) = _mesh.BoundingBox();
+            var seedPt = _web != null ? _web.Seed : 0.5 * (mn + mx);
+            var probe = NetTopology.Build(_famA, _famB, NetIntersections.FindAll(_famA, _famB, 0));
+            if (probe.Nodes.Length > 900) { p.Error = $"{probe.Nodes.Length} joints is too many for the browser; raise the spacing (coarse) and build again."; return JsonSerializer.Serialize(p, MiteJson.Default.KitPayload); }
+            var h = proj.ClosestPoint(seedPt, proj.NearestVertexGlobal(seedPt));
+            var nrm = h.SmoothNormal.Normalized();
+            var (net, motion, anchor) = FlatKit.Press(_famA, _famB, h.Point, nrm, q => proj.ClosestPoint(q, proj.NearestVertexGlobal(q)).SmoothNormal,
+                Math.Max(2, Math.Min(16, o.Steps)), Math.Max(0.01, o.Stiffness), 40);
+            var kit = FlatKit.Build(net, motion, anchor, nrm, new FlatKit.Options
+            {
+                Width = o.Width, Thickness = o.Thickness, Upright = o.Upright, Joint = (FlatKit.JointKind)Math.Max(0, Math.Min(2, o.Joint)),
+                HoleDiameter = o.Hole, Clearance = o.Clearance,
+            });
+            var eo = new KitExport.Options { ToMm = o.ToMm > 0 ? o.ToMm : 1000, SheetWidth = o.SheetWidth > 0 ? o.SheetWidth : 600, SheetHeight = o.SheetHeight > 0 ? o.SheetHeight : 400 };
+            var sheets = KitExport.StripSheets(kit, eo);
+            var assembly = KitExport.Assembly(kit, o.Upright ? o.Thickness : o.Width, eo);
+            var deploy = KitExport.Deployment(kit);
+            p.AssemblySvg = KitExport.ToSvg(assembly);
+            p.DeploymentSvg = KitExport.ToSvg(deploy);
+            p.FirstSheetSvg = sheets.Count > 0 ? KitExport.ToSvg(sheets[0]) : "";
+            p.Zip = Convert.ToBase64String(KitExport.Zip(kit, sheets, assembly, deploy, eo));
+            p.Strips = kit.Strips.Count; p.Joints = kit.Joints.Count; p.Hubs = kit.Joints.Count(j => j.Hub);
+            p.Sheets = sheets.Count(d => d.Title.StartsWith("sheet")); p.TooLong = kit.Strips.Count(s => s.Length * eo.ToMm + 2 * eo.Gap > eo.SheetWidth);
+            p.TotalLength = kit.TotalLength; p.LongestStrip = kit.Strips.Max(s => s.Length);
+            p.Flatness = kit.Flatness; p.Drift = kit.Drift; p.MinAngle = kit.Joints.Select(j => j.MinAngle).DefaultIfEmpty(90).Min();
+            var slots = kit.Strips.SelectMany(s => s.Marks).Where(m => m.Kind == FlatKit.MarkKind.SlotOuter || m.Kind == FlatKit.MarkKind.SlotInner).Select(m => m.Size).ToList();
+            p.SlotMin = slots.DefaultIfEmpty(0).Min(); p.SlotMax = slots.DefaultIfEmpty(0).Max();
+        }
+        catch (Exception ex) { p.Error = ex.Message; }
+        p.Ms = sw.ElapsedMilliseconds;
+        return JsonSerializer.Serialize(p, MiteJson.Default.KitPayload);
     }
 
     // ---- helpers ---------------------------------------------------------------

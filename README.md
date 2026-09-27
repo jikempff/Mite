@@ -46,6 +46,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - **Lath Segment** — splits laths to stock length, cuts kept away from joints, with half-lap splice notch solids
 - **Lath Labels** — lath IDs, label anchor points, and a CSV bill of materials
 - **Lath Preview** — color-codes laths by utilization (green → red)
+- **Flat Kit** — cut, assemble flat, deploy: presses an asymptotic net flat as a scissor mechanism and turns the flat state into a kit — the flat assembly drawing at 1 : 1 (joints numbered, laths labelled), every lath one straight strip with its joints at their spacing (halving slots that turn about the normal, pin holes, or a hub where the rays of a flat point meet), strips nested on laser sheets, the deployment sequence and a cut list; SVG (red cut, blue engrave), DXF R12 and CSV in millimetres
 - **Net Topology** — nodes and members of a two-family net as a structural graph (for Karamba-style analysis or a node schedule); same-family crossings and T-junctions are nodes too
 
 ### Kinetics
@@ -63,7 +64,7 @@ All Grasshopper components weld coincident vertices on intake (STL imports, Brep
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (29 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (30 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -128,7 +129,7 @@ Components appear under the **Mite** tab:
 - **Form Finding** — Planarize Mesh, Minimal Surface, Force Density Method, Dynamic Relaxation
 - **Gridshells** — Asymptotic Web, Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
 - **Analysis** — Lath Analysis, Gridshell Analysis, Mesh Isocurves
-- **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview, Net Topology
+- **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview, Flat Kit, Net Topology
 - **Kinetics** — Net Kinetics
 - **Util** — Mesh Cleanup, Pull To Mesh, Mesh Colour Map
 
@@ -141,6 +142,7 @@ plus IDs and a BOM from **Lath Labels**.
 ## Changelog
 
 ### 1.3.1
+- **Flat Kit** (new component, Mite > Fabrication; `Fabrication/FlatKit` and `KitExport` in the core; a Kit block in the web app with a zip download): cut, assemble flat, deploy. The net is pressed flat as a scissor mechanism and the flat state becomes the kit. Every lath is one straight strip whose joints sit at the lath's arc length between crossings — the length the scissor joints keep through the whole motion, so the strips fit the flat grid and the curved one alike. Upright laths cross in halving slots (A from the outer edge, B from the inner, half the width deep), each as wide as the other strip's footprint at the smallest angle that joint reaches while deploying; flat strips cross on pin holes; a node of three or more laths (the six rays of a 3-fold Enneper web) is a hub. Outputs: the flat assembly at 1 : 1 with joints numbered and laths labelled, the strips nested on laser sheets with every slot labelled with the strip it joins, the deployment from flat to curved, a cut list and a README with the sequence — SVG (red cut, blue engrave), DXF R12 and CSV in millimetres. On the 3-fold Enneper web: 54 strips, 385 joints and one hub, slots 1–1.4 × the sheet thickness (joints turning down to 46°), flat to 3e-5 of the spacing; every crossing appears on exactly two strips labelled with each other, and every strip outline removes exactly its slots.
 - **Press flat** (Net Kinetics `Flatten` input, appended; `ScissorNet.PressFlat` in the core; the default drive in the web app): the anchor joint is held and every lath end slides on a plane that moves from its rest height onto the anchor's tangent plane as Fold goes 0 → 1 — the flat-assembled deployable asymptotic gridshell read backwards. Nothing else is prescribed, so the flat state is the one the mechanism reaches: the 3-fold Enneper web lays flat into a hexagon (support function 60°-periodic to 1 %), joint spacing within 0.1 %, laths asymptotic to 0.1°, the laths bending in the plane around the six rays and the scissors closing towards the rim (90° in the curved state, 65° on average in the outer third of the flat one). Scrub the fold from 1 back to 0 for the deployment.
 - Kinetic nets drop free tails shorter than a quarter of the mean joint spacing (a lath trimmed just past its last joint): a 0.002 h stub divided every residual of its lath by its length and kept the solver from converging.
 - **Lath alignment** (`LathProfile.Align` / `WithAlign`, `Align` input appended to Lath Sweep, Net Joints and Lath Segment): a lath grows from the surface out (0, as before), is centred on it (1: the traced curve is its centre line) or grows from the surface in (2); Offset is the gap to the near face, or the shift of the centre when centred. Joint and splice notches follow the lath. In the web app the choice applies to the A / B laths, and the flat G laths rest on the outer face of the A / B laths instead of lying in the surface, where the shaded mesh cut through them.

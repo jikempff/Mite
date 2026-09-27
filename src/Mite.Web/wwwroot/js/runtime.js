@@ -58,5 +58,6 @@ export async function bootMite(onProgress) {
     aag: (opts) => J(api.Aag(JSON.stringify(opts))),
     frame: (opts) => J(api.Frame(JSON.stringify(opts))),
     kinetics: (opts) => J(api.Kinetics(JSON.stringify(opts))),
+    kit: (opts) => J(api.Kit(JSON.stringify(opts))),
   };
 }

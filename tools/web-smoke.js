@@ -116,6 +116,12 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   });
   check(hex < 0.04, `the flat web is a hexagon (support function 60°-periodic to ${(hex * 100).toFixed(2)} %)`);
 
+  // 9. the kit of the pressed web: strips, joints, a hub and a zip
+  await page.click('#kitrun'); await idle(300000);
+  const kit = await page.evaluate(() => window.__mite.kit);
+  check(kit && !kit.error && kit.strips > 20 && kit.hubs === 1 && kit.sheets >= 1 && kit.zip.length > 1000 && kit.assemblySvg.startsWith('<svg'), `kit built (${kit?.error || `${kit?.strips} strips, ${kit?.joints} joints, ${kit?.hubs} hub, ${kit?.sheets} sheets`})`);
+  check(kit && kit.flatness < 1e-3 && kit.slotMin > 0, `kit is flat with slots (${kit?.flatness?.toExponential(1)}, ${kit?.slotMin})`);
+
   const broken = await page.$$eval('img', (imgs) => imgs.filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.getAttribute('src')));
   check(broken.length === 0, `all icons load (${broken.join(', ') || 'none broken'})`);
   check(errors.length === 0, `no page errors (${errors.join(' | ') || 'none'})`);

@@ -562,11 +562,26 @@ def icon_tab():
     big2.save(os.path.join(WEB_OUT, "Mite_Tab.png"))
 
 
+def icon_flat_kit():
+    """The kit: the flat hexagonal grid (rays and one ring) above a straight strip with two slots."""
+    img, d = canvas()
+    cx, cy, r = 12.0, 8.5, 6.8
+    ring = [P(cx + r * math.cos(k * math.pi / 3), cy + r * math.sin(k * math.pi / 3)) for k in range(7)]
+    stroke(d, ring, "timber", 0.9)
+    for k in range(6):
+        a = math.pi / 6 + k * math.pi / 3
+        stroke(d, [P(cx, cy), P(cx + 0.87 * r * math.cos(a), cy + 0.87 * r * math.sin(a))], "timber", 0.8)
+    dot(d, cx, cy, 1.3, "timber")
+    fill_poly(img, [P(2, 17.5), P(7.2, 17.5), P(7.2, 19.2), P(8.8, 19.2), P(8.8, 17.5), P(15.2, 17.5), P(15.2, 19.2), P(16.8, 19.2),
+                    P(16.8, 17.5), P(22, 17.5), P(22, 21.5), P(2, 21.5)], "timber")
+    finish(img, "FlatKit")
+
+
 ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics,
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
        icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
        icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,
-       icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics,
+       icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics, icon_flat_kit,
        icon_mesh_cleanup, icon_pull_to_mesh, icon_mesh_colour_map, icon_tab]
 
 if __name__ == "__main__":

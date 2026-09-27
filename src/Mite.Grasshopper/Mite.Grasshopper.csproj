@@ -47,5 +47,6 @@
     <EmbeddedResource Include="Resources\GeodesicPath.png" />
     <EmbeddedResource Include="Resources\NetTopology.png" />
     <EmbeddedResource Include="Resources\NetKinetics.png" />
+    <EmbeddedResource Include="Resources\FlatKit.png" />
   </ItemGroup>
 </Project>

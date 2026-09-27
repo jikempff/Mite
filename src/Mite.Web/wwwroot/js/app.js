@@ -59,7 +59,7 @@ const S = {
   net: 'none', netData: null, seed: -1, seedPoint: null, seedNormal: [0, 0, 1], dir: [1, 0.35, 0],
   loft: null, file: null,
   lath: null, selected: null, lathUtil: null,
-  frame: null, aag: null, kin: null, kinTimer: null, drive: 'flatten', picked: [], picking: false,
+  frame: null, aag: null, kin: null, kit: null, kinTimer: null, drive: 'flatten', picked: [], picking: false,
   busy: 0, gen: 0, loading: false, layout: 3,
 };
 
@@ -342,6 +342,7 @@ async function traceNet() {
   const v = S.viewer;
   S.lath = null; S.selected = null; S.frame = null; S.lathUtil = null; S.aag = null;
   stopKinetics(true); S.viewer.setMeshOpacity(surfaceOpacity()); showUtilLegend(false);
+  S.kit = null; $('kit-result').classList.add('hidden'); $('kitzip').classList.add('hidden');
   $('lath-result').classList.add('hidden');
   $('frame-stats').textContent = ''; $('laths-stats').textContent = ''; $('aag-stats').classList.add('hidden');
   v.clearOverlay('supports'); v.clearOverlay('deformed'); v.clearOverlay('sweepAll');
@@ -712,6 +713,50 @@ function drawKinPlot() {
 }
 
 // ---------------------------------------------------------------------------
+// Kit: the flat assembly, the strips and the deployment
+// ---------------------------------------------------------------------------
+
+const svgUrl = (svg) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+
+async function runKit() {
+  if (!S.netData || S.net !== 'asymptotic') { $('kit-stats').textContent = 'The kit needs an asymptotic net (two families): pick Asymptotic in the Net block.'; $('kit-result').classList.remove('hidden'); return; }
+  const o = lathOpts();
+  const scale = +$('kscale').value, toMm = toMetres() * 1000 / scale;
+  // 1 : 1 — the Laths section; a model — its own strip and sheet, in mm of the model
+  const width = scale === 1 ? o.width : +$('kwidth').value / toMm, thickness = scale === 1 ? o.thickness : +$('kthick').value / toMm;
+  const opts = { width, thickness, upright: o.upright, joint: +$('kjoint').value, hole: 0, clearance: +$('kclear').value / toMm,
+    toMm, sheetWidth: +$('ksheetw').value, sheetHeight: +$('ksheeth').value, stiffness: 0.3, steps: 8 };
+  const gen = S.gen;
+  await withBusy('pressing the net flat and cutting the strips…', async () => {
+    const r = await K('kit', opts);
+    if (gen !== S.gen) return;
+    $('kit-result').classList.remove('hidden');
+    if (r.error) { $('kit-stats').innerHTML = `<span class="bad">${r.error}</span>`; $('kitzip').classList.add('hidden'); return; }
+    S.kit = r;
+    const mm = opts.toMm;
+    $('kit-stats').innerHTML = `1 : ${scale} · <b>${r.strips}</b> strips · <b>${r.joints}</b> joints${r.hubs ? ` (${r.hubs} hub)` : ''} · <b>${fmt(r.totalLength * mm / 1000, 1)} m</b> of ${fmt(width * mm, 1)} × ${fmt(thickness * mm, 1)} mm · longest <b>${fmt(r.longestStrip * mm, 0)} mm</b>\n` +
+      `<b>${r.sheets}</b> sheet${r.sheets === 1 ? '' : 's'} of ${opts.sheetWidth} × ${opts.sheetHeight} mm` + (r.tooLong ? ` + <span class="bad">${r.tooLong} strips longer than the sheet</span>` : '') +
+      (r.slotMax > 0 ? ` · slots <b>${fmt(r.slotMin * mm, 1)}–${fmt(r.slotMax * mm, 1)} mm</b> (joints down to ${fmt(r.minAngle, 0)}°)` : '') +
+      `\nflat to <b>${fmt(r.flatness * mm, 2)} mm</b> · joint spacing kept to <b>${(r.drift * 100).toFixed(2)} %</b> · ${r.ms} ms`;
+    $('kit-assembly').src = svgUrl(r.assemblySvg);
+    $('kit-deploy').src = svgUrl(r.deploymentSvg);
+    $('kit-sheet').src = svgUrl(r.firstSheetSvg);
+    $('kitzip').classList.remove('hidden');
+  });
+}
+
+function downloadKit() {
+  const r = S.kit; if (!r?.zip) return;
+  const bin = atob(r.zip), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+  a.download = `mite-kit-${S.shape}.zip`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+// ---------------------------------------------------------------------------
 // Recipe
 // ---------------------------------------------------------------------------
 
@@ -744,6 +789,7 @@ function updateRecipe() {
     const f = frameOptions();
     lines.push(`Gridshell Analysis: Supports = ${f.supports === 'border' ? 'lath ends on the border' : f.supports === 'lowest' ? `lath ends in the lowest ${$('band').value} %` : `${S.picked.length} picked points`}, SupportType = ${f.supportType}, JointStiffness = ${f.jointStiffness < 0 ? -1 : f.jointStiffness} N·m/rad, Density = ${f.density}, AreaLoad = ${f.areaLoad} N/m², Load = (0,0,−${f.lineLoad}) N/m`);
   }
+  if (S.kit) lines.push(`Flat Kit: A, B from the net, P = the seed, scale 1 : ${$('kscale').value} (W, T in model units), Upright = ${$('upright').checked}, Joint = ${$('kjoint').value}, SheetWidth = ${$('ksheetw').value}, SheetHeight = ${$('ksheeth').value} → Folder + Write for the SVG / DXF / CSV`);
   if (S.kin) lines.push(`Net Kinetics: drive ${S.drive}, amplitude ${$('kamp').value}, Stiffness = ${$('kstiff').value}, Steps = ${$('ksteps').value}`);
   $('recipe').textContent = lines.join('\n');
 }
@@ -905,6 +951,10 @@ async function main() {
   });
   for (const id of ['kamp', 'kstiff', 'ksteps']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
   $('kinrun').addEventListener('click', runKinetics);
+  $('kitrun').addEventListener('click', runKit);
+  $('kitzip').addEventListener('click', downloadKit);
+  for (const id of ['kclear', 'kwidth', 'kthick']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
+  $('kscale').addEventListener('change', () => $('kmodel').classList.toggle('hidden', $('kscale').value === '1'));
   $('kfold').addEventListener('input', () => { stopKinetics(); showKinState(+$('kfold').value); drawKinPlot(); });
   $('kplay').addEventListener('click', () => {
     if (S.kinTimer) { stopKinetics(); return; }

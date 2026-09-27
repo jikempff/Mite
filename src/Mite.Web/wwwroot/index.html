@@ -213,6 +213,32 @@
       <p id="kin-note" class="note">Hinges keep the joint spacing and stay normal to the laths; the laths keep their rest bend as far as the stiffness asks (Schikore et al. 2020; Wan, Crolla &amp; Schling 2025). <b>Press flat</b> at amplitude 1 lays the net on the seed's tangent plane: the 3-fold Enneper web folds into a hexagon — the laths bend in the plane around the six rays and the scissors close towards the rim. Scrub the fold back from 1 to 0 to watch the flat grid deploy.</p>
     </section>
 
+    <section class="block" id="kit-block">
+      <h2>Kit <small>cut, assemble flat, deploy</small></h2>
+      <div class="gh"><img src="icons/FlatKit.png" alt="" title="Flat Kit"><span>Grasshopper <b>Flat Kit</b></span></div>
+      <p class="note">The net pressed flat is the assembly: every lath one straight strip, every crossing a joint at its spacing along the strip. At 1 : 1 the kit is the building (span and Laths section); at a model scale it is cut from the strip and sheet given here.</p>
+      <div class="row"><label for="kscale" title="The kit can be the building (1 : 1, the span above and the Laths section) or a model of it">scale</label><select id="kscale"><option value="1">1 : 1 (span and Laths section)</option><option value="5">1 : 5</option><option value="10" selected>1 : 10</option><option value="20">1 : 20</option><option value="50">1 : 50</option></select></div>
+      <div class="grid2" id="kmodel">
+        <div class="row slider"><label for="kwidth">strip <span class="unit">mm</span></label><input id="kwidth" type="range" min="4" max="120" step="1" value="20"><output for="kwidth">20</output></div>
+        <div class="row slider"><label for="kthick">sheet <span class="unit">mm</span></label><input id="kthick" type="range" min="0.5" max="12" step="0.5" value="3"><output for="kthick">3</output></div>
+      </div>
+      <div class="row"><label for="kjoint">joints</label><select id="kjoint"><option value="0" title="slots for upright laths, pins for flat ones">automatic</option><option value="1" title="the strips slot into each other and turn about the normal">halving slots</option><option value="2">pin holes</option></select></div>
+      <div class="grid2">
+        <div class="row slider"><label for="ksheetw">laser bed <span class="unit">mm</span></label><input id="ksheetw" type="number" min="100" max="5000" step="10" value="1000"><span class="unit">×</span><input id="ksheeth" type="number" min="100" max="5000" step="10" value="600"></div>
+        <div class="row slider"><label for="kclear">clearance <span class="unit">mm</span></label><input id="kclear" type="range" min="0" max="2" step="0.05" value="0.2"><output for="kclear">0.2</output></div>
+      </div>
+      <div class="row"><button id="kitrun" class="btn">Build the kit</button><button id="kitzip" class="ghost small hidden">download the kit (.zip)</button></div>
+      <div id="kit-result" class="hidden">
+        <p id="kit-stats" class="stats"></p>
+        <div class="kitview"><img id="kit-assembly" alt="flat assembly"></div>
+        <div class="caption">flat assembly at 1 : 1 — joints numbered, laths labelled (assembly.svg / .dxf)</div>
+        <div class="kitview"><img id="kit-deploy" alt="deployment"></div>
+        <div class="caption">deployment — from the flat grid to the curved net (deployment.svg)</div>
+        <div class="kitview"><img id="kit-sheet" alt="first strip sheet"></div>
+        <div class="caption">first strip sheet — red cut, blue engrave; slots labelled with the strip they join (strips-NN.svg, strips.dxf, cutlist.csv)</div>
+      </div>
+    </section>
+
     <section class="block">
       <h2>Export</h2>
       <div class="row wrap">

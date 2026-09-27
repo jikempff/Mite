@@ -66,7 +66,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 29 components", IconsLoad());
+        Check("Icons load for all 30 components", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -444,6 +444,24 @@ internal static class Tests
             c => Expect(CurveCount(c, 0) == 3 && Points(c, 2).Count == 9 && Numbers(c, 8).Max() < 1e-6,
                 $"3 A laths / 9 joints / drift < 1e-6, got {CurveCount(c, 0)} / {Points(c, 2).Count} / {Numbers(c, 8).Max():E1}"));
 
+        // Flat Kit: the same flat lattice is its own flat state; 6 strips, 9 joints, half-width slots at the spacing
+        TestComponent("Flat Kit",
+            new Mite.Grasshopper.Components.FlatKitComponent(),
+            c =>
+            {
+                SetCurveList(c, 0,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 1, 0), new Rhino.Geometry.Point3d(2, 1, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 2, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(0, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1, 0, 0), new Rhino.Geometry.Point3d(1, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(2, 0, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetInputs(c, (5, 0.2), (6, 0.02));
+            },
+            c => Expect(CurveCount(c, 0) == 3 && CurveCount(c, 1) == 3 && Points(c, 2).Count == 9 && CurveCount(c, 6) == 6,
+                $"3 + 3 flat laths / 9 joints / 6 strip outlines, got {CurveCount(c, 0)} + {CurveCount(c, 1)} / {Points(c, 2).Count} / {CurveCount(c, 6)}"));
+
         Console.WriteLine();
         Console.WriteLine($"=== {_passed} passed, {_failed} failed ===");
         return _failed == 0 ? 0 : 1;
@@ -498,9 +516,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 29)
+        if (comps.Count != 30)
         {
-            Console.WriteLine($"      expected 29 components, found {comps.Count}");
+            Console.WriteLine($"      expected 30 components, found {comps.Count}");
             return false;
         }
 

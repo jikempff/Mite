@@ -12,7 +12,7 @@ Mesh curvature analysis, form finding, asymptotic / geodesic / Chebyshev nets, l
 
 ## Description
 Mite is an open-source Grasshopper toolkit (Rhino 8, Windows and Mac) for
-designing gridshells from meshes: 29 components in seven panels, no external
+designing gridshells from meshes: 30 components in seven panels, no external
 dependencies, MIT licence.
 
 **Curvature.** Principal, Gaussian and mean curvature per vertex (Rusinkiewicz
