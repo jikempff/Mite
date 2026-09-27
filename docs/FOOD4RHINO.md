@@ -1,8 +1,8 @@
-# Food4Rhino listing — Mite 1.2.7
+# Food4Rhino listing — Mite 1.2.8
 
 Paste-ready copy for https://www.food4rhino.com/en/app/mite (edit form). Images
 to upload are listed at the end; the package itself goes up with
-`yak push dist/mite-1.2.7-rh8_0-any.yak`, which also sets the package icon (1.2.6 is on the server already).
+`yak push dist/mite-1.2.8-rh8_0-any.yak`, which also sets the package icon (1.2.7 is on the server already).
 
 ## Title
 Mite — curvature, form finding and gridshell nets for Grasshopper
@@ -12,7 +12,7 @@ Mesh curvature analysis, form finding, asymptotic / geodesic / Chebyshev nets, l
 
 ## Description
 Mite is an open-source Grasshopper toolkit (Rhino 8, Windows and Mac) for
-designing gridshells from meshes: 27 components in six panels, no external
+designing gridshells from meshes: 28 components in seven panels, no external
 dependencies, MIT licence.
 
 **Curvature.** Principal, Gaussian and mean curvature per vertex (Rusinkiewicz
@@ -45,6 +45,11 @@ notches at every crossing), Lath Unroll (exact cutting patterns), Lath Segment
 (stock lengths with splice joints away from joints), Lath Labels (IDs and a
 BOM), Net Topology (nodes and members for any downstream solver).
 
+**Kinetics.** Net Kinetics moves a scissor-jointed asymptotic net as a
+semi-compliant grid mechanism (fixed, sliding and moved nodes, cables, a fold
+slider) and reads every state elastically: bending and twist strains of each
+lath, the strain energy along the motion and the natural, least-energy state.
+
 **Tested against analytic truth.** Cylinder, hyperboloid, catenoid, Enneper,
 ruled patches and Schwarz D are part of the test suite with closed-form
 curvature, rulings and asymptotic directions; every algorithm is checked
@@ -52,6 +57,10 @@ where the answer is exact. The same library runs in the browser at
 kempffsele.me/mite — try a net on your own OBJ before installing anything.
 
 Source, examples and roadmap: https://github.com/jikempff/Mite
+
+## Version notes — 1.2.8
+- New Net Kinetics component (Mite > Kinetics): a scissor-jointed asymptotic net moved as a mechanism — constant joint spacing, hinges normal to the surface, each lath's bending held against its rest shape; drivers are fixed, sliding and moved nodes and cables, one state per fold step. Checked against the exact doubly ruled hyperboloid mechanism of Schikore et al. (2020) to 2e-12 through the whole motion.
+- Every kinetic state is read elastically: normal and geodesic curvature and geodesic torsion of every lath, strains for the chosen section, utilisation per lath, the strain energy along the motion and the natural (least-energy) configuration.
 
 ## Version notes — 1.2.7
 - Nets follow the exact curves: the curvature estimate at the border rows is an osculating-jet fit instead of a one-sided difference (8° → 0.7° direction error at a catenoid rim), so traced asymptotic curves stay within 0.01–0.03 mesh edge of the closed-form lines.
