@@ -171,6 +171,11 @@ public class KineticState
     public double Span { get; set; }
     public double Utilization { get; set; }
     public double Energy { get; set; }
+    /// <summary>Strain energy split (J): bending (kn, kg) and twist (τg) — Schikore et al.'s diagram, Wan et al.'s stages.</summary>
+    public double Bending { get; set; }
+    public double Twist { get; set; }
+    /// <summary>Per lath (A first, then B, as the curves): peak strain utilization in this state.</summary>
+    public double[] LathUtil { get; set; } = Array.Empty<double>();
     public bool Converged { get; set; }
 }
 
@@ -182,6 +187,15 @@ public class KineticsPayload
     public int Drivers { get; set; }
     public KineticState[] States { get; set; } = Array.Empty<KineticState>();
     public int Natural { get; set; } = -1;
+    /// <summary>Per lath: peak utilization over the whole motion, the state where it occurs and what governs there ("kn", "kg", "twist").</summary>
+    public double[] Envelope { get; set; } = Array.Empty<double>();
+    public int[] EnvelopeState { get; set; } = Array.Empty<int>();
+    public string[] EnvelopeSource { get; set; } = Array.Empty<string>();
+    /// <summary>Laths within the strain limit in every state.</summary>
+    public int BuildableLaths { get; set; }
+    /// <summary>The most utilised lath over the motion and its state (−1 without a section).</summary>
+    public int WorstLath { get; set; } = -1;
+    public int WorstState { get; set; } = -1;
     public string? Error { get; set; }
     public long Ms { get; set; }
 }
@@ -988,6 +1002,10 @@ public static partial class MiteApi
                 double sc = o.ToMetres > 0 ? o.ToMetres : 1.0;
                 elastic = KineticStrain.Analyze(net, res, new KineticStrain.Options { Profile = new LathProfile(o.Width, o.Thickness, true), MaxStrain = o.MaxStrain > 0 ? o.MaxStrain : 0.005, UnitScale = sc });
                 p.Natural = KineticStrain.NaturalState(elastic);
+                var env = KineticStrain.Envelope(elastic);
+                p.Envelope = env.LathUtilization; p.EnvelopeState = env.LathState;
+                p.EnvelopeSource = env.LathSource.Select(SourceName).ToArray();
+                p.BuildableLaths = env.BuildableLaths; p.WorstLath = env.GoverningLath; p.WorstState = env.GoverningState;
             }
             var states = new List<KineticState>();
             for (int k = 0; k < res.States.Count; k++)
@@ -1006,6 +1024,9 @@ public static partial class MiteApi
                     Height = zmax - zmin, Span = span, Converged = st.Converged,
                     Utilization = elastic != null ? elastic[k].MaxUtilization : 0,
                     Energy = elastic != null ? elastic[k].StrainEnergy : 0,
+                    Bending = elastic != null ? elastic[k].BendingEnergy : 0,
+                    Twist = elastic != null ? elastic[k].TwistEnergy : 0,
+                    LathUtil = elastic != null ? elastic[k].LathUtilization : Array.Empty<double>(),
                 });
             }
             p.States = states.ToArray();
@@ -1060,6 +1081,14 @@ public static partial class MiteApi
         p.Ms = sw.ElapsedMilliseconds;
         return JsonSerializer.Serialize(p, MiteJson.Default.KitPayload);
     }
+
+    private static string SourceName(KineticStrain.StrainSource s) => s switch
+    {
+        KineticStrain.StrainSource.NormalCurvature => "kn",
+        KineticStrain.StrainSource.GeodesicCurvature => "kg",
+        KineticStrain.StrainSource.Twist => "twist",
+        _ => "",
+    };
 
     // ---- helpers ---------------------------------------------------------------
 

@@ -39,6 +39,9 @@ where they overlap
    SVG / DXF / CSV); next: a physical prototype of the 3-fold Enneper to
    check slot play and the deployment against the model, hub plate design,
    supports, and the G laths in the kit.
+   spread drives, 1.3.0; strain colouring per state and the envelope over the
+   motion done 2026-10-02, see E); next: speed, the flat state as the
+   assembly state.
 4. One lath section for every curve (done in the web app 1.3.0; per-family
    profiles in Grasshopper still open).
 5. Black, white and neon for everything visual (web app done 1.3.0; bench,
@@ -314,7 +317,9 @@ remains the self-test review page.
 - [ ] Metrics with distributions, not only extremes: spacing histogram,
       crossing-angle histogram, utilisation histogram (small, consistent
       charts).
-- [ ] Colour-map legends identical to Mesh Colour Map in Grasshopper.
+- [ ] Colour-map legends identical to Mesh Colour Map in Grasshopper. (App:
+      the colour bars render again — 2026-10-02; the bench still has no
+      utilization legend bar, only swatches.)
 - [ ] Search / filter (failing tests only, by component, by tab); keyboard
       navigation; ticked state summary exportable as a GitHub issue draft.
 - [ ] Component cards show the Grasshopper icon at readable size and the
@@ -635,6 +640,47 @@ Plan
       two crossed top cables (20 % pull: drift 3e-4, 0.04° off asymptotic,
       cables 1 % short, rise 0.52, scissor angles 78–90° → 60–71°) —
       2026-09-26. Open: strain envelope along the motion.
+- [x] Strain per state and the envelope over the motion — 2026-10-02 (UX
+      session, José's priority 3). Core: `KineticStrain.Envelope` → per lath
+      the peak utilization over all states, the state and the governing
+      strain (`StrainSource`: bending from kn, from kg, or twist;
+      `LathResult.Governing` / `GoverningNode`), laths within the limit in
+      every state. Literature: Schikore et al. 2020 evaluate stresses at one
+      (open) state only and read the energy along the motion as line plots;
+      Wan, Man, Crolla & Schling 2025 (Design and construction of an
+      asymptotic kinetic transformable canopy, Automation in Construction
+      180, 106508) check bending and shear stress at each of six stages
+      (GFRP 75 × 12 mm, max 168 MPa / 18 MPa) and report bending energy
+      falling while twist rises — so the per-state check and the
+      bending/twist split are what the plot and colours now show. Web app:
+      lath colour = strain now / envelope / family, legend per state, energy
+      diagram (Π stacked bending + twist on one scale, natural state dot)
+      under the utilization on an absolute axis with the limit at 1, hover
+      with strain now and envelope, a "through the motion" stats line;
+      `tools/web-smoke.js` §9. Grasshopper: Net Kinetics' Report names the
+      envelope (no new outputs yet, see below). Bench: "catenoid, strain per
+      state" view (upright 80 × 10 mm: 41 → 41 → 41 → 41 → 38 → 0 laths over
+      the limit as the ring closes) and an exact self-test (hyperboloid rods
+      all peak in the first state, at atan(s₁/b)/s₁·(d/2)/√3 to 1e-6, by
+      twist). Exact core tests: a closing-and-opening hyperboloid motion puts
+      every rod's envelope in the middle state at the closed form (1e-7); a
+      circular lath names kn or kg by the section orientation.
+      Findings: (1) the viewport colour-bar legends of the app had collapsed
+      to 9 px swatches since 1.2.7 (a later `.legend i` rule for the marker
+      legend overrode them) — fixed, smoke-tested at 160 px. (2) The
+      utilization colours are green → neon yellow (L* 76 → 94) below the
+      limit and red (L* 55 → 16) above: the limit is a 40-unit lightness
+      drop, so it stays readable with red–green colour-vision deficiency
+      (Crameri, Shephard & Heron 2020 warn against red–green pairs of
+      *similar* lightness); green at low utilization vs red over the limit
+      differ by 22 L*. (3) Lienhard, Alpermann, Gengnagel & Knippers 2013
+      (Active bending, a review) ask σ/E > 2.5 ‰ for bending-active
+      materials and > 10 ‰ for kinetic ones (fatigue): a repeatedly moved
+      timber lath at MaxStrain 0.5 % is optimistic; worth a note on the
+      MaxStrain input or a "cycles" factor.
+- [ ] Net Kinetics: append `Envelope` / `EnvelopeFold` outputs once the
+      unmerged Mite Net bundle (2026-09-27, which appends `Net` to this
+      component) is in, so the two do not claim the same output slot.
 - [ ] Speed: a block-aware ordering or a preconditioned CG on JᵀJ for nets
       above ~500 nodes; reuse the symbolic envelope across iterations.
 - [x] Elastic reading of the states — 2026-09-26 (session 1b),

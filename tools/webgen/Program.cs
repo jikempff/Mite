@@ -558,7 +558,12 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         double exact = 2 * n * 0.5 * 0.7e9 * Jrod * (F(bb, sEnd) - F(bb, -sEnd));
         elasticRows.Add(new { fold = R3(res.States[k].Fold), twist = rodElastic[k].TwistEnergy, exact, ratio = R3(rodElastic[k].TwistEnergy / exact), bending = rodElastic[k].BendingEnergy, util = R3(rodElastic[k].MaxUtilization), utilTheory = R3(0.01 / Math.Sqrt(3.0) / bb / 0.005 * (bb * Math.Atan(rho * Math.Tan(Math.PI / n) / bb) / (rho * Math.Tan(Math.PI / n)))) });
     }
-    numbers["kinHyp"] = new { rods = 2 * n, joints = nodes0.Length, states = res.States.Count, worstShape, worstDrift, worstAsym, worstCable, worstIt, ms = t.ElapsedMilliseconds, rows = stateRows, elastic = elasticRows, natural = Mite.Core.Kinetics.KineticStrain.NaturalState(rodElastic) };
+    // strain envelope over the motion (2026-10-02): the waist twist atan(s₁/b)/s₁ falls as β grows, so every rod peaks in
+    // the first state (β = 25°), at the closed form, governed by twist
+    var rodEnv = Mite.Core.Kinetics.KineticStrain.Envelope(rodElastic);
+    double s1h = rho * Math.Tan(Math.PI / n), bh0 = rho * Math.Sin(b0);
+    var envHyp = new { max = rodEnv.MaxUtilization, theory = 0.01 / Math.Sqrt(3.0) * (Math.Atan(s1h / bh0) / s1h) / 0.005, states = rodEnv.LathState.Distinct().ToArray(), sources = rodEnv.LathSource.Select(x => x.ToString()).Distinct().ToArray(), buildable = rodEnv.BuildableLaths, laths = rodEnv.LathUtilization.Length };
+    numbers["kinHyp"] = new { rods = 2 * n, joints = nodes0.Length, states = res.States.Count, worstShape, worstDrift, worstAsym, worstCable, worstIt, ms = t.ElapsedMilliseconds, rows = stateRows, elastic = elasticRows, natural = Mite.Core.Kinetics.KineticStrain.NaturalState(rodElastic), envelope = envHyp };
     scenes["kinHyp"] = new { states = stateScenes };
 
     // 2. A traced asymptotic net on the catenoid (the Studio X "concave cylinder") standing on the ground (bottom-rim
@@ -593,7 +598,21 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     var catElastic = Mite.Core.Kinetics.KineticStrain.Analyze(netC, resC, catOpt);
     int catNatural = Mite.Core.Kinetics.KineticStrain.NaturalState(catElastic);
     var catEnergyRows = catElastic.Select(e => new { fold = R3(e.Fold), util = R3(e.MaxUtilization), bending = R3(e.BendingEnergy), twist = R3(e.TwistEnergy), potential = R3(e.Potential), total = R3(e.Total), buildable = e.Buildable }).ToArray();
-    numbers["kinCat"] = new { laths = netC.Laths.Count, joints = netC.IsJoint.Count(j => j), nodes = netC.Nodes.Length, ground = ground.Length, cableStart = R3(d0), elastic = catEnergyRows, natural = catNatural, naturalFold = catNatural >= 0 ? R3(resC.States[catNatural].Fold) : -1, settleMove = R3(resC.States[0].Nodes.Zip(netC.Nodes, (a2, b2) => (a2 - b2).Length).Max()), settleDeg = resC.States[0].AsymptoticDeviation, ms = t.ElapsedMilliseconds, rows = catRows };
+    // strain per state and envelope (2026-10-02) for the colour view, with upright 80 × 10 mm laths so the colours cross
+    // the limit during the motion (the 12 mm section above is over it in every state: √−K·t/√3 at the throat is 1.39 × the limit)
+    var thinElastic = Mite.Core.Kinetics.KineticStrain.Analyze(netC, resC, new Mite.Core.Kinetics.KineticStrain.Options { Profile = new LathProfile(0.08, 0.010, true), YoungsModulus = 11e9, MaxStrain = 0.005 });
+    var thinEnv = Mite.Core.Kinetics.KineticStrain.Envelope(thinElastic);
+    double envErr = 0;
+    for (int l = 0; l < netC.Laths.Count; l++) envErr = Math.Max(envErr, Math.Abs(thinEnv.LathUtilization[l] - thinElastic.Max(e => e.Laths[l].MaxUtilization)));
+    var strainCat = new
+    {
+        lathUtil = thinElastic.Select(e => e.LathUtilization.Select(R3).ToArray()).ToArray(),
+        envelope = thinEnv.LathUtilization.Select(R3).ToArray(), envelopeState = thinEnv.LathState,
+        sources = thinEnv.LathSource.GroupBy(x => x.ToString()).ToDictionary(g => g.Key, g => g.Count()),
+        buildable = thinEnv.BuildableLaths, worst = thinEnv.GoverningLath, worstState = thinEnv.GoverningState, max = R3(thinEnv.MaxUtilization),
+        perState = thinElastic.Select(e => e.LathUtilization.Count(u => u > 1)).ToArray(), envErr,
+    };
+    numbers["kinCat"] = new { strain = strainCat, laths = netC.Laths.Count, joints = netC.IsJoint.Count(j => j), nodes = netC.Nodes.Length, ground = ground.Length, cableStart = R3(d0), elastic = catEnergyRows, natural = catNatural, naturalFold = catNatural >= 0 ? R3(resC.States[catNatural].Fold) : -1, settleMove = R3(resC.States[0].Nodes.Zip(netC.Nodes, (a2, b2) => (a2 - b2).Length).Max()), settleDeg = resC.States[0].AsymptoticDeviation, ms = t.ElapsedMilliseconds, rows = catRows };
     scenes["kinCat"] = new { wire = Edges(cat, 4), states = catScenes };
 }
 

@@ -290,6 +290,7 @@ public class NetKineticsComponent : MiteComponent
         int natural = KineticStrain.NaturalState(elastic);
         double naturalFold = natural >= 0 ? result.States[natural].Fold : double.NaN;
         bool buildable = elastic.All(e => e.Buildable);
+        var envelope = KineticStrain.Envelope(elastic);
         if (!buildable)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Laths exceed MaxStrain during the motion: peak utilization {utilPerState.Max():0.00} at Fold {result.States[utilPerState.IndexOf(utilPerState.Max())].Fold:0.##}.");
 
@@ -307,6 +308,19 @@ public class NetKineticsComponent : MiteComponent
         sb.AppendLine($"Scissor angles at Fold {last.Fold:0.##}: {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Min():0.#}° … {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Max():0.#}°");
         var eLast = elastic[elastic.Count - 1];
         sb.AppendLine($"Elastic ({(profile.Kind == Mite.Core.Fabrication.SectionKind.Rectangle ? (upright ? "upright" : "flat") + $" {width:G3} × {thickness:G3}" : profile.Kind.ToString().ToLowerInvariant())}, E {modulus / 1e9:G3} GPa, limit {maxStrain:P1}): utilization {utilPerState[0]:0.00} at rest → peak {utilPerState.Max():0.00} at Fold {result.States[utilPerState.IndexOf(utilPerState.Max())].Fold:0.##}; strain energy {elastic[0].StrainEnergy:G4} J → {eLast.StrainEnergy:G4} J (bending {eLast.BendingEnergy:G3}, twist {eLast.TwistEnergy:G3}){(density > 0 ? $", self-weight potential {eLast.Potential:G4} J" : "")}");
+        if (envelope.GoverningLath >= 0)
+        {
+            int wl = envelope.GoverningLath;
+            string lathName = wl < net.CountA ? $"A{wl}" : $"B{wl - net.CountA}";
+            string source = envelope.LathSource[wl] switch
+            {
+                KineticStrain.StrainSource.NormalCurvature => "bending from kn",
+                KineticStrain.StrainSource.GeodesicCurvature => "bending from kg",
+                KineticStrain.StrainSource.Twist => "twist",
+                _ => "unstrained",
+            };
+            sb.AppendLine($"Through the motion: {envelope.BuildableLaths} of {net.Laths.Count} laths stay within MaxStrain in every state; worst lath {lathName} (index {wl} in LathUtil) at {envelope.MaxUtilization:0.00}, Fold {result.States[envelope.GoverningState].Fold:0.##}, {source}");
+        }
         sb.Append(natural >= 0 ? $"Natural state (least energy along the motion): Fold {naturalFold:0.##}{(natural == 0 || natural == elastic.Count - 1 ? " (at the end of the range: the grid wants to go further)" : "")}" : "Natural state: none — the energy is flat along the motion (rigid-body mechanism)");
 
         DA.SetDataList(0, outA);

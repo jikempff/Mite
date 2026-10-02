@@ -654,7 +654,7 @@ function showDeformed() {
 
 function stopKinetics(clear = false) {
   if (S.kinTimer) { clearInterval(S.kinTimer); S.kinTimer = null; $('kplay').textContent = 'play'; }
-  if (clear && S.kin) { S.kin = null; $('kin-result').classList.add('hidden'); S.viewer.setMeshOpacity(surfaceOpacity()); }
+  if (clear && S.kin) { S.kin = null; $('kin-result').classList.add('hidden'); S.viewer.setMeshOpacity(surfaceOpacity()); S.viewer.colorCurves(null, null, null); showUtilLegend(false); }
 }
 
 async function runKinetics() {
@@ -675,20 +675,50 @@ async function runKinetics() {
   });
 }
 
+function kinLathName(l, na) { return l < na ? `A #${l}` : `B #${l - na}`; }
+const KIN_SOURCE = { kn: 'bending, kn', kg: 'bending, kg', twist: 'twist' };
+
+/** Colour the kinetic laths by their strain utilization in state k, by the envelope over the motion, or by family. */
+function colourKinLaths(st) {
+  const r = S.kin, mode = S.kinColour || 'state';
+  const elastic = r.envelope?.length && st.lathUtil?.length;
+  if (!elastic || mode === 'off') { S.viewer.colorCurves(null, null, null); showUtilLegend(false); return; }
+  const u = mode === 'envelope' ? r.envelope : st.lathUtil, na = st.a.length;
+  S.viewer.colorCurves(u.slice(0, na).map(utilizationColor), u.slice(na).map(utilizationColor), null);
+  showUtilLegend(true, mode === 'envelope' ? 'strain envelope over the whole motion · 1 = limit' : `strain utilization at fold ${st.fold.toFixed(2)} · 1 = limit`);
+}
+
 function showKinState(k) {
   const r = S.kin; if (!r) return;
-  const st = r.states[Math.max(0, Math.min(r.states.length - 1, k))];
+  k = Math.max(0, Math.min(r.states.length - 1, k));
+  const st = r.states[k];
+  S.kinShown = k;
   S.viewer.setMeshOpacity(k === 0 ? surfaceOpacity() : Math.min(0.18, surfaceOpacity()));
   S.viewer.setCurves(st.a, st.b);
-  if ($('colorutil').checked && S.kin.states.some((x) => x.utilization > 0)) {} // per-state colouring is per net only
+  colourKinLaths(st);
   $('kfold').nextElementSibling.value = st.fold.toFixed(2);
-  const m = toMetres();
+  const m = toMetres(), na = st.a.length;
+  let env = '';
+  if (r.envelope?.length) {
+    const n = r.envelope.length, over = (st.lathUtil || []).filter((u) => u > 1).length;
+    const w = r.worstLath, ws = r.states[r.worstState];
+    env = `\nthrough the motion: <b class="${r.buildableLaths === n ? 'ok' : 'bad'}">${r.buildableLaths} / ${n}</b> laths stay within the strain limit` +
+      (w >= 0 ? ` · worst <b>${kinLathName(w, na)}</b> <b class="${r.envelope[w] <= 1 ? 'ok' : 'bad'}">${fmt(r.envelope[w], 2)}</b> at fold ${ws.fold.toFixed(2)} (${KIN_SOURCE[r.envelopeSource[w]] || '—'})` : '') +
+      ` · over the limit in this state: <b class="${over ? 'bad' : 'ok'}">${over}</b>` +
+      (st.utilization > 0 ? ` · energy <b>${fmt(st.bending, 1)}</b> J bending + <b>${fmt(st.twist, 1)}</b> J twist` : '');
+  }
   $('kin-stats').innerHTML = `${r.nodes} nodes · ${r.joints} joints · ${r.laths} laths · ${r.drivers} driven · ${r.ms} ms\n` +
     `fold <b>${st.fold.toFixed(2)}</b> · height <b>${fmt(st.height * m, 2)} m</b> · span <b>${fmt(st.span * m, 2)} m</b> · crossing <b>${fmt(st.minAngle, 0)}° … ${fmt(st.maxAngle, 0)}°</b>\n` +
     `joint drift <b>${st.drift.toExponential(1)}</b> · off asymptotic <b>${fmt(st.asymptotic, 2)}°</b> · driver miss <b>${fmt(st.miss * m * 1000, 0)} mm</b>` +
-    (st.utilization > 0 ? ` · strain utilization <b class="${st.utilization <= 1 ? 'ok' : 'bad'}">${fmt(st.utilization, 2)}</b>` : '') + (r.natural === k ? ' · <b>natural state</b> (least energy)' : '') + (st.converged ? '' : ' · <span class="bad">not converged</span>');
+    (st.utilization > 0 ? ` · strain utilization <b class="${st.utilization <= 1 ? 'ok' : 'bad'}">${fmt(st.utilization, 2)}</b>` : '') + (r.natural === k ? ' · <b>natural state</b> (least energy)' : '') + (st.converged ? '' : ' · <span class="bad">not converged</span>') + env;
 }
 
+/**
+ * Along the fold: peak strain utilization on an absolute scale with the limit drawn at 1, and the strain energy
+ * Π = bending + twist as stacked areas on one energy scale (Schikore et al. 2020's energy diagram; Wan et al. 2025
+ * report the same split per stage). Without a section (no elastic reading) it falls back to the geometry:
+ * height and smallest crossing angle, each on its own range.
+ */
 function drawKinPlot() {
   const r = S.kin, c = $('kin-plot'); if (!r) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -697,19 +727,47 @@ function drawKinPlot() {
   const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
   const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const n = r.states.length, X = (i) => 8 + (i / Math.max(1, n - 1)) * (w - 16);
-  const series = [
-    [r.states.map((s) => s.height), css('--ink')],
-    [r.states.map((s) => s.minAngle), css('--famA')],
-    [r.states.map((s) => s.utilization), css('--famB')],
-  ];
-  for (const [vals, col] of series) {
-    const lo = Math.min(...vals), hi = Math.max(...vals), span = Math.max(1e-12, hi - lo);
-    ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.beginPath();
-    vals.forEach((v, i) => { const y = h - 8 - ((v - lo) / span) * (h - 16); if (i) ctx.lineTo(X(i), y); else ctx.moveTo(X(i), y); });
+  const top = 14, bottom = h - 6, Y = (t) => bottom - t * (bottom - top);
+  ctx.font = `10px ${getComputedStyle(document.body).fontFamily}`;
+  const elastic = r.states.some((s) => s.utilization > 0);
+  S.kinPlot = { elastic };
+  if (elastic) {
+    // energy areas: bending from 0, twist stacked on top, one scale (0 … max Π)
+    const eMax = Math.max(1e-30, ...r.states.map((s) => s.bending + s.twist));
+    const area = (lo, hi, col) => {
+      ctx.fillStyle = col; ctx.globalAlpha = 0.22; ctx.beginPath();
+      r.states.forEach((s, i) => { const y = Y(hi(s) / eMax); if (i) ctx.lineTo(X(i), y); else ctx.moveTo(X(i), y); });
+      for (let i = n - 1; i >= 0; i--) ctx.lineTo(X(i), Y(lo(r.states[i]) / eMax));
+      ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    };
+    area(() => 0, (s) => s.bending, css('--famA'));
+    area((s) => s.bending, (s) => s.bending + s.twist, css('--famB'));
+    // utilization on an absolute scale: 0 … max(1.2, peak), limit at 1
+    const uMax = Math.max(1.2, ...r.states.map((s) => s.utilization)) * 1.05;
+    ctx.strokeStyle = css('--muted'); ctx.setLineDash([4, 3]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(8, Y(1 / uMax)); ctx.lineTo(w - 8, Y(1 / uMax)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = css('--ink'); ctx.lineWidth = 1.8; ctx.beginPath();
+    r.states.forEach((s, i) => { const y = Y(s.utilization / uMax); if (i) ctx.lineTo(X(i), y); else ctx.moveTo(X(i), y); });
     ctx.stroke();
+    if (r.natural >= 0) { const s = r.states[r.natural]; ctx.fillStyle = css('--ink'); ctx.beginPath(); ctx.arc(X(r.natural), Y((s.bending + s.twist) / eMax), 3.2, 0, 2 * Math.PI); ctx.fill(); }
+    ctx.fillStyle = css('--muted'); ctx.textBaseline = 'top';
+    ctx.textAlign = 'left'; ctx.fillText(`utilization 0 … ${fmt(uMax, 2)} · limit 1`, 8, 1);
+    const eMin = Math.min(...r.states.map((s) => s.bending + s.twist));
+    ctx.textAlign = 'right'; ctx.fillText(`Π ${fmt(eMin, 1)} … ${fmt(eMax, 1)} J (axis from 0)`, w - 8, 1);
+    S.kinPlot = { elastic, uMax, eMax, limitY: Y(1 / uMax) };
+  } else {
+    const series = [[r.states.map((s) => s.height), css('--ink')], [r.states.map((s) => s.minAngle), css('--famA')]];
+    for (const [vals, col] of series) {
+      const lo = Math.min(...vals), hi = Math.max(...vals), span = Math.max(1e-12, hi - lo);
+      ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.beginPath();
+      vals.forEach((v, i) => { const y = Y((v - lo) / span); if (i) ctx.lineTo(X(i), y); else ctx.moveTo(X(i), y); });
+      ctx.stroke();
+    }
   }
+  $('kin-caption').textContent = elastic
+    ? 'along the fold — line: peak strain utilization (dashed: the limit 1); shaded: strain energy Π split into bending (A colour) and twist (B colour) on one scale; dot: natural state (least Π)'
+    : 'along the fold: height (ink) and smallest crossing angle (A colour), each on its own range — give the laths a section for the strain reading';
   const k = +$('kfold').value;
-  ctx.strokeStyle = css('--muted'); ctx.setLineDash([3, 2]); ctx.beginPath(); ctx.moveTo(X(k), 0); ctx.lineTo(X(k), h); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = css('--muted'); ctx.setLineDash([3, 2]); ctx.beginPath(); ctx.moveTo(X(k), top); ctx.lineTo(X(k), h); ctx.stroke(); ctx.setLineDash([]);
 }
 
 // ---------------------------------------------------------------------------
@@ -842,6 +900,13 @@ async function main() {
   S.viewer.onHover = (o) => {
     if (!o) { $('hud-hover').textContent = ''; return; }
     const pts = o.points; let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]);
+    if (S.kin) { // a kinetic state is on screen: its laths, this state's strain and the envelope over the motion
+      const st = S.kin.states[S.kinShown ?? 0], l = (o.family === 'A' ? 0 : st.a.length) + o.index;
+      const u = st.lathUtil?.[l], e = S.kin.envelope?.[l];
+      $('hud-hover').textContent = `family ${o.family} #${o.index} · length ${fmt(L, 3)}` + (u != null ? ` · utilization ${fmt(u, 2)} at fold ${st.fold.toFixed(2)}` : '') +
+        (e != null ? ` · envelope ${fmt(e, 2)} at fold ${S.kin.states[S.kin.envelopeState[l]].fold.toFixed(2)} (${KIN_SOURCE[S.kin.envelopeSource[l]] || '—'})` : '');
+      return;
+    }
     const f = currentFamilies();
     const u = S.lathUtil?.[(o.family === 'A' ? 0 : o.family === 'B' ? f.a.length : f.a.length + f.b.length) + o.index];
     $('hud-hover').textContent = `family ${o.family} #${o.index} · length ${fmt(L, 3)}` + (u != null ? ` · utilization ${fmt(u, 2)}` : '') + ' · click for the lath';
@@ -955,6 +1020,12 @@ async function main() {
   $('kitzip').addEventListener('click', downloadKit);
   for (const id of ['kclear', 'kwidth', 'kthick']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
   $('kscale').addEventListener('change', () => $('kmodel').classList.toggle('hidden', $('kscale').value === '1'));
+  $('kcolour').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $('kcolour').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    S.kinColour = b.dataset.kc;
+    if (S.kin) colourKinLaths(S.kin.states[S.kinShown ?? 0]);
+  });
   $('kfold').addEventListener('input', () => { stopKinetics(); showKinState(+$('kfold').value); drawKinPlot(); });
   $('kplay').addEventListener('click', () => {
     if (S.kinTimer) { stopKinetics(); return; }
@@ -1001,6 +1072,7 @@ async function main() {
   S.net = 'asymptotic'; showNetParams(); $('upright').checked = true;
   $('band-row').classList.add('hidden');
   window.__mite = S; // for tests
+  window.__miteUtilColour = utilizationColor;
   window.__miteSelectShape = (k) => selectShape(k);
   await loadShape();
 }

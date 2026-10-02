@@ -12,6 +12,9 @@
 //     a round bar sweeps as a tube and gets its own utilization.
 //  5. Layouts: the border web ends every curve on the border (no T-junctions),
 //     the fill still traces, the legend explains the viewport markers.
+//  6.–8. Lath sections, structure, kinetics.
+//  9. Kinetic strain per state: one utilization per lath and state, the
+//     envelope over the motion, and lath colours that follow the fold slider.
 //
 // Usage (needs a published site and a static server):
 //   dotnet publish src/Mite.Web -c Release -o /tmp/miteweb -p:RunAOTCompilation=false
@@ -121,6 +124,49 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   const kit = await page.evaluate(() => window.__mite.kit);
   check(kit && !kit.error && kit.strips > 20 && kit.hubs === 1 && kit.sheets >= 1 && kit.zip.length > 1000 && kit.assemblySvg.startsWith('<svg'), `kit built (${kit?.error || `${kit?.strips} strips, ${kit?.joints} joints, ${kit?.hubs} hub, ${kit?.sheets} sheets`})`);
   check(kit && kit.flatness < 1e-3 && kit.slotMin > 0, `kit is flat with slots (${kit?.flatness?.toExponential(1)}, ${kit?.slotMin})`);
+
+  // 9. strain per state (José's priority 3, 2026-10-02): every state carries each lath's utilization, the envelope is
+  //    their maximum over the motion, and the laths on screen wear the colour of the state shown, of the envelope, or
+  //    of their family
+  const env = await page.evaluate(() => {
+    const k = window.__mite.kin, n = k.envelope.length;
+    let maxErr = 0, stateOk = true;
+    for (let l = 0; l < n; l++) {
+      const m = Math.max(...k.states.map((s) => s.lathUtil[l]));
+      maxErr = Math.max(maxErr, Math.abs(m - k.envelope[l]));
+      if (k.states[k.envelopeState[l]].lathUtil[l] !== k.envelope[l]) stateOk = false;
+    }
+    const lens = k.states.every((s) => s.lathUtil.length === n && s.a.length + s.b.length === n);
+    const buildable = k.envelope.filter((u) => u <= 1).length;
+    return { n, laths: k.laths, maxErr, stateOk, lens, buildable, reported: k.buildableLaths, worst: k.worstLath, worstU: k.envelope[k.worstLath], peak: Math.max(...k.envelope), sources: [...new Set(k.envelopeSource)] };
+  });
+  check(env.n === env.laths && env.lens, `every state carries one utilization per lath (${env.n} laths)`);
+  check(env.maxErr === 0 && env.stateOk, `envelope = max over the states, at its stated state (error ${env.maxErr})`);
+  check(env.buildable === env.reported && env.worstU === env.peak, `buildable through the motion ${env.reported} / ${env.n}, worst lath ${env.worst} at ${env.peak?.toFixed(2)} (${env.sources.join(', ')})`);
+  const colours = async () => page.evaluate(() => {
+    const S = window.__mite, k = S.kin, st = k.states[S.kinShown], na = st.a.length, col = window.__miteUtilColour;
+    let dState = 0, dEnv = 0, dFam = 0;
+    for (const o of S.viewer.curveObjects) {
+      const l = (o.family === 'A' ? 0 : na) + o.index, c = o.line.material.color;
+      const d = (x) => Math.max(Math.abs(c.r - x[0]), Math.abs(c.g - x[1]), Math.abs(c.b - x[2]));
+      const fam = c.clone().setHex(o.color);   // the family colour as three.js stores it (colour-managed)
+      dState = Math.max(dState, d(col(st.lathUtil[l]))); dEnv = Math.max(dEnv, d(col(k.envelope[l]))); dFam = Math.max(dFam, d([fam.r, fam.g, fam.b]));
+    }
+    return { dState, dEnv, dFam, legend: document.getElementById('ulegend').classList.contains('hidden') ? '' : document.getElementById('ulegend-title').textContent, bar: document.getElementById('ulegend-bar').getBoundingClientRect().width, shown: S.kinShown };
+  });
+  await page.$eval('#kfold', (e) => { e.value = 0; e.dispatchEvent(new Event('input')); });
+  const c0 = await colours();
+  check(c0.shown === 0 && c0.dState < 1e-6 && /fold 0\.00/.test(c0.legend), `fold 0: laths coloured by their strain in that state (Δ ${c0.dState.toExponential(1)}, legend "${c0.legend}")`);
+  check(c0.bar >= 100, `the colour bar of the legend is a bar, not a swatch (${c0.bar.toFixed(0)} px wide)`);
+  await page.click('#kcolour [data-kc=envelope]');
+  const c1 = await colours();
+  check(c1.dEnv < 1e-6 && /envelope/.test(c1.legend), `envelope colouring (Δ ${c1.dEnv.toExponential(1)}, legend "${c1.legend}")`);
+  await page.click('#kcolour [data-kc=off]');
+  const c2 = await colours();
+  check(c2.dFam < 1e-6 && c2.legend === '', 'family colours back, legend hidden');
+  await page.click('#kcolour [data-kc=state]');
+  const plot = await page.evaluate(() => ({ p: window.__mite.kinPlot, cap: document.getElementById('kin-caption').textContent }));
+  check(plot.p?.elastic && plot.p.uMax >= 1.2 && /strain energy/.test(plot.cap), `energy diagram drawn (utilization axis 0 … ${plot.p?.uMax?.toFixed(2)}, Π up to ${plot.p?.eMax?.toFixed(1)} J)`);
 
   const broken = await page.$$eval('img', (imgs) => imgs.filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.getAttribute('src')));
   check(broken.length === 0, `all icons load (${broken.join(', ') || 'none broken'})`);

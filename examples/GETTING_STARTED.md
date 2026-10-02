@@ -251,7 +251,13 @@ state the unactuated grid settles into, and `Ok` says whether the whole
 motion stays within the limit. On the catenoid the upright laths sit at
 utilization 1.37 from twist alone at rest (√−K·t/√3 at the throat) and relax
 as the ring closes, so the natural state is the closed one and the cables
-would hold it open. Keep `Sg` at 0 (joints only) for interactive use; a value
+would hold it open. A lath has to survive every state it passes through, not
+only the ends: the Report's "Through the motion" line counts the laths that stay
+within `E` in every state and names the worst one (its index in `Ul`), the fold
+where it peaks and whether bending (kn or kg) or twist governs — to see it per
+lath, run `Ul` through Flip Matrix and Bounds (or open the web
+app's Kinetics block, which colours the laths by their strain in the state on
+the slider or by that envelope). Keep `Sg` at 0 (joints only) for interactive use; a value
 subdivides the laths so they can bend between joints, at several times the
 solve time (the twist energy does not change: a lath twists uniformly between
 hinges).

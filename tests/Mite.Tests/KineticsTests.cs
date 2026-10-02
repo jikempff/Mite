@@ -433,6 +433,105 @@ public class KineticsTests
     }
 
     [Fact]
+    public void MotionEnvelope_PicksThePeakStateOfEveryLath_AndNamesTheTwist()
+    {
+        // The hyperboloid rods carry only twist; at the waist joint the node torsion is the mean of the two waist
+        // segments, atan(s₁/b)/s₁ with s₁ = ρ tan(π/n) and b = ρ sin β, the largest on the rod. It falls as β grows,
+        // so a motion that closes to β = 30° in the middle and opens again to 50° has its envelope in the middle state:
+        // utilization (d/2)/√3 · atan(s₁/b)/s₁ / limit with b = ρ sin 30°, the twist governing every rod.
+        double betaEnds = 50 * Math.PI / 180, betaMid = 30 * Math.PI / 180;
+        double Beta(double t) => betaEnds - (betaEnds - betaMid) * Math.Sin(Math.PI * t);
+        var (nodes, laths, normals) = ScissorNet.HyperboloidMechanism(N, Levels, Rho, betaEnds);
+        var net = new ScissorNet(nodes, laths, N, normals);
+        int rows = 2 * Levels + 1, top0 = 2 * Levels, topOpp = (N / 2) * rows + 2 * Levels;
+        double TopDiameter(double beta) { var (nn, _, _) = ScissorNet.HyperboloidMechanism(N, Levels, Rho, beta); return (nn[top0] - nn[topOpp]).Length; }
+        const int steps = 6;
+        var motion = net.Solve(new ScissorNet.Options { Fixed = new[] { Levels }, Cables = new[] { (top0, topOpp) }, CableLengthsAt = t => new[] { TopDiameter(Beta(t)) }, Steps = steps, Tolerance = 1e-11 });
+        const double limit = 0.0085;  // between the end states' and the middle state's peak twist strain
+        var opt = new KineticStrain.Options { Profile = LathProfile.Round(0.02), ShearModulus = 0.7e9, MaxStrain = limit };
+        var states = KineticStrain.Analyze(net, motion, opt);
+        var env = KineticStrain.Envelope(states);
+
+        double s1 = Rho * Math.Tan(Math.PI / N);
+        double Util(double beta) { double b = Rho * Math.Sin(beta); return 0.01 / Math.Sqrt(3.0) * (Math.Atan(s1 / b) / s1) / limit; }
+        // every state's rods against the closed form: the waist joint governs, by twist
+        for (int k = 0; k <= steps; k++)
+            foreach (var lr in states[k].Laths)
+            {
+                Assert.InRange(lr.MaxUtilization / Util(Beta((double)k / steps)), 1 - 1e-7, 1 + 1e-7);
+                Assert.Equal(KineticStrain.StrainSource.Twist, lr.Governing);
+                Assert.Equal(Levels, lr.GoverningNode);
+            }
+        Assert.Equal(2 * N, env.LathUtilization.Length);
+        for (int l = 0; l < 2 * N; l++)
+        {
+            Assert.Equal(steps / 2, env.LathState[l]);
+            Assert.Equal(KineticStrain.StrainSource.Twist, env.LathSource[l]);
+            Assert.InRange(env.LathUtilization[l] / Util(betaMid), 1 - 1e-7, 1 + 1e-7);
+            Assert.Equal(states.Max(st => st.Laths[l].MaxUtilization), env.LathUtilization[l]);
+        }
+        Assert.Equal(steps / 2, env.GoverningState);
+        Assert.Equal(states[steps / 2].MaxUtilization, env.MaxUtilization);
+        // the end states are within the limit, the middle state is not: buildable in the end states only
+        Assert.True(Util(betaEnds) < 1 && Util(betaMid) > 1, $"test premise: {Util(betaEnds)} < 1 < {Util(betaMid)}");
+        Assert.True(states[0].Buildable && states[steps].Buildable);
+        Assert.Equal(0, env.BuildableLaths);
+        Assert.False(env.Buildable);
+
+        // a more generous strain limit (2 %) puts the whole motion inside it
+        var loose = KineticStrain.Envelope(KineticStrain.Analyze(net, motion, new KineticStrain.Options { Profile = LathProfile.Round(0.02), ShearModulus = 0.7e9, MaxStrain = 0.02 }));
+        Assert.Equal(2 * N, loose.BuildableLaths);
+        Assert.True(loose.Buildable);
+        Assert.InRange(loose.MaxUtilization / (env.MaxUtilization * limit / 0.02), 1 - 1e-12, 1 + 1e-12);
+
+        // no states: an empty envelope, nothing governs
+        var none = KineticStrain.Envelope(new List<KineticStrain.StateResult>());
+        Assert.Empty(none.LathUtilization);
+        Assert.Equal(-1, none.GoverningState);
+        Assert.True(none.Buildable);
+    }
+
+    [Fact]
+    public void GoverningStrain_FollowsTheSectionOrientation()
+    {
+        // a circular lath (R = 2) bending out of the surface (kn = 1/R) or within it (kg = 1/R): the flat strip
+        // 0.1 × 0.01 is governed by the curvature that bends it, upright or flat
+        double R = 2.0; int n = 25;
+        var pts = new Vec3d[n]; var radial = new Vec3d[n]; var vertical = new Vec3d[n];
+        for (int i = 0; i < n; i++)
+        {
+            double a = Math.PI * i / (n - 1);
+            pts[i] = new Vec3d(R * Math.Cos(a), R * Math.Sin(a), 0);
+            radial[i] = new Vec3d(-Math.Cos(a), -Math.Sin(a), 0);
+            vertical[i] = new Vec3d(0, 0, 1);
+        }
+        var lath = new[] { Enumerable.Range(0, n).ToArray() };
+        KineticStrain.LathResult Read(Vec3d[] nrm, bool upright) =>
+            KineticStrain.Analyze(new ScissorNet(pts, lath, 1, nrm), new ScissorNet.State { Nodes = pts, Normals = nrm },
+                new KineticStrain.Options { Profile = new LathProfile(0.1, 0.01, upright), MaxStrain = 0.005 }).Laths[0];
+        var flatKn = Read(radial, false);     // kn about the weak axis: t/2 · kn = 0.0025 → 0.5
+        var flatKg = Read(vertical, false);   // kg about the strong axis: w/2 · kg = 0.025 → 5
+        var upKn = Read(radial, true);        // upright: kn about the strong axis → 5
+        var upKg = Read(vertical, true);      // upright: kg about the weak axis → 0.5
+        Assert.Equal(KineticStrain.StrainSource.NormalCurvature, flatKn.Governing);
+        Assert.Equal(KineticStrain.StrainSource.GeodesicCurvature, flatKg.Governing);
+        Assert.Equal(KineticStrain.StrainSource.NormalCurvature, upKn.Governing);
+        Assert.Equal(KineticStrain.StrainSource.GeodesicCurvature, upKg.Governing);
+        Assert.InRange(flatKn.MaxUtilization, 0.5 - 1e-9, 0.5 + 1e-9);
+        Assert.InRange(flatKg.MaxUtilization, 5 - 1e-9, 5 + 1e-9);
+        Assert.InRange(upKn.MaxUtilization, 5 - 1e-9, 5 + 1e-9);
+        Assert.InRange(upKg.MaxUtilization, 0.5 - 1e-9, 0.5 + 1e-9);
+        Assert.InRange(flatKn.GoverningNode, 1, n - 2);   // the end nodes carry no curvature
+        // a straight, untwisted lath: nothing governs
+        var line = Enumerable.Range(0, 5).Select(i => new Vec3d(i, 0, 0)).ToArray();
+        var up = Enumerable.Repeat(new Vec3d(0, 0, 1), 5).ToArray();
+        var straight = KineticStrain.Analyze(new ScissorNet(line, new[] { Enumerable.Range(0, 5).ToArray() }, 1, up), new ScissorNet.State { Nodes = line, Normals = up }).Laths[0];
+        Assert.Equal(KineticStrain.StrainSource.None, straight.Governing);
+        Assert.Equal(-1, straight.GoverningNode);
+        Assert.Equal(0.0, straight.MaxUtilization);
+    }
+
+    [Fact]
     public void SubdividedRods_StayStraightAndInextensible()
     {
         // joints only vs. rods split into 3 pieces between joints: same motion, laths keep their length
