@@ -749,7 +749,7 @@
   "file": "GridshellAnalysisComponent.cs",
   "name": "Gridshell Analysis",
   "nick": "GridFE",
-  "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the profile's section (rectangle, round bar or custom polygon), coupled at net crossings; supports are fixed points. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. A first-order sanity check, not a full FE package.",
+  "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the strip section, coupled at net crossings (rigid, scissor hinge or semi-rigid about the surface normal); supports are fixed or pinned points; loads per metre of lath, self-weight, area load and point loads. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. Optionally (Modes > 0) the linear buckling load factors and mode shapes of the same load case. A first-order sanity check, not a full FE package.",
   "tab": "Analysis",
   "icon": "GridshellAnalysis",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF3",
@@ -774,7 +774,7 @@
     "name": "Joints",
     "nick": "J",
     "type": "Point",
-    "desc": "Crossing points where laths are coupled (from Net Joints)",
+    "desc": "Crossing points where laths are coupled (from Net Joints or Net Topology nodes). Lath ends lying on another lath (T-junctions) are coupled automatically",
     "access": "list",
     "default": null,
     "optional": true
@@ -793,7 +793,7 @@
     "type": "Vector",
     "desc": "Force per unit length in N/m applied along every lath (default: 1 kN/m downward)",
     "access": "item",
-    "default": "new Vector3d(0, 0, -1000"
+    "default": "{0,0,-1000}"
    },
    {
     "name": "E",
@@ -875,6 +875,72 @@
     "access": "item",
     "default": null,
     "optional": true
+   },
+   {
+    "name": "SupportType",
+    "nick": "St",
+    "type": "Integer",
+    "desc": "0 = fixed (all six degrees of freedom), 1 = pinned (translations held, rotations free)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "JointStiffness",
+    "nick": "Jk",
+    "type": "Number",
+    "desc": "Rotational stiffness of the joints about the surface normal in N·m/rad: −1 = rigid (default), 0 = free scissor hinge (a bolt along the normal), > 0 semi-rigid bolted joint",
+    "access": "item",
+    "default": "-1.0"
+   },
+   {
+    "name": "Density",
+    "nick": "ρ",
+    "type": "Number",
+    "desc": "Material density in kg/m³ for self-weight (0 = none; timber ≈ 450, steel 7850)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "AreaLoad",
+    "nick": "q",
+    "type": "Number",
+    "desc": "Vertical area load in N/m² on the mesh area (snow, cladding), shared by the laths per metre of length (0 = none)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "LoadPoints",
+    "nick": "Lp",
+    "type": "Point",
+    "desc": "Points where concentrated forces act (attached to the nearest node)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Forces",
+    "nick": "F",
+    "type": "Vector",
+    "desc": "Force in N per load point (one per point, or one for all)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Modes",
+    "nick": "Bm",
+    "type": "Integer",
+    "desc": "Number of linear buckling modes to compute (0 = none). Each gives a load factor λ on the whole load case: below 1 the perfect net buckles under it, below 10 second-order effects matter (EN 1993-1-1 §5.2.1)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Amplitude",
+    "nick": "Ba",
+    "type": "Number",
+    "desc": "Largest displacement of the drawn mode shapes in model units (0 = automatic: span / 300, the usual imperfection amplitude for a nonlinear check)",
+    "access": "item",
+    "default": "0.0"
    }
   ],
   "outputs": [
@@ -939,6 +1005,46 @@
     "nick": "Nx",
     "type": "Number",
     "desc": "Axial force per element in N (tension positive), one branch per lath",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "SupportNodes",
+    "nick": "Sn",
+    "type": "Point",
+    "desc": "The frame nodes the supports hold",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Reactions",
+    "nick": "R",
+    "type": "Vector",
+    "desc": "Reaction force in N at each support node",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "Rp",
+    "type": "Text",
+    "desc": "Totals: applied load, reactions, equilibrium error, joints, supports (and buckling)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Buckling",
+    "nick": "λ",
+    "type": "Number",
+    "desc": "Linear buckling load factors, ascending (one per mode; empty when Modes = 0 or nothing is compressed)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "ModeShapes",
+    "nick": "Bs",
+    "type": "Curve",
+    "desc": "Lath curves displaced by each buckling mode, one branch per mode (one curve per input curve), largest displacement = Amplitude — use the first as the imperfect geometry of a nonlinear check",
     "access": "tree",
     "default": null
    }

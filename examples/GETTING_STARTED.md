@@ -171,6 +171,13 @@ beams take their area, inertia and torsion constant from the same `Sh` / `Sc`
 section as Lath Sweep and Lath Analysis, so one profile feeds the model, the
 strain check and the statics.
 
+Set `Bm` (Modes) to 3 to also get the linear buckling factors `λ`: the load
+case times λ₁ buckles the perfect net. Below 1 it fails, below 10 the linear
+results underestimate deflections and forces (EN 1993-1-1 §5.2.1); the `Bs`
+mode shapes are drawn at span/300 (or `Ba`), the usual imperfection to feed a
+nonlinear check in Karamba3D or another FE package, since gridshells buckle
+well below the linear λ when they are imperfect.
+
 ## 6. Make it move (kinetic asymptotic nets)
 
 **Net Kinetics** (Mite > Kinetics) treats the crossings of an asymptotic net

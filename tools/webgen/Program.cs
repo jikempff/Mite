@@ -214,6 +214,48 @@ var sw = Stopwatch.StartNew();
     for (int c = 0; c < laths.Count; c++) { var l = new List<double[]>(); for (int i = 0; i < laths[c].Length; i++) { var d = nodeOf.TryGetValue((c, i), out int n) ? fr.Displacements[n] : Vec3d.Zero; l.Add(P(laths[c][i] + 100 * d)); } defl.Add(l.ToArray()); }
     scenes["frame"] = new { original = laths.Select(l => Line(l)).ToArray(), deformed = defl.ToArray(), scale = 100, supports = sup.Select(P).ToArray() };
     numbers["frame"] = new { nodes = fr.Nodes.Length, dof = fr.Nodes.Length * 6, ms = t2.ElapsedMilliseconds, maxDisp = fr.MaxDisplacement, maxUtil = R3(fr.MaxUtilization), supports = fr.SupportNodeCount, elements = fr.Utilization.Length };
+
+    // Linear buckling of the same net and load (3 modes), and the exact cases
+    var t3 = Stopwatch.StartNew();
+    var frB = FrameAnalysis.Compute(saddle, laths, xs.Select(x => x.Point).ToList(), sup, new LathProfile(0.08, 0.012, true), new Vec3d(0, 0, -1000),
+        new FrameAnalysis.Options { BucklingModes = 3 });
+    t3.Stop();
+    var bk = frB.Buckling!;
+    var modeLines = new List<double[][][]>();
+    for (int m = 0; m < bk.Shapes.Length; m++)
+    {
+        var ml = new List<double[][]>();
+        for (int c = 0; c < laths.Count; c++) { var l = new List<double[]>(); for (int i = 0; i < laths[c].Length; i++) { var d = nodeOf.TryGetValue((c, i), out int n) ? bk.Shapes[m][n] : Vec3d.Zero; l.Add(P(laths[c][i] + 0.15 * d)); } ml.Add(l.ToArray()); }
+        modeLines.Add(ml.ToArray());
+    }
+    scenes["frame"] = new { original = laths.Select(l => Line(l)).ToArray(), deformed = defl.ToArray(), scale = 100, supports = sup.Select(P).ToArray(), modes = modeLines.ToArray(), modeAmp = 0.15 };
+    // Euler cantilever, 8 cubic elements, flat 0.1 × 0.025 lath (strong/weak = 16): exact discrete
+    // eigenvalues of the consistent geometric stiffness are 1.000002060, 9.001478254 (weak) and 16.000032963 (strong) × π²EI/4L²
+    var plane = TestMeshes.CreateQuadGrid(4, 4, 10.0);
+    var col = Enumerable.Range(0, 9).Select(i => new Vec3d(1 + 0.5 * i, 5, 0)).ToArray();
+    var cb = FrameAnalysis.Compute(plane, new[] { col }, null, new[] { col[0] }, new LathProfile(0.1, 0.025, false), Vec3d.Zero,
+        new FrameAnalysis.Options { E = 11e9, BucklingModes = 3, PointLoads = new[] { (col[^1], new Vec3d(-100, 0, 0)) } }).Buckling!;
+    double eulerC = Math.PI * Math.PI * 11e9 * (0.1 * Math.Pow(0.025, 3) / 12) / (4 * 16);
+    // portal frame, fixed bases, h = Lb = 4, 16 elements per member, upright 0.1 × 0.02: sway x / tan x = −6 Lb/h
+    var vplane = new MeshData(TestMeshes.CreateQuadGrid(4, 4, 3.0).Vertices.Select(q => new Vec3d(q.X - 6, 0, q.Y - 6)).ToArray(), TestMeshes.CreateQuadGrid(4, 4, 3.0).Faces);
+    Vec3d[] Seg(Vec3d a0, Vec3d b0, int k) => Enumerable.Range(0, k + 1).Select(i => a0 + (double)i / k * (b0 - a0)).ToArray();
+    var pa = new Vec3d(-2, 0, -2); var pb = new Vec3d(2, 0, -2);
+    var c1 = Seg(pa, pa + new Vec3d(0, 0, 4), 16); var c2 = Seg(pb, pb + new Vec3d(0, 0, 4), 16); var bm = Seg(c1[^1], c2[^1], 16);
+    var pf = FrameAnalysis.Compute(vplane, new[] { c1, bm, c2 }, null, new[] { pa, pb }, new LathProfile(0.1, 0.02, true), Vec3d.Zero,
+        new FrameAnalysis.Options { E = 11e9, BucklingModes = 1, PointLoads = new[] { (c1[^1], new Vec3d(0, 0, -1000)), (c2[^1], new Vec3d(0, 0, -1000)) } }).Buckling!;
+    double xlo = Math.PI / 2 + 1e-12, xhi = Math.PI - 1e-12;
+    for (int k = 0; k < 200; k++) { double mid = 0.5 * (xlo + xhi); if (mid / Math.Tan(mid) + 6 > 0) xlo = mid; else xhi = mid; }
+    double xs0 = 0.5 * (xlo + xhi), portalPcr = xs0 * xs0 * 11e9 * (0.1 * Math.Pow(0.02, 3) / 12) / 16;
+    numbers["buckling"] = new
+    {
+        factors = bk.Factors.Select(f => Math.Round(f, 4)).ToArray(), iterations = bk.Iterations, converged = bk.Converged,
+        spread = bk.Shapes.Select(sh => R3(sh.Count(v => v.Length > 0.2) / (double)sh.Length)).ToArray(),
+        peakAt = bk.Shapes.Select(sh => { int i = Array.IndexOf(sh, sh.OrderByDescending(v => v.Length).First()); return P(frB.Nodes[i]); }).ToArray(),
+        sturm = bk.SturmConfirmed, residual = bk.MaxResidual, ms = t3.ElapsedMilliseconds,
+        amplification = bk.Factors.Length > 0 && bk.Factors[0] > 1 ? R3(1 / (1 - 1 / bk.Factors[0])) : 0,
+        cantRatios = cb.Factors.Select(f => Math.Round(f * 100 / eulerC, 9)).ToArray(), cantSturm = cb.SturmConfirmed,
+        portalErr = pf.Factors[0] * 1000 / portalPcr - 1, portalK = Math.Round(Math.PI / xs0, 6), portalSturm = pf.SturmConfirmed,
+    };
 }
 
 static double ArcAt(Vec3d[] line, double[] arc, Vec3d p)

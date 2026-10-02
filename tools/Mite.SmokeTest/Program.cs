@@ -274,6 +274,34 @@ internal static class Tests
                     && Expect(err < 0.05, $"deflection {maxDisp:F3} vs analytic {expected:F3} ({err:P1})");
             });
 
+        TestComponent("Gridshell Analysis (buckling)",
+            new Mite.Grasshopper.Components.GridshellAnalysisComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-3, -3, 0);
+                plane.Vertices.Add(3, -3, 0);
+                plane.Vertices.Add(3, 3, 0);
+                plane.Vertices.Add(-3, 3, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                // 3 m flat 0.1 × 0.02 cantilever pushed along its axis: λ·P = π²EI/(4L²)
+                SetInputs(c, (0, plane), (4, Rhino.Geometry.Vector3d.Zero), (7, 0.1), (8, 0.02), (12, 0.25), (21, 2));
+                SetCurveList(c, 1, new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1.5, 0, 0), new Rhino.Geometry.Point3d(1.5, 0, 0)));
+                SetPointList(c, 3, new Rhino.Geometry.Point3d(-1.5, 0, 0));
+                SetPointList(c, 19, new Rhino.Geometry.Point3d(1.5, 0, 0));
+                SetVectorList(c, 20, new Rhino.Geometry.Vector3d(-100, 0, 0));
+            },
+            c =>
+            {
+                var lambda = Numbers(c, 11);
+                double I = 0.1 * System.Math.Pow(0.02, 3) / 12.0;
+                double pcr = System.Math.PI * System.Math.PI * 11e9 * I / (4 * 9.0);
+                double err = lambda.Count > 0 ? System.Math.Abs(lambda[0] * 100 / pcr - 1) : 1;
+                return Expect(lambda.Count == 2, $"2 buckling factors, got {lambda.Count}")
+                    && Expect(err < 1e-3, $"λ₁·P = {(lambda.Count > 0 ? lambda[0] * 100 : 0):F2} N vs Euler {pcr:F2} N ({err:P3})")
+                    && Expect(CurveCount(c, 12) == 2, "one mode-shape curve per mode");
+            });
+
         TestComponent("Lath Unroll",
             new Mite.Grasshopper.Components.LathUnrollComponent(),
             c =>

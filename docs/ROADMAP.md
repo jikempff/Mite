@@ -25,8 +25,10 @@ where they overlap
    2026-09-27 (1.3.0, `AsymptoticWeb`, `AagWeb`); next items in G below.
 2. Structural analysis that can be trusted: chosen supports (done: border /
    lowest / picked, fixed / pinned), joint model (done: rigid / hinge /
-   semi-rigid), loads (done: self-weight, area, point); next: buckling, joint
-   eccentricity, the AAG erection sequence.
+   semi-rigid), loads (done: self-weight, area, point), linear buckling (done
+   2026-10-02, see D "Stability"); next: joint eccentricity, the end-moment
+   terms of K_g, a nonlinear check with the mode-1 imperfection, the AAG
+   erection sequence.
 3. The kinetic behaviour of any web in the browser (done for scissor / lift /
    spread drives, 1.3.0); next: speed, strain colouring per state, the flat
    state as the assembly state.
@@ -345,6 +347,44 @@ remains the self-test review page.
       least-squares fit over the window or the tangent's rotation about the
       transported normal; and the strain model itself (τ·t/√3 twist strain,
       w/2 and t/2 fibre distances) against Schling's timber limits.
+- [x] Stability of the frame (linear buckling) — 2026-10-02,
+      `FrameAnalysis.Options.BucklingModes`, `Numerics/SubspaceIteration`,
+      Gridshell Analysis `Modes` / `Amplitude` → `Buckling` / `ModeShapes`
+      (appended). Literature: consistent geometric stiffness from
+      ½N∫(u′² + v′² + w′² + r₀²θ′²) dx with Hermite cubics (Przemieniecki 1968;
+      McGuire, Gallagher & Ziemian 2000 ch. 9 — their end-moment terms left
+      out), Wagner r₀² = I_p/A (Timoshenko & Gere 1961 §5.3; Frame3DD uses J/A
+      instead, which is not the Wagner term); subspace iteration with
+      q = max(2p, p + 8) (Bathe 2013, "The subspace iteration method —
+      revisited") on G = −K_g, which is indefinite, so the reduced problem is
+      solved as G_r z = μK_r z through the eigen-decomposition of K_r, the
+      positive μ are picked, and a Sturm count (negative pivots of K − σG,
+      new `SparseSymmetricSolver.NegativePivots`) confirms nothing below λ₁
+      was missed; α_cr thresholds from EN 1993-1-1 §5.2.1; gridshell context
+      Bulenda & Knippers 2001, Malek, Wierzbicki & Ochsendorf 2014, Bruno,
+      Sassone & Venuti 2016 (L/300 eigenmode-affine imperfections).
+      Exact checks (`BucklingTests`, bench): 8-element cantilever =
+      the discrete eigenvalues 1.000002060, 9.001478254, 16.000032963 (strong
+      axis) × π²EI/4L² to 1e-9 (computed independently in numpy), errors
+      7.5e-3 / 5.1e-4 / 3.3e-5 / 2.1e-6 for 1 / 2 / 4 / 8 elements (from above,
+      h⁴); fixed-base portal sway x/tan x = −6 L_b/h within 1.1e-5 (K = 1.1565);
+      λ scales exactly with 1/load and E. Findings:
+      - unshifted subspace iteration needed 133 iterations / 31 s on the bench
+        saddle (18 078 DOF): the negative eigenvalues (the load reversed)
+        compete for the iteration vectors and the modes come in mirror pairs.
+        Carrying G X with X (one G product per vector), CSR products, and a
+        shift σ = 0.8 λ₁ after four steps (K − σG stays positive definite
+        below λ₁, so the plain LDLᵀ works) → 13 iterations / 6.1 s including
+        the static solve and the two Sturm factorizations;
+      - the saddle demo's first modes are local: laths at the middle of the
+        two low edges buckle (1.3 % of the nodes move more than 0.2 of the
+        peak), λ₁ = 32.65 under 1 kN/m — the net is far from global buckling
+        under that load and its weak point is the edge laths.
+      Open: end-moment terms of K_g (lateral–torsional buckling of laths in
+      bending, McGuire et al. eq. 9.18); per-family sections; a geometrically
+      nonlinear solve (arc-length) to follow the mode-1 imperfection past
+      λ₁, which is what Bulenda & Knippers and Bruno et al. show governs; the
+      buckling block in the web app (the wasm API does not expose it yet).
 - [ ] Mesh repair and welding: Attene 2010 (A lightweight approach to
       repairing digitized polygon meshes); Botsch et al. 2010 (Polygon Mesh
       Processing, ch. 8) — for Mesh Cleanup.
@@ -559,6 +599,10 @@ Open
       bump the yak manifest.
 
 ## Done
+
+- [x] 2026-10-02 (session, D): linear buckling in Gridshell Analysis —
+      geometric stiffness, shifted subspace iteration with a Sturm check,
+      exact Euler / portal tests, bench checks and mode-shape demo.
 
 - [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
       Gridshell Analysis joints inserted exactly (the snap had chained joints

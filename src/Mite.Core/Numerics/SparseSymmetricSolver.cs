@@ -31,6 +31,39 @@ public sealed class SparseSymmetricSolver
     public long EnvelopeSize => _env.LongLength;
 
     /// <summary>
+    /// Number of negative pivots in D of the LDLᵀ factor. By Sylvester's law
+    /// of inertia this is the number of negative eigenvalues of the matrix
+    /// (0 for a positive-definite one); for a factor of K − σG it counts the
+    /// eigenvalues of the pencil K φ = λ G φ that lie in (0, σ) — the Sturm
+    /// sequence check of eigenvalue solvers.
+    /// </summary>
+    public int NegativePivots
+    {
+        get
+        {
+            int count = 0;
+            foreach (double d in _diag) if (d < 0) count++;
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// a·A + b·B for two builders of the same size (e.g. the shifted pencil
+    /// K − σG of a buckling or vibration problem).
+    /// </summary>
+    public static Builder Combine(Builder a, double sa, Builder b, double sb)
+    {
+        if (a.N != b.N) throw new ArgumentException("Matrix sizes differ.", nameof(b));
+        var c = new Builder(a.N);
+        for (int i = 0; i < a.N; i++)
+        {
+            foreach (var kv in a.Rows[i]) c.Add(i, kv.Key, sa * kv.Value);
+            foreach (var kv in b.Rows[i]) c.Add(i, kv.Key, sb * kv.Value);
+        }
+        return c;
+    }
+
+    /// <summary>
     /// Builder for symmetric matrices; only the upper triangle (row ≤ col)
     /// needs to be added, but adding both halves is tolerated (the lower one
     /// is ignored). Repeated (row, col) entries accumulate.

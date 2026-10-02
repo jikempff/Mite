@@ -7,6 +7,14 @@ using Mite.Core.Geometry;
 
 namespace Mite.Core.Analysis;
 
+// Linear buckling (Options.BucklingModes): consistent geometric stiffness after
+// Przemieniecki (1968) and McGuire, Gallagher & Ziemian (2000, ch. 9), the
+// Wagner term r0² = Ip/A after Timoshenko & Gere (1961, Theory of Elastic
+// Stability §5.3), eigen-solve by subspace iteration (Bathe 2013) with a Sturm
+// sequence check; α_cr thresholds from EN 1993-1-1 §5.2.1; gridshell context:
+// Bulenda & Knippers (2001, Stability of grid shells, Comput. Struct. 79) and
+// Bruno, Sassone & Venuti (2016, Eng. Struct. 112).
+
 /// <summary>
 /// Linear static analysis of a lath network as a 3D frame: each polyline
 /// segment becomes a 12-DOF Euler-Bernoulli beam with the lath's section,
@@ -14,7 +22,8 @@ namespace Mite.Core.Analysis;
 /// surface normal with an optional rotational stiffness), and support points
 /// are fixed or pinned. A first-order sanity check for gridshells — not a
 /// replacement for a full FE package, but it runs inside the definition and
-/// reports per-lath axial/bending utilization against an allowable stress.
+/// reports per-lath axial/bending utilization against an allowable stress,
+/// and optionally the linear buckling load factors and mode shapes.
 /// </summary>
 public static class FrameAnalysis
 {
@@ -87,6 +96,50 @@ public static class FrameAnalysis
 
         /// <summary>Concentrated forces (N) attached to the nearest node.</summary>
         public IReadOnlyList<(Vec3d Point, Vec3d Force)>? PointLoads { get; set; }
+
+        /// <summary>
+        /// Number of linear buckling modes to compute (0 = none, the
+        /// default). Each mode is a load factor λ on the whole load case
+        /// (line load, self-weight, area and point loads together) at which
+        /// the frame loses stability, with its mode shape — see
+        /// <see cref="BucklingResult"/>.
+        /// </summary>
+        public int BucklingModes { get; set; } = 0;
+    }
+
+    /// <summary>
+    /// Linearised (eigenvalue) buckling of the frame: (K + λ K_g) φ = 0, with
+    /// K_g the geometric stiffness of the axial forces of the static solution.
+    /// λ₁ is the elastic critical load factor α_cr of EN 1993-1-1 §5.2.1:
+    /// below 1 the load case buckles the perfect frame; below 10 second-order
+    /// effects are not negligible (amplification ≈ 1/(1 − 1/λ₁)). Linear
+    /// buckling of shells and gridshells is unconservative — the first mode
+    /// is the usual shape of the geometric imperfection for a nonlinear check
+    /// (Bulenda &amp; Knippers 2001; Bruno, Sassone &amp; Venuti 2016).
+    /// </summary>
+    public sealed class BucklingResult
+    {
+        /// <summary>Critical load factors, ascending (positive: the load as given; a mode that needs the load reversed is not reported).</summary>
+        public double[] Factors { get; }
+
+        /// <summary>Per mode, the translation of every node (Result.Nodes order), scaled so the largest is 1 (unitless).</summary>
+        public Vec3d[][] Shapes { get; }
+
+        /// <summary>Subspace iterations used and whether the factors converged to 1e-10.</summary>
+        public int Iterations { get; }
+        public bool Converged { get; }
+
+        /// <summary>Largest relative eigen-residual ‖Kφ − λGφ‖ / ‖Kφ‖.</summary>
+        public double MaxResidual { get; }
+
+        /// <summary>True when the Sturm sequence check confirms that no lower positive factor was missed.</summary>
+        public bool SturmConfirmed { get; }
+
+        public BucklingResult(double[] factors, Vec3d[][] shapes, int iterations, bool converged, double maxResidual, bool sturmConfirmed)
+        {
+            Factors = factors; Shapes = shapes; Iterations = iterations; Converged = converged;
+            MaxResidual = maxResidual; SturmConfirmed = sturmConfirmed;
+        }
     }
 
     public readonly struct Result
@@ -152,6 +205,9 @@ public static class FrameAnalysis
         /// <summary>Laths (by index) that no support reaches through the net; they are left out of the solve (zero displacement, zero utilization).</summary>
         public readonly int[] FloatingLaths;
 
+        /// <summary>Linear buckling modes, when <see cref="Options.BucklingModes"/> &gt; 0 (otherwise null).</summary>
+        public readonly BucklingResult? Buckling;
+
         public Result(Vec3d[] nodes, List<(int, int)>[] nodeMap, Vec3d[] displacements,
             double maxDisplacement, (int, int)[] elementSource,
             double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
@@ -165,7 +221,18 @@ public static class FrameAnalysis
             double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
             int supportNodeCount, double[] torsion, int[] supportNodes, Vec3d[] reactions,
             Vec3d totalLoad, double equilibriumError, Vec3d[][] laths, int jointCount, int[] floatingLaths)
+            : this(nodes, nodeMap, displacements, maxDisplacement, elementSource, axial, bendY, bendZ,
+                utilization, maxUtilization, supportNodeCount, torsion, supportNodes, reactions,
+                totalLoad, equilibriumError, laths, jointCount, floatingLaths, null) { }
+
+        public Result(Vec3d[] nodes, List<(int, int)>[] nodeMap, Vec3d[] displacements,
+            double maxDisplacement, (int, int)[] elementSource,
+            double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
+            int supportNodeCount, double[] torsion, int[] supportNodes, Vec3d[] reactions,
+            Vec3d totalLoad, double equilibriumError, Vec3d[][] laths, int jointCount, int[] floatingLaths,
+            BucklingResult? buckling)
         {
+            Buckling = buckling;
             FloatingLaths = floatingLaths;
             SupportNodeCount = supportNodeCount;
             Nodes = nodes;
@@ -758,9 +825,86 @@ public static class FrameAnalysis
             if (utilization[e] > maxUtil) maxUtil = utilization[e];
         }
 
+        // ---- Linear buckling ------------------------------------------------
+        // (K + λ K_g(N)) φ = 0 with N the axial forces above; solved as
+        // K φ = λ G φ, G = −K_g, by subspace iteration on the factor of K.
+        BucklingResult? buckling = null;
+        if (options.BucklingModes > 0)
+        {
+            double r0Sq = (Iy + Iz) / A; // polar radius of gyration², Wagner term
+            var Gff = new SparseSymmetricSolver.Builder(nfree);
+            bool anyCompression = false;
+            for (int e = 0; e < ne; e++)
+            {
+                if (elemRot[e] == null || axial[e] == 0) continue;
+                if (axial[e] < 0) anyCompression = true;
+                var kg = LocalGeometricStiffness(axial[e], r0Sq, elemLen[e]);
+                var dofs = ElemDofs(e);
+                var rot = elemRot[e];
+                for (int r = 0; r < 12; r++)
+                {
+                    int fr = dofMap[dofs[r]];
+                    if (fr < 0) continue;
+                    int rb = r / 3 * 3, ra = r % 3;
+                    for (int c = 0; c < 12; c++)
+                    {
+                        int fc = dofMap[dofs[c]];
+                        if (fc < 0 || fr > fc) continue;
+                        int cb = c / 3 * 3, ca = c % 3;
+                        double sum = 0;
+                        for (int a = 0; a < 3; a++)
+                        {
+                            double qa = Component(rot[a], ra);
+                            if (qa == 0) continue;
+                            for (int b = 0; b < 3; b++)
+                                sum += qa * kg[rb + a, cb + b] * Component(rot[b], ca);
+                        }
+                        if (sum != 0) Gff.Add(fr, fc, -sum);
+                    }
+                }
+            }
+            if (!anyCompression)
+            {
+                buckling = new BucklingResult(Array.Empty<double>(), Array.Empty<Vec3d[]>(), 0, true, 0, true);
+            }
+            else
+            {
+                var eig = SubspaceIteration.SmallestPositive(solver, Kff, Gff, options.BucklingModes, u);
+                var shapes = new Vec3d[eig.Values.Length][];
+                for (int m = 0; m < eig.Values.Length; m++)
+                {
+                    var phi = eig.Vectors[m];
+                    var sh = new Vec3d[nodes.Count];
+                    double big = 0; Vec3d bigV = Vec3d.Zero;
+                    for (int i = 0; i < nodes.Count; i++)
+                    {
+                        int b0 = transBase[i];
+                        double x = dofMap[b0] >= 0 ? phi[dofMap[b0]] : 0;
+                        double y = dofMap[b0 + 1] >= 0 ? phi[dofMap[b0 + 1]] : 0;
+                        double z = dofMap[b0 + 2] >= 0 ? phi[dofMap[b0 + 2]] : 0;
+                        sh[i] = new Vec3d(x, y, z);
+                        if (sh[i].Length > big) { big = sh[i].Length; bigV = sh[i]; }
+                    }
+                    // unit largest translation, sign fixed by its largest component
+                    double sgn = 1;
+                    if (big > 0)
+                    {
+                        double ax = Math.Abs(bigV.X), ay = Math.Abs(bigV.Y), az = Math.Abs(bigV.Z);
+                        double lead = az >= ax && az >= ay ? bigV.Z : ay >= ax ? bigV.Y : bigV.X;
+                        sgn = lead < 0 ? -1 : 1;
+                    }
+                    double f = big > 0 ? sgn / big : 0;
+                    for (int i = 0; i < sh.Length; i++) sh[i] = f * sh[i];
+                    shapes[m] = sh;
+                }
+                buckling = new BucklingResult(eig.Values, shapes, eig.Iterations, eig.Converged, eig.MaxResidual, eig.SturmConfirmed);
+            }
+        }
+
         return new Result(nodes.ToArray(), nodeMap.ToArray(), displacements, maxDisp,
             elemSrc.ToArray(), axial, bendY, bendZ, utilization, maxUtil, supportNodes.Count,
-            torsion, supportNodes.ToArray(), reactions, totalLoad, eqErr, lathsW, jointCount, floatingCurves.OrderBy(c => c).ToArray());
+            torsion, supportNodes.ToArray(), reactions, totalLoad, eqErr, lathsW, jointCount, floatingCurves.OrderBy(c => c).ToArray(),
+            buckling);
     }
 
     private static int NearestNode(PointGrid grid, List<Vec3d> nodes, Vec3d p, double radius)
@@ -883,6 +1027,40 @@ public static class FrameAnalysis
     }
 
     private static double Component(Vec3d v, int i) => i == 0 ? v.X : i == 1 ? v.Y : v.Z;
+
+    /// <summary>
+    /// Consistent geometric stiffness of a straight 12-DOF beam under the
+    /// axial force N (tension positive), DOF order as <see cref="LocalStiffness"/>.
+    /// From the second-order strain energy ½N∫(u′² + v′² + w′² + r₀²θ′²) dx
+    /// with the cubic Hermite shapes of the beam for v, w and linear shapes
+    /// for u, θ (Przemieniecki 1968, Theory of Matrix Structural Analysis;
+    /// McGuire, Gallagher &amp; Ziemian 2000, Matrix Structural Analysis §9,
+    /// with the end-moment terms left out); r₀² = (I_y + I_z)/A is the polar
+    /// radius of gyration of a section whose shear centre is the centroid
+    /// (Wagner term of torsional buckling, Timoshenko &amp; Gere 1961 §5.3).
+    /// Bending blocks: N/(30L)·[36, 3L, −36, 3L; 3L, 4L², −3L, −L²; …], signs
+    /// of the rotation couplings as in the elastic stiffness.
+    /// </summary>
+    internal static double[,] LocalGeometricStiffness(double N, double r0Sq, double L)
+    {
+        var k = new double[12, 12];
+        void Set(int i, int j, double v) { k[i, j] = v; k[j, i] = v; }
+        double a = N / L, b = N / (30 * L);
+        // axial and torsion (Wagner)
+        Set(0, 0, a); Set(0, 6, -a); Set(6, 6, a);
+        Set(3, 3, a * r0Sq); Set(3, 9, -a * r0Sq); Set(9, 9, a * r0Sq);
+        // v, rz (bending about z)
+        Set(1, 1, 36 * b); Set(1, 5, 3 * L * b); Set(1, 7, -36 * b); Set(1, 11, 3 * L * b);
+        Set(5, 5, 4 * L * L * b); Set(5, 7, -3 * L * b); Set(5, 11, -L * L * b);
+        Set(7, 7, 36 * b); Set(7, 11, -3 * L * b);
+        Set(11, 11, 4 * L * L * b);
+        // w, ry (bending about y)
+        Set(2, 2, 36 * b); Set(2, 4, -3 * L * b); Set(2, 8, -36 * b); Set(2, 10, -3 * L * b);
+        Set(4, 4, 4 * L * L * b); Set(4, 8, 3 * L * b); Set(4, 10, -L * L * b);
+        Set(8, 8, 36 * b); Set(8, 10, 3 * L * b);
+        Set(10, 10, 4 * L * L * b);
+        return k;
+    }
 
     /// <summary>
     /// Standard 12x12 Euler-Bernoulli beam stiffness in local coordinates.

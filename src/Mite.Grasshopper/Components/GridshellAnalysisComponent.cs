@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Grasshopper;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
@@ -18,6 +19,7 @@ public class GridshellAnalysisComponent : MiteComponent
             "scissor hinge or semi-rigid about the surface normal); supports are fixed or pinned points; " +
             "loads per metre of lath, self-weight, area load and point loads. Geometry is converted from the document units to " +
             "metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. " +
+            "Optionally (Modes > 0) the linear buckling load factors and mode shapes of the same load case. " +
             "A first-order sanity check, not a full FE package.",
             "Analysis", "GridshellAnalysis") { }
 
@@ -45,6 +47,8 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("AreaLoad", "q", "Vertical area load in N/m² on the mesh area (snow, cladding), shared by the laths per metre of length (0 = none)", GH_ParamAccess.item, 0.0);
         pManager.AddPointParameter("LoadPoints", "Lp", "Points where concentrated forces act (attached to the nearest node)", GH_ParamAccess.list);
         pManager.AddVectorParameter("Forces", "F", "Force in N per load point (one per point, or one for all)", GH_ParamAccess.list);
+        pManager.AddIntegerParameter("Modes", "Bm", "Number of linear buckling modes to compute (0 = none). Each gives a load factor λ on the whole load case: below 1 the perfect net buckles under it, below 10 second-order effects matter (EN 1993-1-1 §5.2.1)", GH_ParamAccess.item, 0);
+        pManager.AddNumberParameter("Amplitude", "Ba", "Largest displacement of the drawn mode shapes in model units (0 = automatic: span / 300, the usual imperfection amplitude for a nonlinear check)", GH_ParamAccess.item, 0.0);
         pManager[2].Optional = true;
         pManager[19].Optional = true;
         pManager[20].Optional = true;
@@ -62,7 +66,9 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("Axial", "Nx", "Axial force per element in N (tension positive), one branch per lath", GH_ParamAccess.tree);
         pManager.AddPointParameter("SupportNodes", "Sn", "The frame nodes the supports hold", GH_ParamAccess.list);
         pManager.AddVectorParameter("Reactions", "R", "Reaction force in N at each support node", GH_ParamAccess.list);
-        pManager.AddTextParameter("Report", "Rp", "Totals: applied load, reactions, equilibrium error, joints, supports", GH_ParamAccess.item);
+        pManager.AddTextParameter("Report", "Rp", "Totals: applied load, reactions, equilibrium error, joints, supports (and buckling)", GH_ParamAccess.item);
+        pManager.AddNumberParameter("Buckling", "λ", "Linear buckling load factors, ascending (one per mode; empty when Modes = 0 or nothing is compressed)", GH_ParamAccess.list);
+        pManager.AddCurveParameter("ModeShapes", "Bs", "Lath curves displaced by each buckling mode, one branch per mode (one curve per input curve), largest displacement = Amplitude — use the first as the imperfect geometry of a nonlinear check", GH_ParamAccess.tree);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -99,6 +105,10 @@ public class GridshellAnalysisComponent : MiteComponent
         var loadPts = new List<Point3d>(); var forces = new List<Vector3d>();
         DA.GetDataList(19, loadPts);
         DA.GetDataList(20, forces);
+        int modes = 0; double amplitude = 0;
+        DA.GetData(21, ref modes);
+        DA.GetData(22, ref amplitude);
+        modes = Math.Max(0, Math.Min(modes, 50));
 
         if (supports.Count == 0)
         {
@@ -176,6 +186,7 @@ public class GridshellAnalysisComponent : MiteComponent
                     JointRotationalStiffness = jointK < 0 ? double.PositiveInfinity : jointK,
                     Density = Math.Max(0, density), AreaLoad = areaLoad,
                     PointLoads = pointLoads,
+                    BucklingModes = modes,
                 });
         }
         catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
@@ -245,9 +256,63 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.SetDataList(8, supNodes);
         DA.SetDataList(9, reacts);
         var sumR = Vec3d.Zero; foreach (int n in result.SupportNodes) sumR = sumR + result.Reactions[n];
-        DA.SetData(10, $"load {result.TotalLoad.Z / 1000:0.###} kN (vertical) · reactions {sumR.Z / 1000:0.###} kN · equilibrium error {result.EquilibriumError:E1}\n" +
+        string report = $"load {result.TotalLoad.Z / 1000:0.###} kN (vertical) · reactions {sumR.Z / 1000:0.###} kN · equilibrium error {result.EquilibriumError:E1}\n" +
             $"{result.Nodes.Length} nodes · {result.Utilization.Length} elements · {result.JointCount} joints · {result.SupportNodeCount} supports ({(supportType == 1 ? "pinned" : "fixed")}) · joints {(jointK < 0 ? "rigid" : jointK == 0 ? "hinged" : $"k = {jointK:G3} N·m/rad")}\n" +
-            $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}");
+            $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}";
+
+        // Linear buckling: factors, mode shapes at the chosen amplitude, verdict
+        var factors = new List<double>();
+        var shapeTree = new DataTree<Curve?>();
+        var bk = result.Buckling;
+        if (bk != null)
+        {
+            factors.AddRange(bk.Factors);
+            double amp = amplitude;
+            if (amp <= 0)
+            {
+                double x0 = double.MaxValue, x1 = double.MinValue, y0 = double.MaxValue, y1 = double.MinValue;
+                foreach (var n in result.Nodes) { x0 = Math.Min(x0, n.X); x1 = Math.Max(x1, n.X); y0 = Math.Min(y0, n.Y); y1 = Math.Max(y1, n.Y); }
+                amp = Math.Max(x1 - x0, y1 - y0) * inv / 300.0; // model units
+            }
+            double ampM = amp * s;
+            for (int m = 0; m < bk.Shapes.Length; m++)
+            {
+                var path = new global::Grasshopper.Kernel.Data.GH_Path(m);
+                var modeCurves = new Curve?[curves.Count];
+                for (int c = 0; c < laths.Count; c++)
+                {
+                    var pts = new List<Point3d>();
+                    for (int i = 0; i < laths[c].Length; i++)
+                    {
+                        Vec3d d = nodeOf.TryGetValue((c, i), out int node) ? bk.Shapes[m][node] : Vec3d.Zero;
+                        pts.Add(MeshConvert.ToRhinoPoint(inv * (laths[c][i] + ampM * d)));
+                    }
+                    if (pts.Count > 1) modeCurves[lathIndex[c]] = new PolylineCurve(pts);
+                }
+                shapeTree.AddRange(modeCurves, path);
+            }
+            if (bk.Factors.Length == 0)
+                report += "\nbuckling: nothing is in compression under this load case";
+            else
+            {
+                double l1 = bk.Factors[0];
+                report += $"\nbuckling λ = {string.Join(", ", bk.Factors.Select(f => f.ToString("0.###")))}" +
+                    (l1 > 1 ? $" · second-order amplification ≈ {1 / (1 - 1 / l1):0.00}" : "") +
+                    $" · {bk.Iterations} iterations, residual {bk.MaxResidual:E1}, Sturm check {(bk.SturmConfirmed ? "passed" : "FAILED")}";
+                if (l1 < 1)
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                        $"Buckling factor λ₁ = {l1:0.###} < 1: the perfect net buckles under this load case. Stiffen it (deeper laths, more supports, rigid joints) or reduce the load.");
+                else if (l1 < 10)
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                        $"Buckling factor λ₁ = {l1:0.##} < 10: second-order effects are not negligible (EN 1993-1-1 §5.2.1, amplification ≈ {1 / (1 - 1 / l1):0.00}); gridshells are imperfection sensitive, so check with a nonlinear analysis using the first mode shape as imperfection.");
+                if (!bk.Converged || !bk.SturmConfirmed)
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                        $"Buckling solve {(bk.Converged ? "" : "did not converge")}{(!bk.Converged && !bk.SturmConfirmed ? " and " : "")}{(bk.SturmConfirmed ? "" : "could not confirm that no lower mode was missed (Sturm check)")}: treat the factors with care, or ask for more Modes.");
+            }
+        }
+        DA.SetData(10, report);
+        DA.SetDataList(11, factors);
+        DA.SetDataTree(12, shapeTree);
 
         if (result.MaxUtilization > 1.0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
