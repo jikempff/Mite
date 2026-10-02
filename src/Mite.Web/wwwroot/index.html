@@ -203,9 +203,14 @@
       <div class="row"><button id="kinrun" class="btn">Run the motion</button><span class="unit">on the current asymptotic net — use a coarse spacing</span></div>
       <div id="kin-result" class="hidden">
         <div class="row slider"><label for="kfold">fold</label><input id="kfold" type="range" min="0" max="10" step="1" value="0"><output for="kfold">0</output><button id="kplay" class="ghost small">play</button></div>
+        <div class="row"><span class="unit">lath colour</span><div class="chips small" id="kcolour" role="radiogroup" aria-label="lath colour during the motion">
+          <button data-kc="state" class="on" title="Peak strain utilization of each lath in the state on screen — it changes as you move the fold slider">strain now</button>
+          <button data-kc="envelope" title="Peak strain utilization of each lath over every state of the motion: what the lath must survive to be moved at all">envelope</button>
+          <button data-kc="off" title="Family colours">family</button>
+        </div></div>
         <p id="kin-stats" class="stats"></p>
         <canvas id="kin-plot" class="plot" height="110"></canvas>
-        <div class="caption">along the fold: height (ink), smallest crossing angle (A), peak strain utilization (B)</div>
+        <div class="caption" id="kin-caption">along the fold — line: peak strain utilization (dashed: the limit 1); shaded: strain energy Π split into bending (A colour) and twist (B colour) on one scale; dot: natural state (least Π)</div>
       </div>
       <p id="kin-note" class="note">Hinges keep the joint spacing and stay normal to the laths; the laths keep their rest bend as far as the stiffness asks (Schikore et al. 2020; Wan, Crolla &amp; Schling 2025). Low stiffness lets the grid unfold further — a 3-fold Enneper web flattens completely.</p>
     </section>

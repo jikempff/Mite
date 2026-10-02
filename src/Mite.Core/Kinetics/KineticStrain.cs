@@ -76,6 +76,38 @@ public static class KineticStrain
         /// <summary>Material-free ∫ (kn² + kg² + τg²) ds in model units.</summary>
         public double CurvatureSquare;
         public double Length;
+        /// <summary>Which curvature gives the peak strain at the lath's most utilised node.</summary>
+        public StrainSource Governing;
+        /// <summary>Index of the most utilised node along the lath (−1 when nothing is strained).</summary>
+        public int GoverningNode = -1;
+    }
+
+    /// <summary>The curvature whose strain governs a utilization: bending from kn or kg, or twist from τg.</summary>
+    public enum StrainSource { None, NormalCurvature, GeodesicCurvature, Twist }
+
+    /// <summary>
+    /// Strain envelope of a motion: for every lath the peak utilization over all states, the state where
+    /// it occurs and the curvature that governs there. A kinetic lath is loaded by every state it passes
+    /// through, not only by the end states (Wan, Man, Crolla &amp; Schling 2025 check bending and shear
+    /// stress at each of six stages of their canopy; envelopes over load cases are the usual design check),
+    /// so "buildable" for a mechanism means within the limit in every state.
+    /// </summary>
+    public sealed class MotionEnvelope
+    {
+        /// <summary>Per lath: peak utilization over all states.</summary>
+        public double[] LathUtilization = Array.Empty<double>();
+        /// <summary>Per lath: index of the state where that peak occurs (the first on ties; −1 for no states).</summary>
+        public int[] LathState = Array.Empty<int>();
+        /// <summary>Per lath: what governs at that state.</summary>
+        public StrainSource[] LathSource = Array.Empty<StrainSource>();
+        /// <summary>Peak over all laths and states.</summary>
+        public double MaxUtilization;
+        /// <summary>The lath and the state of that peak (−1 when there are none).</summary>
+        public int GoverningLath = -1, GoverningState = -1;
+        /// <summary>Laths that stay within the limit (utilization ≤ 1) in every state.</summary>
+        public int BuildableLaths;
+        /// <summary>True when every lath stays within the limit through the whole motion.</summary>
+        public bool Buildable => BuildableLaths == LathUtilization.Length;
     }
 
     public sealed class StateResult
@@ -164,9 +196,17 @@ public static class KineticStrain
                 double kn = r.NormalCurvature[i], kg = r.GeodesicCurvature[i], tg = r.GeodesicTorsion[i];
                 double kB = upright ? kg : kn;   // fibre distance ExtentB, bends about the A axis
                 double kA = upright ? kn : kg;   // fibre distance ExtentA, bends about the B axis
-                double strain = Math.Max(Math.Abs(kB) * halfB, Math.Max(Math.Abs(kA) * halfA, Math.Abs(tg) * twistFactor));
+                double sB = Math.Abs(kB) * halfB, sA = Math.Abs(kA) * halfA, sT = Math.Abs(tg) * twistFactor;
+                double strain = Math.Max(sB, Math.Max(sA, sT));
                 r.Utilization[i] = strain / opt.MaxStrain;
-                r.MaxUtilization = Math.Max(r.MaxUtilization, r.Utilization[i]);
+                if (r.Utilization[i] > r.MaxUtilization)
+                {
+                    r.MaxUtilization = r.Utilization[i];
+                    r.GoverningNode = i;
+                    r.Governing = strain == sT ? StrainSource.Twist
+                        : strain == sB ? (upright ? StrainSource.GeodesicCurvature : StrainSource.NormalCurvature)
+                        : (upright ? StrainSource.NormalCurvature : StrainSource.GeodesicCurvature);
+                }
                 if (i > 0 && i + 1 < n)
                 {
                     double ds = 0.5 * (segLen[i - 1] + segLen[i]);
@@ -196,6 +236,43 @@ public static class KineticStrain
     /// <summary>Every state of a motion.</summary>
     public static List<StateResult> Analyze(ScissorNet net, ScissorNet.Result motion, Options? options = null) =>
         motion.States.Select(s => Analyze(net, s, options)).ToList();
+
+    /// <summary>
+    /// Strain envelope over the states of a motion (see <see cref="MotionEnvelope"/>). All states must come
+    /// from the same net (same lath count).
+    /// </summary>
+    public static MotionEnvelope Envelope(IReadOnlyList<StateResult> states)
+    {
+        int laths = states.Count > 0 ? states[0].Laths.Length : 0;
+        var env = new MotionEnvelope
+        {
+            LathUtilization = new double[laths],
+            LathState = Enumerable.Repeat(-1, laths).ToArray(),
+            LathSource = new StrainSource[laths],
+        };
+        for (int k = 0; k < states.Count; k++)
+        {
+            if (states[k].Laths.Length != laths) throw new ArgumentException("Every state must have the same laths.", nameof(states));
+            for (int l = 0; l < laths; l++)
+            {
+                var lr = states[k].Laths[l];
+                if (env.LathState[l] < 0 || lr.MaxUtilization > env.LathUtilization[l])
+                {
+                    env.LathUtilization[l] = lr.MaxUtilization; env.LathState[l] = k; env.LathSource[l] = lr.Governing;
+                }
+            }
+        }
+        for (int l = 0; l < laths; l++)
+        {
+            if (env.LathUtilization[l] <= 1.0) env.BuildableLaths++;
+            if (env.GoverningLath < 0 || env.LathUtilization[l] > env.MaxUtilization)
+            {
+                env.MaxUtilization = env.LathUtilization[l]; env.GoverningLath = l; env.GoverningState = env.LathState[l];
+            }
+        }
+        if (states.Count == 0) { env.GoverningLath = -1; env.GoverningState = -1; }
+        return env;
+    }
 
     /// <summary>
     /// Index of the natural state — the least Total (strain energy + potential)
