@@ -8,9 +8,13 @@ special data types required.
 
 1. Add a **Mesh Sphere** (Mesh > Primitive) or reference any mesh.
 2. Wire it into **Gaussian Curvature** (Mite > Curvature).
-3. Wire the mesh and `K` into **Mesh Colour Map** (Mite > Util): blue is
-   negative, white zero, red positive. (Or build your own chain with
-   **Bounds** + **Remap Numbers** + **Gradient** + **Mesh Colours**.)
+3. Wire the mesh and `K` into **Mesh Colour Map** (Mite > Util): neon blue
+   is negative, white zero, crimson positive — the same colours as the web
+   app, with equal lightness at both ends so −K and +K of the same size read
+   equally strong. `P` = 1 is the sequential map (black → neon blue → neon
+   green → white) for magnitudes, 2 the utilization map, 3–5 the 1.3.0
+   colours. (Or build your own chain with **Bounds** + **Remap Numbers** +
+   **Gradient** + **Mesh Colours**.)
 4. Optional: wire the mesh and `K` into **Mesh Isocurves** with level `0` to
    outline the saddle-shaped regions.
 
@@ -197,7 +201,8 @@ no Joints or Supports (every contact is coupled, every border end supported).
 - **Lath Labels** — IDs (`L000`, `L001`, ...; set the prefix and start number
   per family), midpoint tag anchors, and a CSV bill of materials with lengths
   (and utilization if you wire Lath Analysis in).
-- **Lath Preview** — colors the swept laths by utilization: green OK, red over.
+- **Lath Preview** — colors the swept laths by utilization: green OK, neon
+  yellow close to the limit, neon red over (the web app's colours).
 - **Net Topology** — nodes and members of the net as a graph, for a structural
   package or a node schedule.
 

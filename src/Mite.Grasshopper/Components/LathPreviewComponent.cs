@@ -11,7 +11,7 @@ public class LathPreviewComponent : MiteComponent
     public LathPreviewComponent()
         : base("Lath Preview", "Preview",
             "Colors swept laths by utilization (e.g. from Lath Analysis or Gridshell Analysis): " +
-            "green within limits, yellow near the limit, red beyond it.",
+            "green within limits, neon yellow near the limit, neon red beyond it (the web app's colours).",
             "Fabrication", "LathPreview") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDF7");
@@ -46,7 +46,7 @@ public class LathPreviewComponent : MiteComponent
             if (laths[i] == null) { colored.Add(null); continue; }
             double u = utils.Count > 0 ? utils[Math.Min(i, utils.Count - 1)] : 0.0;
             // NaN (a lath that could not be analyzed) shows neutral grey, not a green pass
-            var color = double.IsNaN(u) ? Color.FromArgb(150, 150, 150) : UtilizationColor(u);
+            var color = UtilizationColor(u);
             var m = laths[i].DuplicateMesh();
             m.VertexColors.Clear();
             for (int v = 0; v < m.Vertices.Count; v++)
@@ -57,29 +57,10 @@ public class LathPreviewComponent : MiteComponent
         DA.SetDataList(0, colored);
     }
 
-    internal static Color UtilizationColor(double u)
-    {
-        // 0 -> green, 0.7 -> yellow, 1.0 -> red, >1.3 -> dark red
-        if (u <= 0.7)
-        {
-            double t = u / 0.7;
-            return Lerp(Color.FromArgb(46, 160, 67), Color.FromArgb(230, 200, 40), t);
-        }
-        if (u <= 1.0)
-        {
-            double t = (u - 0.7) / 0.3;
-            return Lerp(Color.FromArgb(230, 200, 40), Color.FromArgb(220, 60, 50), t);
-        }
-        double d = Math.Min(1.0, (u - 1.0) / 0.3);
-        return Lerp(Color.FromArgb(220, 60, 50), Color.FromArgb(120, 20, 20), d);
-    }
-
-    private static Color Lerp(Color a, Color b, double t)
-    {
-        t = Math.Max(0.0, Math.Min(1.0, t));
-        return Color.FromArgb(
-            (int)(a.R + (b.R - a.R) * t),
-            (int)(a.G + (b.G - a.G) * t),
-            (int)(a.B + (b.B - a.B) * t));
-    }
+    /// <summary>
+    /// Mite's utilization colours (Mite.Core MitePalette, identical to the web app):
+    /// green → neon yellow below the limit, a lightness drop to neon red at 1.0,
+    /// darker red to 1.3, dark red beyond, grey for NaN.
+    /// </summary>
+    internal static Color UtilizationColor(double u) => PaletteColours.Utilization(u);
 }

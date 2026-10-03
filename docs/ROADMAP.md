@@ -44,8 +44,9 @@ where they overlap
    assembly state.
 4. One lath section for every curve (done in the web app 1.3.0; per-family
    profiles in Grasshopper still open).
-5. Black, white and neon for everything visual (web app done 1.3.0; bench,
-   icons and Food4Rhino images still in the old palette).
+5. Black, white and neon for everything visual (web app done 1.3.0; one
+   palette in the core for Grasshopper, the app and the bench 2026-10-03, see
+   C; icons and Food4Rhino images still in the old palette).
 
 Priorities set by José (2026-09-25), in order
 1. Kinetic / adaptive asymptotic gridshells (E): simulate the folding of a
@@ -320,6 +321,44 @@ remains the self-test review page.
 - [ ] Colour-map legends identical to Mesh Colour Map in Grasshopper. (App:
       the colour bars render again — 2026-10-02; the bench still has no
       utilization legend bar, only swatches.)
+- [x] Colour-map legends identical to Mesh Colour Map in Grasshopper — 2026-10-03:
+      one palette, black / white / neon, in the core (`Display/MitePalette`,
+      `ColourScience`); Mesh Colour Map, Lath Preview, the app (colormaps.js,
+      app.css, viewer.js) and the bench draw from it, and `PaletteTests` reads
+      the app's files so they cannot drift apart. Literature: Kovesi 2015 (Good
+      colour maps: uniform L*, equal-lightness diverging ends, sine-ramp test),
+      Moreland 2009 (diverging maps), Crameri et al. 2020, Machado, Oliveira &
+      Fernandes 2009 (dichromat simulation in linear RGB), WCAG 2.1 (contrast,
+      SC 1.4.11 3:1 for graphics), CIE 15:2004 (CIELAB). Findings:
+      - the 1.3.0 app diverging map ran from L* 29.8 (blue) to 46.0 (red):
+        equal |K| read with different strength (asymmetry 16.1 L*); the maps
+        are now cut from the same sRGB paths at equal L* steps — asymmetry
+        0.58, L* within 0.96 of linear (was 5.6); sequential within 0.95 (was
+        6.2); Grasshopper's RdBu was 6.4 asymmetric, viridis-like 1.8;
+      - equal chroma at the diverging ends (Kovesi's second rule) is not
+        reachable with neon blue: at L* 39.5 the crimson end has chroma 70 vs
+        114; equal chroma would need L* 53 and a duller blue — kept the neon;
+      - the bench's teal / plum families were ΔE 15 apart for simulated
+        protanopes / deuteranopes, the app's blue / red are ΔE 102 (light) /
+        76 (dark);
+      - the app's light-theme green #00c865 had 2.2:1 on white (WCAG asks 3:1
+        for graphics): now #00a653 (3.2:1); the 3D viewer used yet another
+        green (#00d86b), now the same.
+- [ ] Family G against B for deuteranopes: neon red and neon green are ΔE 12
+      apart (light theme) / 25 (dark) for a simulated deuteranope — exactly
+      Crameri et al.'s warning. No lightness for G separates it from B for
+      both protanopes (B darkens to L* 43) and deuteranopes (B at L* 61) while
+      keeping 3:1 on white; a teal G (#029ebf, ΔE ≥ 42 to A and B) or a lime G
+      on black (#aff803, ΔE 57) would, or a dashed line style for G. José to
+      choose; then change `MitePalette.FamilyG` (tests follow).
+- [ ] App 3D viewer: family colours per theme (it draws the light-theme
+      colours on the dark theme too) and the remaining hard-coded neon
+      constants (`NEON.yellow`, the seed green) through the palette.
+- [ ] Grasshopper previews: the Mite Net preview (unmerged 2026-09-27 bundle)
+      should take `MitePalette.FamilyA/B` and the end-class colours once merged;
+      check them against Rhino's default grey viewport background.
+- [ ] Icons in black / white / neon (`tools/generate_icons.py`) after the Mite
+      Net bundle (two new icons) is merged, then the Food4Rhino screenshots.
 - [ ] Search / filter (failing tests only, by component, by tab); keyboard
       navigation; ticked state summary exportable as a GitHub issue draft.
 - [ ] Component cards show the Grasshopper icon at readable size and the

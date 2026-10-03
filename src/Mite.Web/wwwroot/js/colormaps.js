@@ -5,20 +5,22 @@
 function lerp(a, b, t) { return a + (b - a) * t; }
 function mix(c0, c1, t) { return [lerp(c0[0], c1[0], t), lerp(c0[1], c1[1], t), lerp(c0[2], c1[2], t)]; }
 
-// Stops in 0..1 → rgb 0..1
-const DIVERGING = [ // neon blue – white – neon red (kempff/seleme)
-  [0.00, [0.10, 0.12, 0.85]],
-  [0.25, [0.45, 0.52, 1.00]],
-  [0.50, [0.97, 0.97, 0.97]],
-  [0.75, [1.00, 0.45, 0.55]],
-  [1.00, [0.85, 0.05, 0.20]],
-];
-const SEQUENTIAL = [ // black → neon blue → neon green → white
-  [0.00, [0.04, 0.04, 0.04]],
-  [0.35, [0.16, 0.24, 1.00]],
-  [0.70, [0.00, 0.85, 0.42]],
-  [1.00, [0.96, 1.00, 0.97]],
-];
+// Stops in 0..1 → rgb 0..1. The values are Mite.Core's MitePalette (one
+// palette for Grasshopper, this app and the bench; PaletteTests checks that
+// this file matches it): evenly spaced stops cut at equal CIELAB L* steps, so
+// lightness changes at a uniform rate (Kovesi 2015) and both ends of the
+// diverging map have the same lightness (L* 39.5).
+const evenStops = (cols) => cols.map((c, i) => [i / (cols.length - 1), c.map((x) => x / 255)]);
+const DIVERGING = evenStops([ // neon blue (family A) – white – crimson
+  [42, 60, 255], [83, 98, 253], [118, 130, 252], [151, 159, 251], [183, 189, 249], [215, 218, 248],
+  [247, 247, 247],
+  [239, 213, 221], [231, 179, 194], [223, 144, 166], [214, 108, 138], [204, 66, 105], [188, 0, 53],
+]);
+const SEQUENTIAL = evenStops([ // black → neon blue → neon green → white
+  [10, 10, 10], [18, 23, 73], [24, 33, 122], [30, 44, 172], [37, 54, 224], [34, 89, 229],
+  [24, 127, 192], [16, 157, 164], [8, 185, 137], [1, 212, 112], [93, 231, 160], [176, 244, 208],
+  [245, 255, 247],
+]);
 
 export function sample(stops, t) {
   t = Math.max(0, Math.min(1, t));

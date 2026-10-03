@@ -61,7 +61,7 @@ for tab in TAB_ORDER:
         demo = note.get("demo")
         demo_html = ""
         if demo:
-            kind = "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sparkline" if demo == "lathUtil" else "3d"
+            kind = "palette" if demo == "palette" else "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sparkline" if demo == "lathUtil" else "3d"
             controls = ""
             if note.get("before_after"):
                 controls = '<div class="demo-ctl"><label><input type="radio" name="ba-' + slug(n) + '" value="before"> input</label><label><input type="radio" name="ba-' + slug(n) + '" value="after" checked> result</label><label><input type="radio" name="ba-' + slug(n) + '" value="both"> both</label></div>'
@@ -79,6 +79,13 @@ for tab in TAB_ORDER:
                 controls = '<div class="demo-ctl"><span class="ctl-l">show</span>' + "".join(
                     f'<label><input type="radio" name="tk-{slug(n)}" value="{m}" {"checked" if m == mode else ""}> {lbl}</label>'
                     for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2")]) + '</div>'
+            if demo == "palette":
+                controls = '<div class="demo-ctl"><span class="ctl-l">map</span>' + "".join(
+                    f'<label><input type="radio" name="map-{slug(n)}" value="{k}" {"checked" if k == "div" else ""}> {lbl}</label>'
+                    for k, lbl in [("div", "diverging"), ("seq", "sequential"), ("util", "utilization")]) + \
+                    '<span class="ctl-l" style="margin-left:8px">colours</span>' + "".join(
+                    f'<label><input type="radio" name="ver-{slug(n)}" value="{k}" {"checked" if k == "new" else ""}> {lbl}</label>'
+                    for k, lbl in [("new", "Mite palette"), ("old", "1.3.0")]) + '</div>'
             hint = "drag to rotate · scroll to zoom" if kind == "3d" else ""
             demo_html = f'<div class="demo{" tall" if note.get("tall") else ""}" data-demo="{demo}" data-kind="{kind}" data-id="{slug(n)}">{controls}<canvas></canvas><div class="demo-legend" id="lg-{slug(n)}"></div><div class="demo-hint">{hint}</div></div>'
         checks_html = ""
@@ -121,6 +128,8 @@ import base64, os
 if os.path.exists("favicon.svg"):
     fav = base64.b64encode(open("favicon.svg", "rb").read()).decode()
     page = page.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,' + fav + '">', 1)
+from palette_css import palette_vars
+page = page.replace("/*__PALETTE_LIGHT__*/", palette_vars(numbers["palette"], "light")).replace("/*__PALETTE_DARK__*/", palette_vars(numbers["palette"], "dark"))
 page = page.replace("/*__NAV__*/", "".join(nav)).replace("/*__CARDS__*/", "".join(cards))
 page = page.replace("/*__SCENES__*/", json.dumps(scenes, separators=(",", ":"))).replace("/*__NUMBERS__*/", json.dumps(numbers)).replace("/*__ORDER__*/", json.dumps([slug(n) for n in COMP_ORDER]))
 open("site/index.html", "w").write(page)

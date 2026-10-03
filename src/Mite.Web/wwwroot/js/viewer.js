@@ -14,7 +14,7 @@ import { LineSegmentsGeometry } from '../vendor/lines/LineSegmentsGeometry.js';
 // kempff/seleme palette: black, white and neon
 export const FAMILY_A = 0x2a3cff; // neon blue
 export const FAMILY_B = 0xff1f4f; // neon red
-export const FAMILY_G = 0x00d86b; // neon green (geodesic diagonals)
+export const FAMILY_G = 0x00a653; // neon green (geodesic diagonals) — Mite.Core MitePalette.FamilyG(Light), 3.2:1 on white
 export const NEON = { blue: 0x2a3cff, red: 0xff1f4f, green: 0x00d86b, yellow: 0xd9ff00 };
 
 export class Viewer {
