@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Mite.Core.Analysis;
 using Mite.Core.Curvature;
+using Mite.Core.Display;
 using Mite.Core.Dynamics;
 using Mite.Core.Fabrication;
 using Mite.Core.FormFinding;
@@ -588,6 +589,66 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     for (int i = 0; i < 20000; i++) { var p = new Vec3d(rng.NextDouble() * 300, rng.NextDouble() * 300, rng.NextDouble()); var h = proj.ClosestPoint(p, -1); if (Math.Abs(h.Point.Z) < 1e-9) ok++; }
     t2.Stop();
     numbers["projection"] = new { vertices = grid.VertexCount, buildMs = t.ElapsedMilliseconds, queries = 20000, queryMs = t2.ElapsedMilliseconds, exact = ok };
+}
+
+// ---------- palette: black, white and neon (Mite.Core MitePalette) ----------
+{
+    double Lab(double r, double g, double b) => ColourScience.Lightness(r, g, b);
+    double[] Profile(Rgb[] stops, int n = 401) => Enumerable.Range(0, n).Select(i => { var c = MitePalette.SampleExact(stops, i / (double)(n - 1)); return Lab(c.R, c.G, c.B); }).ToArray();
+    (double asym, double dev) Diverging(double[] L)
+    {
+        int mid = L.Length / 2; double asym = 0, dev = 0;
+        for (int i = 0; i < mid; i++) asym = Math.Max(asym, Math.Abs(L[i] - L[L.Length - 1 - i]));
+        for (int i = 0; i < L.Length; i++) { double s = i <= mid ? i / (double)mid : (L.Length - 1 - i) / (double)mid; double e = i <= mid ? L[0] : L[^1]; dev = Math.Max(dev, Math.Abs(L[i] - (e + (L[mid] - e) * s))); }
+        return (asym, dev);
+    }
+    double SeqDev(double[] L) => Enumerable.Range(0, L.Length).Max(i => Math.Abs(L[i] - (L[0] + (L[^1] - L[0]) * i / (L.Length - 1.0))));
+    bool Monotone(double[] L) => Enumerable.Range(1, L.Length - 1).All(i => L[i] > L[i - 1]);
+    Rgb[] Even(params double[][] c) => c.Select(x => new Rgb((int)Math.Round(255 * x[0]), (int)Math.Round(255 * x[1]), (int)Math.Round(255 * x[2]))).ToArray();
+    // the 1.3.0 maps, resampled evenly (app diverging and sequential had uneven stops: sample them exactly)
+    (double r, double g, double b) OldSample((double t, double r, double g, double b)[] st, double t)
+    {
+        for (int i = 1; i < st.Length; i++) if (t <= st[i].t) { double f = (t - st[i - 1].t) / (st[i].t - st[i - 1].t); return (255 * (st[i - 1].r + (st[i].r - st[i - 1].r) * f), 255 * (st[i - 1].g + (st[i].g - st[i - 1].g) * f), 255 * (st[i - 1].b + (st[i].b - st[i - 1].b) * f)); }
+        return (255 * st[^1].r, 255 * st[^1].g, 255 * st[^1].b);
+    }
+    var oldDiv = new[] { (0.00, 0.10, 0.12, 0.85), (0.25, 0.45, 0.52, 1.00), (0.50, 0.97, 0.97, 0.97), (0.75, 1.00, 0.45, 0.55), (1.00, 0.85, 0.05, 0.20) };
+    var oldSeq = new[] { (0.00, 0.04, 0.04, 0.04), (0.35, 0.16, 0.24, 1.00), (0.70, 0.00, 0.85, 0.42), (1.00, 0.96, 1.00, 0.97) };
+    double[] OldProfile((double, double, double, double)[] st) => Enumerable.Range(0, 401).Select(i => { var c = OldSample(st, i / 400.0); return Lab(c.r, c.g, c.b); }).ToArray();
+    int[][] OldStops((double, double, double, double)[] st, int n = 33) => Enumerable.Range(0, n).Select(i => { var c = OldSample(st, i / (n - 1.0)); return new[] { (int)Math.Round(c.r), (int)Math.Round(c.g), (int)Math.Round(c.b) }; }).ToArray();
+    var ghDiv = new[] { new Rgb(33, 102, 172), new Rgb(247, 247, 247), new Rgb(178, 24, 43) };
+    var ghVir = new[] { new Rgb(68, 1, 84), new Rgb(59, 82, 139), new Rgb(33, 145, 140), new Rgb(94, 201, 98), new Rgb(253, 231, 37) };
+
+    var dNew = Diverging(Profile(MitePalette.Diverging)); var dOld = Diverging(OldProfile(oldDiv)); var dGh = Diverging(Profile(ghDiv));
+    var Ld = Profile(MitePalette.Diverging); var Ls = Profile(MitePalette.Sequential); var LsOld = OldProfile(oldSeq);
+    double utilBelow = ColourScience.Lightness(MitePalette.Utilization(0.999)), utilAt = ColourScience.Lightness(MitePalette.Utilization(1.0));
+    double utilStepCvd = new[] { Cvd.Protanopia, Cvd.Deuteranopia }.Min(t => ColourScience.Lightness(ColourScience.Simulate(MitePalette.Utilization(0.999), t)) - ColourScience.Lightness(ColourScience.Simulate(MitePalette.Utilization(1.0), t)));
+    object Fam(Theme th) => new
+    {
+        contrastA = Math.Round(ColourScience.ContrastRatio(MitePalette.FamilyA(th), MitePalette.Paper(th)), 2),
+        contrastB = Math.Round(ColourScience.ContrastRatio(MitePalette.FamilyB(th), MitePalette.Paper(th)), 2),
+        contrastG = Math.Round(ColourScience.ContrastRatio(MitePalette.FamilyG(th), MitePalette.Paper(th)), 2),
+        abWorst = Math.Round(ColourScience.WorstCaseDeltaE(MitePalette.FamilyA(th), MitePalette.FamilyB(th)), 1),
+        agWorst = Math.Round(ColourScience.WorstCaseDeltaE(MitePalette.FamilyA(th), MitePalette.FamilyG(th)), 1),
+        bgWorst = Math.Round(ColourScience.WorstCaseDeltaE(MitePalette.FamilyB(th), MitePalette.FamilyG(th)), 1),
+    };
+    var pal = MitePalette.Export();
+    pal["old"] = new { diverging = OldStops(oldDiv), sequential = OldStops(oldSeq) };
+    double R2(double v) => Math.Round(v, 2);
+    pal["check"] = new
+    {
+        divAsym = R2(dNew.asym), divDev = R2(dNew.dev), divEnds = new[] { R2(Ld[0]), R2(Ld[^1]) }, divCentre = R2(Ld[200]),
+        divAsymOld = R2(dOld.asym), divDevOld = R2(dOld.dev), divEndsOld = new[] { R2(OldProfile(oldDiv)[0]), R2(OldProfile(oldDiv)[^1]) }, divAsymGh = R2(dGh.asym),
+        seqDev = R2(SeqDev(Ls)), seqMonotone = Monotone(Ls), seqRange = new[] { R2(Ls[0]), R2(Ls[^1]) }, seqDevOld = R2(SeqDev(LsOld)), seqDevGh = R2(SeqDev(Profile(ghVir))),
+        utilStep = R2(utilBelow - utilAt), utilStepCvd = R2(utilStepCvd),
+        light = Fam(Theme.Light), dark = Fam(Theme.Dark),
+        benchOldAB = Math.Round(ColourScience.WorstCaseDeltaE(Rgb.FromHex("#0F7B8A"), Rgb.FromHex("#9A3D6E")), 1),
+        appOldGLight = Math.Round(ColourScience.ContrastRatio(Rgb.FromHex("#00c865"), new Rgb(255, 255, 255)), 2),
+        divProfile = Ld.Where((_, i) => i % 10 == 0).Select(x => Math.Round(x, 2)).ToArray(),
+        seqProfile = Ls.Where((_, i) => i % 10 == 0).Select(x => Math.Round(x, 2)).ToArray(),
+        divProfileOld = OldProfile(oldDiv).Where((_, i) => i % 10 == 0).Select(x => Math.Round(x, 2)).ToArray(),
+        seqProfileOld = LsOld.Where((_, i) => i % 10 == 0).Select(x => Math.Round(x, 2)).ToArray(),
+    };
+    numbers["palette"] = pal;
 }
 
 numbers["totalMs"] = sw.ElapsedMilliseconds;

@@ -45,7 +45,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - **Lath Unroll** — flat 2D cutting patterns from laths (exact per-triangle isometry), laid out in a row for CNC
 - **Lath Segment** — splits laths to stock length, cuts kept away from joints, with half-lap splice notch solids
 - **Lath Labels** — lath IDs, label anchor points, and a CSV bill of materials
-- **Lath Preview** — color-codes laths by utilization (green → red)
+- **Lath Preview** — color-codes laths by utilization in the web app's colours (green → neon yellow, then a lightness drop to neon red at the limit, readable with red–green colour blindness)
 - **Net Topology** — nodes and members of a two-family net as a structural graph (for Karamba-style analysis or a node schedule); same-family crossings and T-junctions are nodes too
 
 ### Kinetics
@@ -54,7 +54,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 ### Utilities
 - **Mesh Cleanup** — weld vertices (also far from the origin), reduce collapsed faces, drop degenerate/duplicate faces, unify winding
 - **Pull To Mesh** — project hand-drawn curves and points onto a mesh, with optional on-surface fairing
-- **Mesh Colour Map** — colour a mesh by per-vertex values in one step (diverging palette centred on zero for signed curvature)
+- **Mesh Colour Map** — colour a mesh by per-vertex values in one step (diverging palette centred on zero for signed curvature); the black / white / neon maps are shared with the web app and the bench (`Display/MitePalette` in the core) and are perceptually uniform: CIELAB lightness changes at a constant rate and both ends of the diverging map have the same lightness
 
 All Grasshopper components weld coincident vertices on intake (STL imports, Brep meshes with seams) and map per-vertex results back to the original mesh, so **Mesh Colours** and **Deconstruct Mesh** line up.
 
@@ -139,6 +139,9 @@ split to stock with **Lath Segment**, and produce cutting patterns with **Lath U
 plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
+
+### Unreleased
+- **One palette: black, white and neon** (`Display/MitePalette` and `ColourScience` in the core). Grasshopper's Mesh Colour Map and Lath Preview, the web app and the bench now draw with the same colours, checked by tests that read the app's CSS and colour maps. The maps are cut from the app's sRGB paths at equal steps of CIELAB L* (Kovesi 2015, *Good colour maps*): the diverging map (neon blue — white — crimson) has both ends at L* 39.5 (the 1.3.0 app map ran from 29.8 to 46.0, so −K and +K of the same size read with different strength; asymmetry 16.1 → 0.58) and L* within 0.96 of linear (was 5.6); the sequential map black — neon blue — neon green — white is within 0.95 of linear (was 6.2). Mesh Colour Map: Palette 0/1 are these maps, 2 is the utilization map (1 = limit), 3–5 keep the 1.3.0 colours. Lath Preview uses the app's utilization colours, whose limit is a lightness step of 39 L* (32 for simulated protanopes and deuteranopes, Machado et al. 2009). The app's light-theme geodesic green #00c865 (2.2:1 on white) is now #00a653 (3.2:1, WCAG 2.1 SC 1.4.11). The bench drops its teal / plum (ΔE 15 between the two families for dichromats) for the app's blue / red (ΔE 102) and the app's typography, and its Mesh Colour Map card shows Kovesi's sine-ramp test image with the lightness curve of each map, before and after.
 
 ### 1.3.0
 - **Asymptotic Web** (new component, Mite > Gridshells; `Gridshells/AsymptoticWeb` in the core). An asymptotic parameterisation of a negatively curved surface is fixed up to u = f(ū), v = g(v̄) (Schling, Wang, Hoyer & Pottmann 2022), so placing nodes every Spacing along the two asymptotic curves through a seed fixes the whole net: every other node is the crossing of the curve of one family through a node of the first seed curve with the curve of the other family through a node of the second — Schling's "alternately drawing each curve and using their intersections as new starting points". No curve is inserted or stopped to keep a spacing, so there are no short stubs and no T-junctions; laths run border to border and the output includes the quad mesh of the nodes. The symmetry of the surface is carried into the net: a seed on a flat point (3-fold Enneper, monkey saddle) becomes a singular node where 2n asymptotic rays meet (found where the field points radially around the seed); a rotation about the seed normal is detected and one sector is traced and rotated; a surface of revolution gets N rotated copies of the two curves through the seed, N = round(2πρ / (√2·Spacing)), whose meridian diagonals are exact geodesics. Checked against the closed forms: catenoid nodes on the u ± v lattice to 0.6 % of Δφ, meridian diagonals planar to 1e-3; classical Enneper nodes on the u ± v lattice through the ray nodes to 3 % of the parameter step; the hyperbolic paraboloid web is its grid of rulings (straight to 0.01); 3-fold Enneper: six rays, 3-fold symmetry, crossings at 90° ± 3°.

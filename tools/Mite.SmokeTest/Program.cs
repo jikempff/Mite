@@ -337,7 +337,17 @@ internal static class Tests
                 SetMeshList(c, 0, m1, m2);
                 SetNumberList(c, 1, new[] { 0.5, 1.5 });
             },
-            c => Expect(Meshes(c, 0).Count == 2, "two colored laths"));
+            c =>
+            {
+                var ms = Meshes(c, 0);
+                // Mite.Core MitePalette.Utilization: 0.5 → green side, 1.5 → dark red (89, 0, 20), as in the web app
+                var c0 = ms.Count == 2 ? ms[0].VertexColors[0] : System.Drawing.Color.Empty;
+                var c1 = ms.Count == 2 ? ms[1].VertexColors[0] : System.Drawing.Color.Empty;
+                var e0 = Mite.Core.Display.MitePalette.Utilization(0.5);
+                return Expect(ms.Count == 2, "two colored laths")
+                    && Expect(c0.R == e0.R && c0.G == e0.G && c0.B == e0.B, $"u = 0.5 in the palette's green ({c0.R},{c0.G},{c0.B})")
+                    && Expect(c1.R == 89 && c1.G == 0 && c1.B == 20, $"u = 1.5 dark red ({c1.R},{c1.G},{c1.B})");
+            });
 
         TestComponent("Dynamic Relaxation",
             new Mite.Grasshopper.Components.DynamicRelaxationComponent(),
@@ -390,7 +400,11 @@ internal static class Tests
             c =>
             {
                 var m = MeshOut(c, 0);
-                return Expect(m != null && m.VertexColors.Count == saddle.Vertices.Count, "one colour per vertex");
+                int zero = -1;
+                if (m != null) for (int i = 0; i < m.Vertices.Count; i++) if (System.Math.Abs(m.Vertices[i].Z) < 1e-12) { zero = i; break; }
+                var cz = zero >= 0 && m != null ? m.VertexColors[zero] : System.Drawing.Color.Empty;
+                return Expect(m != null && m.VertexColors.Count == saddle.Vertices.Count, "one colour per vertex")
+                    && Expect(zero < 0 || (cz.R == 247 && cz.G == 247 && cz.B == 247), $"z = 0 is the diverging map's white centre ({cz.R},{cz.G},{cz.B})");
             });
 
         TestComponent("Geodesic Path",

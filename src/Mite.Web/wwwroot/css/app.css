@@ -8,7 +8,7 @@
 
 :root {
   --bg: #ffffff; --surface: #fafafa; --surface2: #f1f1f1; --line: #e2e2e2; --ink: #0a0a0a; --muted: #6b6b6b; --faint: #a0a0a0;
-  --famA: #2a3cff; --famB: #ff1f4f; --famG: #00c865; --neon: #00ff85; --accent: #0a0a0a; --warn: #ff1f4f; --ok: #00a653;
+  --famA: #2a3cff; --famB: #ff1f4f; --famG: #00a653; --neon: #00ff85; --accent: #0a0a0a; --warn: #ff1f4f; --ok: #00a653;
   --sans: 'Sohne', 'Helvetica Neue', Helvetica, Arial, sans-serif; --mono: 'Sohne', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --panel-w: 360px;
 }
