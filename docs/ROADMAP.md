@@ -531,15 +531,59 @@ Open
       family with more freedom (Schling et al. 2022 §2.3).
 - [ ] Propagation from a boundary strip (Wang et al. 2024) as a second way to
       start a web: two neighbouring polylines drawn by the user.
-- [ ] Refinement: subdivide the AAG web and re-optimise so the laths between
-      nodes are smooth (now straight node-to-node chords after AAG); then the
-      strip boundaries from the rectifying developables (quintic splines).
+- [x] Refinement: subdivide the AAG web and re-optimise so the laths between
+      nodes are smooth — 2026-10-03, `Gridshells/AagRefinement`, Asymptotic Web
+      `Refine` (input 8) and `Surface` (output 6). Schling et al. 2022 §3.4:
+      bilinear subdivision, then the refined original polylines keep planar
+      stars (cross direction from the fine mesh line, (v⁻ − v⁺)·n = 0) or
+      geodesic osculating planes; joints held (weight 3), fine vertices on the
+      reference shifted by the joints' interpolated offsets. Exact checks with
+      joints on closed-form curves: catenoid laths 1.0e-4 off φ ± z = const
+      (chords 2.7e-3), meridians 4e-5 off the catenary (chords 7.2e-3);
+      hyperboloid rulings straight to 5e-6, meridians 3.5e-5 off the hyperbola
+      (chords 2.9e-3); rotational AAG web: turning per step 24.4° → 12.7° (×2)
+      → 6.8° (×4). Findings:
+      - Second-difference fairness pulls each lath toward its chords: 4.8e-4
+        off the exact curve (1.4e-3, half the chord sagitta, with the final
+        fairness at 10 %); third differences along the laths (zero on
+        circles) bring it to 1.0e-4. Too little fairness lets the fine laths
+        zigzag inside the tangent plane (38° steps at fairness 0.01 with
+        second differences): the A-net and geodesic conditions do not see
+        in-plane kinks.
+      - The paper's schedule matters: fair first, then 1 % of it; a phase that
+        stalls must hand over to the next instead of ending the solve.
+      - ×4 is not more accurate than ×2 against the exact curves (1.25e-4 vs
+        1.0e-4): the joints are held and the fine net between them is a
+        compromise at that level; ×4 only makes the laths smoother (turning
+        per step halves again). ×2 is the core default; the component's
+        Refine defaults to 0 (off).
+- [ ] Strip boundaries from the rectifying developables (§3.4 "Extraction of
+      strips"): for each refined lath with normals n, across vector q (q = n
+      for an upright asymptotic strip, q = n × t for a flat geodesic strip),
+      ruling r = τ t + κ⊥ q with τ the rotation rate of q about t and
+      κ⊥ = −t′·(t × q); the other boundary c + w/(r̂·q) r̂; the in-plane
+      curvature t′·q must vanish (that is the asymptotic / geodesic property).
+      Report the ruling angle atan(τ/κ⊥) per vertex: on near-straight laths
+      (hyperboloid rulings) the rectifying developable degenerates and the
+      real strip twists elastically instead.
+- [ ] AAG on singular webs: laths still turn by 21° where they cross the rays
+      of the 3-fold Enneper web (the web's own chains 17.6°, the 1.3.0 default
+      fairness 44.5°). Look at the diagonal break at the rays (Schling et al.
+      Fig. 14 drop the fairness across the singular polylines, not the lath
+      fairness) and at the short edges next to the rays.
+- [ ] Refine in the web app (`Mite.Web/Api.cs`, AAG block).
 - [ ] Choose the seed spacing per ray (e.g. uniform in the asymptotic
       parameter instead of arc length) for more homogeneous cells, and a
       "cookie-cut" option: trace on a larger surface, trim to a boundary.
 - [ ] Speed: the AAG solve is ~2 s natively / ~12 s in the browser for 385
       nodes (envelope LDLᵀ of 6N unknowns): nested dissection or a
-      supernodal factorisation.
+      supernodal factorisation. Half done 2026-10-03: `Numerics/SparseLdl`
+      (elimination tree + up-looking LDLᵀ after Davis 2005, nested dissection
+      on BFS level structures after George 1973) under `AagWeb` and
+      `AagRefinement` — 385 joints 2.1 s → 1.2 s, its ×2 refinement 27 s →
+      7.6 s, identical results. Open: supernodes (3–6 unknowns per vertex
+      factor as dense blocks), the JᵀJ assembly through a hash map (now about
+      half the refinement time), and the same solver for `ScissorNet`.
 - [ ] Global family assignment across flat points for the older Asymptotic
       Net layouts (the web already handles them by rays).
 
@@ -559,6 +603,14 @@ Open
       bump the yak manifest.
 
 ## Done
+
+- [x] 2026-10-03 (session 1, G): smooth AAG laths by subdivision and
+      re-optimisation (Schling et al. 2022 §3.4) with exact catenoid and
+      hyperboloid lattice tests; AAG fairness default 0.05 → 0.2 (44.5° kinks
+      at the rays → 21°); nested-dissection sparse LDLᵀ for the AAG solves;
+      bench card for Asymptotic Web (29 components; `extract_component.py`
+      writes a `components.json` entry from a component source — the Asymptotic
+      Net entry has drifted, 9 of 11 inputs).
 
 - [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
       Gridshell Analysis joints inserted exactly (the snap had chained joints

@@ -433,4 +433,58 @@ public static class TestMeshes
 
         return new MeshData(verts, faces.ToArray());
     }
+
+    /// <summary>
+    /// An asymptotic web on a lattice of closed-form nodes (for exact AAG tests): node(i, j); A laths run along j
+    /// (i fixed), B laths along i; diagonal family 0 is (i + k, j − k), family 1
+    /// is (i + k, j + k).
+    /// </summary>
+    public static Mite.Core.Gridshells.AsymptoticWeb.Result AsymptoticLattice(Func<int, int, Vec3d?> node, int I, int J)
+    {
+        var w = new Mite.Core.Gridshells.AsymptoticWeb.Result();
+        var id = new int[I + 1, J + 1];
+        for (int i = 0; i <= I; i++)
+            for (int j = 0; j <= J; j++)
+            {
+                var p = node(i, j);
+                if (p == null) { id[i, j] = -1; continue; }
+                id[i, j] = w.Nodes.Count; w.Nodes.Add(p.Value);
+            }
+        int N = w.Nodes.Count;
+        var na = new List<int>[N]; var nb = new List<int>[N];
+        for (int k = 0; k < N; k++) { na[k] = new List<int>(); nb[k] = new List<int>(); }
+        for (int i = 0; i <= I; i++)
+            for (int j = 0; j <= J; j++)
+            {
+                int a = id[i, j];
+                if (a < 0) continue;
+                if (j < J && id[i, j + 1] >= 0) { na[a].Add(id[i, j + 1]); na[id[i, j + 1]].Add(a); }
+                if (i < I && id[i + 1, j] >= 0) { nb[a].Add(id[i + 1, j]); nb[id[i + 1, j]].Add(a); }
+                if (i < I && j < J && id[i, j + 1] >= 0 && id[i + 1, j + 1] >= 0 && id[i + 1, j] >= 0)
+                    w.Quads.Add(new[] { a, id[i, j + 1], id[i + 1, j + 1], id[i + 1, j] });
+            }
+        w.NeighborsA = na.Select(l => l.ToArray()).ToArray();
+        w.NeighborsB = nb.Select(l => l.ToArray()).ToArray();
+        for (int fam = 0; fam < 2; fam++)
+            for (int s = -(I + J); s <= 2 * (I + J); s++)
+            {
+                var ch = new List<int>();
+                void Flush()
+                {
+                    if (ch.Count >= 2) { w.DiagonalNodes.Add(ch.ToArray()); w.DiagonalFamily.Add(fam); w.Diagonals.Add(ch.Select(k => w.Nodes[k]).ToArray()); }
+                    ch = new List<int>();
+                }
+                for (int i = 0; i <= I; i++)
+                {
+                    int j = fam == 0 ? s - i : i - s;
+                    if (j < 0 || j > J || id[i, j] < 0) { Flush(); continue; }
+                    ch.Add(id[i, j]);
+                }
+                Flush();
+            }
+        double sum = 0; int c = 0;
+        for (int a = 0; a < N; a++) foreach (int b in na[a].Concat(nb[a])) { sum += (w.Nodes[a] - w.Nodes[b]).Length; c++; }
+        w.Spacing = sum / c;
+        return w;
+    }
 }

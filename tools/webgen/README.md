@@ -12,8 +12,9 @@ python3 build.py           # assembles site/index.html from template.html + note
 
 - `Program.cs` — runs the algorithms on the test shapes and records geometry
   (`scenes.json`) and measurements (`numbers.json`).
-- `components.json` — inputs/outputs of the 28 Grasshopper components
-  (extracted from the component sources; regenerate when parameters change).
+- `components.json` — inputs/outputs of the 29 Grasshopper components
+  (extracted from the component sources with `extract_component.py`; regenerate
+  an entry when its parameters change).
 - `notes.py` — per component: which demo to show, "what to expect" bullets,
   and self-test checks as JavaScript expressions over `N` (numbers) and `SC` (scenes).
 - `template.html` / `build.py` — page shell and assembly.

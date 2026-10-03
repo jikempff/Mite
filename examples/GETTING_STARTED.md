@@ -42,6 +42,11 @@ Use a doubly-curved mesh. For asymptotic nets it must have anticlastic
   every node star planar: three families of straight, flat slats, two upright
   and one lying on the surface (Schling, Wang, Hoyer & Pottmann 2022). The
   surface moves slightly; the `R` report says how far and how exact the result is
+- `Rf` (Refine) — with AAG on, `1` or `2` turns the joint-to-joint chords into
+  smooth laths: every edge is split into 2 or 4 and the fine net re-optimised so
+  the laths stay asymptotic (upright) and the diagonals geodesic (flat), with the
+  joints where AAG put them. `Sf` is the fine surface. Expect the turning per
+  step in the report to halve with each level; `2` is about five times slower
 
 `A` and `B` are the upright laths, `G` the flat diagonals, `N` the nodes and `Q`
 the net as a quad mesh. A seed on a flat point (the centre of a 3-fold Enneper
