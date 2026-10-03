@@ -112,7 +112,7 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
   <header class="masthead">
     <h1><small>Grasshopper plugin · version 1.3.2 · 30 components</small>Mite Bench</h1>
     <p>Every component with its inputs, outputs and defaults, what it should do, a self-test run on the real Mite.Core library, and a live view of the result. Tick the ones that make sense, note what doesn't, and copy the summary back to the chat.</p>
-    <div class="progress"><b><span id="done">0</span> / 28</b>reviewed<div class="bar"><i id="barfill"></i></div></div>
+    <div class="progress"><b><span id="done">0</span> / <span id="total">0</span></b>reviewed<div class="bar"><i id="barfill"></i></div></div>
   </header>
 
   <nav class="nav" aria-label="Components">
@@ -150,7 +150,7 @@ function updateProgress(){
   let n = 0;
   document.querySelectorAll('[data-ok]').forEach(cb => { const card = cb.closest('.card'); card.classList.toggle('done', cb.checked); const dot = document.querySelector(`[data-nav="${cb.dataset.ok}"] .dot`); if (dot) dot.classList.toggle('on', cb.checked); if (cb.checked) n++; });
   document.getElementById('done').textContent = n;
-  document.getElementById('barfill').style.width = (100*n/28)+'%';
+  document.getElementById('barfill').style.width = (100*n/ORDER.length)+'%'; document.getElementById('total').textContent = ORDER.length;
 }
 document.querySelectorAll('[data-ok]').forEach(cb => { cb.checked = store.get('ok:'+cb.dataset.ok) === '1'; cb.addEventListener('change', () => { store.set('ok:'+cb.dataset.ok, cb.checked ? '1':'0'); updateProgress(); }); });
 document.querySelectorAll('[data-note]').forEach(ta => { ta.value = store.get('note:'+ta.dataset.note) || ''; ta.addEventListener('input', () => store.set('note:'+ta.dataset.note, ta.value)); });
@@ -167,7 +167,7 @@ function summary(){
     fails.push(...failed.map(f => name + ': ' + f));
     if (ticked || note) lines.push(`${ticked ? '[x]' : '[ ]'} ${name}${note ? ' — ' + note.replace(/\s+/g,' ') : ''}`);
   });
-  lines.splice(1, 0, `${ok} of 28 marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
+  lines.splice(1, 0, `${ok} of ${ORDER.length} marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
   return lines.join('\n');
 }
 function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
@@ -269,6 +269,8 @@ const builders = {
   asym(el){ const m = mode(el) || ''; if (m.startsWith('asymCat_')) { const sc = SC[m]; legend(el.dataset.id, [[WIRE(), sc.label], [A(), 'family A'], [B(), 'family B']]); return { view: { yaw: -0.6, pitch: 0.5 }, layers: [wireLayer(sc.wire), { lines: sc.a, color: A(), width: 1.6 }, { lines: sc.b, color: B(), width: 1.6 }] }; }
     if (m === 'asymHyp') { legend(el.dataset.id, [[WIRE(), 'hyperboloid x² + y² − z² = 1'], [A(), 'family A (straight rulings)'], [B(), 'family B']]); return { view: { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(SC.asymHyp.wire), { lines: SC.asymHyp.a, color: A(), width: 1.6 }, { lines: SC.asymHyp.b, color: B(), width: 1.6 }] }; }
     legend(el.dataset.id, [[WIRE(), 'saddle z = x² − y²'], [A(), 'family A'], [B(), 'family B']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.asym.wire), { lines: SC.asym.a, color: A(), width: 1.6 }, { lines: SC.asym.b, color: B(), width: 1.6 }] }; },
+  aag(el){ const m = mode(el) || 'aag_chords'; const sc = SC[m]; legend(el.dataset.id, [[WIRE(), sc.label], [A(), 'asymptotic A (upright)'], [B(), 'asymptotic B (upright)'], [INK(), 'geodesic diagonals (flat) · dots: joints']]);
+    return { view: m === 'aag_enneper3' ? SADDLE_VIEW : { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(sc.wire || SC.aag_chords.wire), { lines: sc.a, color: A(), width: 1.5 }, { lines: sc.b, color: B(), width: 1.5 }, { lines: sc.g, color: INK(), width: 1.1, alpha: 0.8 }], points: [{ pts: sc.joints, color: INK(), r: 1.5 }] }; },
   conj(el){ legend(el.dataset.id, [[WIRE(), 'saddle'], [A(), 'max-curvature family'], [B(), 'min-curvature family']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.conj.wire), { lines: SC.conj.a, color: A(), width: 1.6 }, { lines: SC.conj.b, color: B(), width: 1.6 }] }; },
   miteNet(el){ const m = mode(el) || 'miteNet'; const sc = SC[m]; const warn = css('--warn'), bad = css('--bad');
     const items = [[WIRE(), sc.label], [A(), 'family A'], [B(), 'family B'], [INK(), 'border ends (' + sc.border.length + ')']];

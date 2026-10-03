@@ -516,6 +516,77 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     }
 }
 
+// ---------- Asymptotic Web: AAG webs and their refinement (Schling, Wang, Hoyer & Pottmann 2022, §3.4) ----------
+{
+    var t = Stopwatch.StartNew();
+    double[][][] Lines(IEnumerable<Vec3d[]> ls) => ls.Select(l => Line(l)).ToArray();
+    Vec3d[] Chop(Vec3d[] l, int m) { var o = new List<Vec3d>(); for (int k = 0; k + 1 < l.Length; k++) for (int j = 0; j < m; j++) o.Add(l[k] + (j / (double)m) * (l[k + 1] - l[k])); o.Add(l[^1]); return o.ToArray(); }
+    // rotational AAG web on the catenoid: chords, ×2, ×4
+    var cat = AnalyticShapes.Build("catenoid", 1.0, 1.2, 0, 48).ToTriangulated();
+    var webC = AsymptoticWeb.Build(cat, PrincipalCurvature.Compute(cat, 2), -1, new AsymptoticWeb.Options { Spacing = 0.3 });
+    var aagC = AagWeb.Optimize(cat, webC);
+    var wireC = Edges(cat, 8);
+    scenes["aag_chords"] = new { label = "catenoid — AAG web, laths as joint-to-joint chords", wire = wireC, a = Lines(aagC.A), b = Lines(aagC.B), g = Lines(aagC.G), joints = aagC.Nodes.Select(P).ToArray() };
+    var refRows = new List<object>();
+    foreach (int levels in new[] { 1, 2 })
+    {
+        var tr = Stopwatch.StartNew();
+        var f = AagRefinement.Refine(cat, webC, aagC, new AagRefinement.Options { Levels = levels });
+        tr.Stop();
+        scenes["aag_ref" + f.Subdivisions] = new { label = $"catenoid — refined ×{f.Subdivisions}", a = Lines(f.A), b = Lines(f.B), g = Lines(f.G), joints = aagC.Nodes.Select(P).ToArray() };
+        refRows.Add(new { m = f.Subdivisions, fine = f.Vertices.Length, turnBefore = R3(f.InitialMaxTurning), turnAfter = R3(f.MaxTurning), star = R3(f.StarError), geo = R3(f.GeodesicError), kn = R3(f.MaxNormalCurvature), kg = R3(f.MaxGeodesicCurvature), shift = f.JointShift, dev = R3(f.MaxDeviation), ms = tr.ElapsedMilliseconds });
+    }
+    // 3-fold Enneper: singular web, AAG kinks at the rays with the 1.3.0 fairness
+    var en = AnalyticShapes.Build("enneper3", 3, 0.9, 0, 48).ToTriangulated();
+    var webE = AsymptoticWeb.Build(en, PrincipalCurvature.Compute(en, 2), -1, new AsymptoticWeb.Options());
+    var aagOld = AagWeb.Optimize(en, webE, new AagWeb.Options { Fairness = 0.05 });
+    var te = Stopwatch.StartNew();
+    var aagE = AagWeb.Optimize(en, webE);
+    te.Stop();
+    var fE = AagRefinement.Refine(en, webE, aagE, new AagRefinement.Options { Levels = 1 });
+    scenes["aag_enneper3"] = new { label = "3-fold Enneper — AAG web refined ×2 (six rays)", wire = Edges(en, 6), a = Lines(fE.A), b = Lines(fE.B), g = Lines(fE.G), joints = aagE.Nodes.Select(P).ToArray() };
+
+    // exact lattices: joints on the closed-form asymptotic lines
+    // catenoid r = cosh z: φ ± z = const
+    const double D = 0.1; int I = 16;
+    var latC = TestMeshes.AsymptoticLattice((i, j) => { double phi = (i + j - I) * D, z = (i - j) * D; return Math.Abs(z) > 1.0 + 1e-9 ? null : new Vec3d(Math.Cosh(z) * Math.Cos(phi), Math.Cosh(z) * Math.Sin(phi), z); }, I, I);
+    var catFine = AnalyticShapes.Build("catenoid", 1.0, 1.15, 0, 192).ToTriangulated();
+    var projCF = new MeshProjection(catFine);
+    Vec3d Orient(MeshProjection pr, Vec3d p, Vec3d n) { var h = pr.ClosestPoint(p, pr.NearestVertexGlobal(p)); n = n.Normalized(); return Vec3d.Dot(h.SmoothNormal, n) < 0 ? -1.0 * n : n; }
+    var nC = latC.Nodes.Select(p => Orient(projCF, p, new Vec3d(p.X, p.Y, -Math.Sinh(p.Z) * Math.Cosh(p.Z)))).ToArray();
+    var fC = AagRefinement.Refine(catFine, latC, latC.Nodes, nC, 0, new AagRefinement.Options { Levels = 1, JointWeight = 10 });
+    var chC = AagWeb.Optimize(catFine, latC, new AagWeb.Options { Iterations = 0 });
+    double Inv(Vec3d p, int s) => Math.Atan2(p.Y, p.X) + s * p.Z;
+    int Sgn(Vec3d[] l) => Math.Abs(Math.IEEERemainder(Inv(l[^1], 1) - Inv(l[0], 1), 2 * Math.PI)) < Math.Abs(Math.IEEERemainder(Inv(l[^1], -1) - Inv(l[0], -1), 2 * Math.PI)) ? 1 : -1;
+    double Off(Vec3d[] l, int s, int m) { double w = 0; for (int k = 0; k + m < l.Length; k += m) { double c0 = Inv(l[k], s); for (int j = k + 1; j < k + m; j++) w = Math.Max(w, Math.Abs(Math.IEEERemainder(Inv(l[j], s) - c0, 2 * Math.PI)) * Math.Cosh(l[j].Z)); } return w; }
+    double offRef = fC.A.Concat(fC.B).Max(l => Off(l, Sgn(l), 2)), offChord = chC.A.Concat(chC.B).Max(l => Off(Chop(l, 2), Sgn(l), 2));
+    double catRef = fC.G.SelectMany(l => l).Max(p => Math.Abs(Math.Sqrt(p.X * p.X + p.Y * p.Y) - Math.Cosh(p.Z)));
+    double catChord = chC.G.SelectMany(l => Chop(l, 2)).Max(p => Math.Abs(Math.Sqrt(p.X * p.X + p.Y * p.Y) - Math.Cosh(p.Z)));
+    // hyperboloid x² + y² − z² = 1: rulings cross at s = tan((ψ − φ)/2)
+    const double DH = 0.14; int IH = 14;
+    var latH = TestMeshes.AsymptoticLattice((i, j) => { double phi = i * DH, psi = j * DH, s = Math.Tan(0.5 * (psi - phi)); return Math.Abs(s) > 0.75 ? null : new Vec3d(Math.Cos(phi) - s * Math.Sin(phi), Math.Sin(phi) + s * Math.Cos(phi), s); }, IH, IH);
+    var hypFine = AnalyticShapes.Build("hyperboloid", 1.0, 1.0, 0.8, 192).ToTriangulated();
+    var projHF = new MeshProjection(hypFine);
+    var nH = latH.Nodes.Select(p => Orient(projHF, p, new Vec3d(p.X, p.Y, -p.Z))).ToArray();
+    var fH = AagRefinement.Refine(hypFine, latH, latH.Nodes, nH, 0, new AagRefinement.Options { Levels = 1, JointWeight = 10 });
+    var chH = AagWeb.Optimize(hypFine, latH, new AagWeb.Options { Iterations = 0 });
+    double bow = 0, len = 0;
+    foreach (var l in fH.A.Concat(fH.B)) { var a0 = l[0]; var d = (l[^1] - a0).Normalized(); len = Math.Max(len, (l[^1] - a0).Length); foreach (var p in l) { var v = p - a0; bow = Math.Max(bow, (v - Vec3d.Dot(v, d) * d).Length); } }
+    double hypRef = fH.G.SelectMany(l => l).Max(p => Math.Abs(Math.Sqrt(p.X * p.X + p.Y * p.Y) - Math.Sqrt(1 + p.Z * p.Z)));
+    double hypChord = chH.G.SelectMany(l => Chop(l, 2)).Max(p => Math.Abs(Math.Sqrt(p.X * p.X + p.Y * p.Y) - Math.Sqrt(1 + p.Z * p.Z)));
+    t.Stop();
+    numbers["aagRefine"] = new
+    {
+        catenoid = refRows,
+        aagMs = te.ElapsedMilliseconds,
+        kinkOld = R3(aagOld.MaxLathTurning), kink = R3(aagE.MaxLathTurning), webTurn = R3(AagWeb.Optimize(en, webE, new AagWeb.Options { Iterations = 0 }).MaxLathTurning),
+        enGeo = R3(aagE.GeodesicError), enStar = R3(aagE.StarError),
+        enRef = new { star = R3(fE.StarError), kn = R3(fE.MaxNormalCurvature), kg = R3(fE.MaxGeodesicCurvature), turnG = R3(AagRefinement.MaxTurning(aagE.G)), turnGAfter = R3(AagRefinement.MaxTurning(fE.G)) },
+        offRef, offChord, catRef, catChord, bow, len = R3(len), hypRef, hypChord,
+        ms = t.ElapsedMilliseconds
+    };
+}
+
 // ---------- Net Kinetics: scissor-jointed asymptotic nets as mechanisms ----------
 {
     // 1. Exact: the doubly ruled hyperboloid grid of Schikore et al. 2020 (16 rods per family, 7 joints each),

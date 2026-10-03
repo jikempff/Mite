@@ -37,6 +37,10 @@ public class AsymptoticWebComponent : MiteComponent
         pManager.AddIntegerParameter("Iterations", "It", "AAG optimisation iterations", GH_ParamAccess.item, 16);
         pManager.AddNumberParameter("Proximity", "Px", "AAG: weight of staying on the reference surface (0 lets it float)", GH_ParamAccess.item, 0.3);
         pManager.AddIntegerParameter("Diagonal", "D", "Which diagonal family becomes geodesic: 0 = the straighter one, 1 = the other", GH_ParamAccess.item, 0);
+        pManager.AddIntegerParameter("Refine", "Rf",
+            "AAG: smooth laths through the joints (Schling, Wang, Hoyer & Pottmann 2022, §3.4). Every web edge is split into 2^Refine pieces " +
+            "and the fine net re-optimised so the refined laths stay asymptotic (upright) or geodesic (flat) while the joints stay put. " +
+            "0 = off (laths are joint-to-joint chords), 1 = halves, 2 = quarters (the paper's choice, about five times slower)", GH_ParamAccess.item, 0);
         pManager[1].Optional = true;
     }
 
@@ -48,6 +52,7 @@ public class AsymptoticWebComponent : MiteComponent
         pManager.AddPointParameter("Nodes", "N", "Web nodes (every A × B crossing)", GH_ParamAccess.list);
         pManager.AddMeshParameter("Quads", "Q", "The web as a quad mesh on its nodes", GH_ParamAccess.item);
         pManager.AddTextParameter("Report", "R", "Rays, symmetry, node count, diagonal geodesic error and — with AAG — star and geodesic errors and how far the surface moved", GH_ParamAccess.item);
+        pManager.AddMeshParameter("Surface", "Sf", "AAG with Refine > 0: the refined quad mesh the smooth laths lie on (cladding, strip normals)", GH_ParamAccess.item);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -55,7 +60,7 @@ public class AsymptoticWebComponent : MiteComponent
         var input = LoadMesh(DA, 0);
         if (input == null) return;
         Point3d seedPt = Point3d.Unset;
-        double spacing = 0; int symmetry = -1, iterations = 16, diagonal = 0; bool aag = false; double proximity = 0.3;
+        double spacing = 0; int symmetry = -1, iterations = 16, diagonal = 0, refine = 0; bool aag = false; double proximity = 0.3;
         DA.GetData(1, ref seedPt);
         DA.GetData(2, ref spacing);
         DA.GetData(3, ref symmetry);
@@ -63,6 +68,7 @@ public class AsymptoticWebComponent : MiteComponent
         DA.GetData(5, ref iterations);
         DA.GetData(6, ref proximity);
         DA.GetData(7, ref diagonal);
+        DA.GetData(8, ref refine);
 
         var data = input.Data;
         var proj = new MeshProjection(data);
@@ -88,14 +94,28 @@ public class AsymptoticWebComponent : MiteComponent
         var nodes = web.Nodes.ToArray();
         int fam = diagonal == 1 ? 1 : 0;
         for (int i = 0; i < web.Diagonals.Count; i++) if (web.DiagonalFamily[i] == fam) g.Add(web.Diagonals[i]);
+        Mesh? fineMesh = null;
         if (aag)
         {
             var r = AagWeb.Optimize(data, web, new AagWeb.Options { Iterations = Math.Max(1, iterations), Proximity = Math.Max(0, proximity), GeodesicFamily = fam, ShouldCancel = Cancelled });
             a = r.A; b = r.B; g = r.G; nodes = r.Nodes;
-            lines.Add($"AAG: geodesic {r.InitialGeodesicError:0.##}° → {r.GeodesicError:0.###}° · stars {r.InitialStarError:0.##}° → {r.StarError:0.###}° · surface moved {r.MeanDeviation:G3} mean, {r.MaxDeviation:G3} max · {r.Iterations} iterations");
+            lines.Add($"AAG: geodesic {r.InitialGeodesicError:0.##}° → {r.GeodesicError:0.###}° · stars {r.InitialStarError:0.##}° → {r.StarError:0.###}° · surface moved {r.MeanDeviation:G3} mean, {r.MaxDeviation:G3} max · laths turn ≤ {r.MaxLathTurning:0.#}° at a joint · {r.Iterations} iterations");
             if (r.GeodesicError > 1 || r.StarError > 1)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "The surface carries no AAG web close to it: lower Proximity to let it change more, try the other Diagonal family, or start from a surface of revolution.");
+            if (refine > 0)
+            {
+                var f = AagRefinement.Refine(data, web, r, new AagRefinement.Options { Levels = Math.Min(3, refine), ShouldCancel = Cancelled });
+                a = f.A; b = f.B; g = f.G;
+                lines.Add($"Refined ×{f.Subdivisions}: laths turn ≤ {f.MaxTurning:0.#}° per step (chords {f.InitialMaxTurning:0.#}°) · stars {f.StarError:0.###}° · geodesic {f.GeodesicError:0.###}° · " +
+                          $"|kn|·spacing ≤ {f.MaxNormalCurvature:G2}, |kg|·spacing ≤ {f.MaxGeodesicCurvature:G2} · joints moved ≤ {f.JointShift:G2} · {f.Vertices.Length} fine vertices");
+                fineMesh = new Mesh();
+                foreach (var p in f.Vertices) fineMesh.Vertices.Add(MeshConvert.ToRhinoPoint(p));
+                foreach (var q in f.Quads) fineMesh.Faces.AddFace(q[0], q[1], q[2], q[3]);
+                fineMesh.Normals.ComputeNormals();
+            }
         }
+        else if (refine > 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Refine smooths the laths of the AAG web; without AAG the laths are already the traced curves.");
 
         DA.SetDataList(0, MeshConvert.ToCurves(a));
         DA.SetDataList(1, MeshConvert.ToCurves(b));
@@ -107,5 +127,6 @@ public class AsymptoticWebComponent : MiteComponent
         qm.Normals.ComputeNormals();
         DA.SetData(4, qm);
         DA.SetData(5, string.Join("\n", lines));
+        if (fineMesh != null) DA.SetData(6, fineMesh);
     }
 }

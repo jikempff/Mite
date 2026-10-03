@@ -45,8 +45,14 @@ public static class AagWeb
         /// <summary>Weight of the proximity to the reference surface (0 lets the surface float).</summary>
         public double Proximity { get; set; } = 0.3;
 
-        /// <summary>Fairness weight during the first half of the iterations (then a tenth of it).</summary>
-        public double Fairness { get; set; } = 0.05;
+        /// <summary>
+        /// Fairness weight during the first half of the iterations (then a tenth
+        /// of it). The A-net and geodesic conditions let a lath kink inside the
+        /// tangent plane; at 0.05 (the 1.3.0 default) the 3-fold Enneper web
+        /// kinked by 44.5° where its laths cross the rays, at 0.2 by 21° (the
+        /// web's own chains turn by up to 17.6° there).
+        /// </summary>
+        public double Fairness { get; set; } = 0.2;
 
         /// <summary>Levenberg damping (the paper's ε closeness to the current iterate).</summary>
         public double Damping { get; set; } = 1e-3;
@@ -72,6 +78,14 @@ public static class AagWeb
         public double MaxDeviation { get; set; }
         public double MeanDeviation { get; set; }
         public int Iterations { get; set; }
+        /// <summary>
+        /// Largest turning angle (degrees) between consecutive chords of an
+        /// asymptotic lath at a node. The A-net conditions allow a lath to kink
+        /// inside the tangent plane; only the fairness term keeps it smooth.
+        /// </summary>
+        public double MaxLathTurning { get; set; }
+        /// <summary>The diagonal family (0 or 1 of <see cref="AsymptoticWeb.Result.DiagonalFamily"/>) that was made geodesic.</summary>
+        public int GeodesicFamily { get; set; }
     }
 
     public static Result Optimize(MeshData reference, AsymptoticWeb.Result web, Options? options = null)
@@ -89,6 +103,7 @@ public static class AagWeb
         var chainsB = Chains(web.NeighborsB, web.Nodes);
         var chainsG = new List<int[]>();
         int famG = options.GeodesicFamily == 1 ? 1 : 0;
+        res.GeodesicFamily = famG;
         for (int i = 0; i < web.DiagonalNodes.Count; i++) if (web.DiagonalFamily[i] == famG && web.DiagonalNodes[i].Length >= 2) chainsG.Add(web.DiagonalNodes[i]);
 
         // regular nodes carry the A-net star; the singular seed does not
@@ -259,6 +274,7 @@ public static class AagWeb
         foreach (var ch in chainsA) res.A.Add(ch.Select(i => res.Nodes[i]).ToArray());
         foreach (var ch in chainsB) res.B.Add(ch.Select(i => res.Nodes[i]).ToArray());
         foreach (var ch in chainsG) res.G.Add(ch.Select(i => res.Nodes[i]).ToArray());
+        res.MaxLathTurning = AagRefinement.MaxTurning(res.A.Concat(res.B));
         return res;
     }
 
@@ -295,7 +311,7 @@ public static class AagWeb
 
 
     /// <summary>Accumulates JᵀJ and Jᵀr row by row for a sparse least-squares step.</summary>
-    private sealed class NormalEquations
+    internal sealed class NormalEquations
     {
         private readonly int _n;
         private readonly Dictionary<long, double> _jtj = new Dictionary<long, double>();
@@ -347,6 +363,9 @@ public static class AagWeb
                 b.Add(i, i, diag[i]);
                 foreach (var (c, v) in rows[i]) if (c > i) b.Add(i, c, v);
             }
+            // nested-dissection LDLᵀ; the envelope solver as the fallback
+            var ldl = SparseLdl.Factor(b, 1e-18);
+            if (ldl != null) return ldl.Solve(rhs);
             var solver = SparseSymmetricSolver.Factor(b, 1e-18);
             return solver?.Solve(rhs);
         }
