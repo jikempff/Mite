@@ -20,7 +20,7 @@ COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Cu
               "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
               "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
               "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
-              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
+              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Strip", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
               "Net Kinetics",
               "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 byname = {c["name"]: c for c in comps}

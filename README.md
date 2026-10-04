@@ -43,6 +43,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - **Lath Sweep** — extrudes on-surface curves (geodesic, asymptotic, streamline) into solid laths with a rectangular profile riding in the surface frame; flat mode for geodesic gridshells, upright (egg-crate) mode for asymptotic gridshells, with surface offset
 - **Net Joints** — finds crossings between the lath families and builds lap-joint notch solids (half-lap for flat laths, slots for upright ones) with lap fraction and clearance, ready for boolean subtraction
 - **Lath Unroll** — flat 2D cutting patterns from laths (exact per-triangle isometry), laid out in a row for CNC
+- **Lath Strip** — the strip a thin straight plank forms along each lath: the developable that stands upright on the surface (asymptotic laths) or lies on it (geodesic laths), with its rulings, an exact flat pattern (a straight band on asymptotic / geodesic laths), and the stretches where no developable exists (twist exceeds bend) with the edge strain the plank needs there
 - **Lath Segment** — splits laths to stock length, cuts kept away from joints, with half-lap splice notch solids
 - **Lath Labels** — lath IDs, label anchor points, and a CSV bill of materials
 - **Lath Preview** — color-codes laths by utilization (green → red)
@@ -63,7 +64,7 @@ All Grasshopper components weld coincident vertices on intake (STL imports, Brep
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (29 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (30 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -128,7 +129,7 @@ Components appear under the **Mite** tab:
 - **Form Finding** — Planarize Mesh, Minimal Surface, Force Density Method, Dynamic Relaxation
 - **Gridshells** — Asymptotic Web, Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
 - **Analysis** — Lath Analysis, Gridshell Analysis, Mesh Isocurves
-- **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview, Net Topology
+- **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Strip, Lath Segment, Lath Labels, Lath Preview, Net Topology
 - **Kinetics** — Net Kinetics
 - **Util** — Mesh Cleanup, Pull To Mesh, Mesh Colour Map
 
@@ -139,6 +140,9 @@ split to stock with **Lath Segment**, and produce cutting patterns with **Lath U
 plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
+
+### Unreleased
+- **Lath Strip** (new component, Mite > Fabrication; `Fabrication/DevelopableStrip` in the core): the developable strip a thin straight plank forms along a lath — perpendicular to the surface for upright (asymptotic) laths, tangent to it for flat (geodesic) laths. Its rulings lean by the ratio of twist to bend, r = κg n + τg t upright and τg t − κn u flat (Tang, Kilian, Bo, Wallner & Pottmann 2016), i.e. Schling, Wang, Hoyer & Pottmann's (2022, §3.4) rectifying-developable boundary and Starostin & van der Heijden's (2007) strip r + v(b + ηt). Discretely each ruling is the intersection of the planes of the neighbouring segments, so every quad is planar and the flat pattern is exact. Where the twist exceeds the bend, |τ| > |κ|, a narrow plank is no longer that developable (Freddi, Hornung, Mora & Paroni 2016); where κ = 0 none exists. There the strip twists, with rulings leaning back to square, and Lath Strip reports the edge strain the plank needs. Closed-form checks: a flat plank on a 60° helix is the cylinder (rulings ∥ axis to 1e-13, straight band to 1e-14); on a latitude it is the tangent cone (developed radius exact for the discrete pyramid, tan φ0 to 2e-4); on the catenoid's asymptotic lines the rulings converge to κg n + τg t at second order (1.6e-4° at 161 stations); across the catenoid throat the lath inflects by symmetry, so 39 % of a rim-to-rim lath twists and its edges stretch by the helicoid's (W/2)²τ²/2; a hyperboloid ruling has no developable at all.
 
 ### 1.3.0
 - **Asymptotic Web** (new component, Mite > Gridshells; `Gridshells/AsymptoticWeb` in the core). An asymptotic parameterisation of a negatively curved surface is fixed up to u = f(ū), v = g(v̄) (Schling, Wang, Hoyer & Pottmann 2022), so placing nodes every Spacing along the two asymptotic curves through a seed fixes the whole net: every other node is the crossing of the curve of one family through a node of the first seed curve with the curve of the other family through a node of the second — Schling's "alternately drawing each curve and using their intersections as new starting points". No curve is inserted or stopped to keep a spacing, so there are no short stubs and no T-junctions; laths run border to border and the output includes the quad mesh of the nodes. The symmetry of the surface is carried into the net: a seed on a flat point (3-fold Enneper, monkey saddle) becomes a singular node where 2n asymptotic rays meet (found where the field points radially around the seed); a rotation about the seed normal is detected and one sector is traced and rotated; a surface of revolution gets N rotated copies of the two curves through the seed, N = round(2πρ / (√2·Spacing)), whose meridian diagonals are exact geodesics. Checked against the closed forms: catenoid nodes on the u ± v lattice to 0.6 % of Δφ, meridian diagonals planar to 1e-3; classical Enneper nodes on the u ± v lattice through the ray nodes to 3 % of the parameter step; the hyperbolic paraboloid web is its grid of rulings (straight to 0.01); 3-fold Enneper: six rays, 3-fold symmetry, crossings at 90° ± 3°.

@@ -453,6 +453,30 @@ def icon_lath_unroll():
     finish(img, "LathUnroll")
 
 
+def icon_lath_strip():
+    """A plank twisting along its lath: a ribbon whose apparent width swings
+    through zero, its oblique rulings drawn across it."""
+    img, d = canvas()
+    n = 7
+    xs = [2.5 + 19.0 * i / (n - 1) for i in range(n)]
+    def edge(i, side):
+        t = i / (n - 1)
+        h = 5.2 * math.cos(math.pi * (0.15 + 0.85 * t))        # apparent half-width, turns over
+        lean = 1.6 * math.sin(math.pi * t)                      # rulings lean along the lath
+        yc = 12 - 2.5 * math.sin(math.pi * t)
+        return (xs[i] + side * lean * 0.5, yc - side * h)
+    for i in range(n - 1):
+        quad = [P(*edge(i, 1)), P(*edge(i + 1, 1)), P(*edge(i + 1, -1)), P(*edge(i, -1))]
+        fill_poly(img, quad, "timber", width=0.7)
+        if i >= (n - 1) // 2:   # the far face, once the plank has turned over
+            mask = Image.new("L", img.size, 0)
+            ImageDraw.Draw(mask).polygon(quad, fill=60)
+            img.paste(Image.new("RGBA", img.size, (40, 10, 0, 255)), (0, 0), mask)
+    for i in range(1, n - 1):
+        stroke(d, [P(*edge(i, 1)), P(*edge(i, -1))], "timber", 0.7)
+    finish(img, "LathStrip")
+
+
 def icon_lath_segment():
     img, d = canvas()
     fill_poly(img, [P(2, 10), P(22, 10), P(22, 14.5), P(2, 14.5)], "timber")
@@ -566,7 +590,7 @@ ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, i
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
        icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
        icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,
-       icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics,
+       icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_strip, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics,
        icon_mesh_cleanup, icon_pull_to_mesh, icon_mesh_colour_map, icon_tab]
 
 if __name__ == "__main__":

@@ -199,7 +199,7 @@ public static class StripUnroll
     /// Places point c in the plane given distances to two known points a and b,
     /// resolving the two-way ambiguity toward the current forward direction.
     /// </summary>
-    private static Vec3d PlacePoint(Vec3d a, Vec3d b, double ra, double rb, Vec3d forward)
+    internal static Vec3d PlacePoint(Vec3d a, Vec3d b, double ra, double rb, Vec3d forward)
     {
         Vec3d d = b - a;
         double len = d.Length;

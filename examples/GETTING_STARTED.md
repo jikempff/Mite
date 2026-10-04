@@ -155,6 +155,14 @@ clearance.
   a half-lap splice into that overlap. Outputs are one branch per lath.
 - **Lath Unroll** — flat cutting patterns per lath, laid out in a row (`G`
   gap). Export the `P` curves for CNC/laser.
+- **Lath Strip** — the strip a thin straight plank (sheet steel, GFRP, plywood
+  lamella) forms along each lath: wire the same Mesh and curves, `W` the plank
+  width, `U` True for upright asymptotic laths. `S` is the 3D strip and `R` its
+  rulings; `P` the flat pattern, a straight band where the strip is
+  developable. `D` says on which share of each lath that is true: an asymptotic
+  lath that inflects (e.g. crossing a catenoid's waist) or runs straight must
+  twist there instead, and `Es` gives the edge strain that twist costs the
+  plank. Thick timber laths twist as rods: check those with Lath Analysis.
 - **Lath Labels** — IDs (`L000`, `L001`, ...; set the prefix and start number
   per family), midpoint tag anchors, and a CSV bill of materials with lengths
   (and utilization if you wire Lath Analysis in).

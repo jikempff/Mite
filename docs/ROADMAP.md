@@ -345,6 +345,9 @@ remains the self-test review page.
       least-squares fit over the window or the tangent's rotation about the
       transported normal; and the strain model itself (τ·t/√3 twist strain,
       w/2 and t/2 fibre distances) against Schling's timber limits.
+      2026-10-04: the plank's own shape is now the developable of Lath Strip
+      (G); in the twist regime |τ| > |κ| its edge strain (W/2)²(τ − cκ)²/2 is
+      the sheet-material counterpart of the rod twist strain above.
 - [ ] Mesh repair and welding: Attene 2010 (A lightweight approach to
       repairing digitized polygon meshes); Botsch et al. 2010 (Polygon Mesh
       Processing, ch. 8) — for Mesh Cleanup.
@@ -542,6 +545,63 @@ Open
       supernodal factorisation.
 - [ ] Global family assignment across flat points for the older Asymptotic
       Net layouts (the web already handles them by rays).
+- [x] Lath strips as developables — 2026-10-04, `Fabrication/DevelopableStrip`
+      and the Lath Strip component (Fabrication). Sources: Tang, Kilian, Bo,
+      Wallner & Pottmann 2016 (rulings r = κg n + τg t for the strip
+      orthogonal to the surface, τg t − κn u for the tangent one, u = n × t);
+      Schling, Wang, Hoyer & Pottmann 2022 §3.4 (c̄ = c + w/(r_D·e₃) r_D);
+      Starostin & van der Heijden 2007 (x = r + v(b + ηt), η = τ/κ, regular
+      while |wη'| < 1); Freddi, Hornung, Mora & Paroni 2016 (corrected
+      Sadowsky functional: the narrow ribbon is the rectifying developable only
+      while |κ| ≥ |τ|; energy 4τ² beyond). Discrete: ruling = intersection of
+      the planes of the neighbouring segments (spanned by the segment and the
+      bisected normal, or n̄ × e), so quads are planar and the pattern exact;
+      on traced laths the planes are measured over four mesh edges either side.
+      Where the developable's ruling leans more than MaxLean (45°) from square
+      the ruling is mirrored back towards square (cot θ = 1/η: continuous at
+      45°, a helicoid where κ = 0 — Mite's choice, not from the papers) and the
+      strip twists; EdgeStrain reports the mean edge elongation the plank
+      needs there. Exact tests: helix 60° flat = the cylinder (1e-13), great
+      circle closed band, latitude = tangent cone (discrete pyramid radius to
+      1e-9, tan φ0 to 2e-4), catenoid asymptotic line v ∈ [1.2, 2.2]: ruling
+      angle error 2.6e-3° → 6.5e-4° → 1.6e-4° (41/81/161 stations, second
+      order), quads planar to 6e-16, band straight to 2e-6; catenoid v ∈ [−2, 2]:
+      developable on 60.8 % (closed-form share of |τ| ≤ |κ| 61.0 %), edge
+      strain at the throat = helicoid (W/2)²τ²/2 to 0.1 %; hyperboloid ruling:
+      no developable, helicoid strain to 0.4 %; helix 30°: twist regime, edge
+      strain √(1 + (W/2)²(τ − κ²/τ)²) − 1 to 1 %. On meshes (64-gon cylinder,
+      64 × 64 catenoid): rulings within 1.4° of the axis, strains within 3–5 %
+      of the closed forms (the window averages the twist peak).
+      Findings:
+      - An asymptotic lath that crosses the waist of a catenoid inflects there
+        by symmetry (the 180° rotation about the throat normal maps the lath
+        to itself reversed, so κg = κn = 0 while τg = 1): no developable
+        strip exists across the throat, and with |τ| > |κ| for |v| < 1.12 the
+        twisting stretch is 39 % of a rim-to-rim lath of the z ∈ [−2, 2]
+        catenoid — independent of the plank width. The studio catenoid
+        (z ∈ [−1, 1]) is twist regime over its whole height (|η| ≥ 1.2). So
+        upright sheet lamellas on catenoid-like AAG webs twist (helicoid edge
+        strain (W/2)²τ²/2: 8e-4 for 80 mm at τ = 1), they are not bent
+        developables; the meridian G laths (τg = 0) are developable with
+        square rulings everywhere.
+      - Lath Unroll's square strip (rulings along the surface normal / n × t)
+        is not developable wherever τg ≠ 0: on the catenoid lath above it needs
+        edge strain 1.1e-4 at W = 0.1 where the developable needs none.
+      - The ribbon model is for thin planks. Timber laths (w/t ≈ 5–10) carry
+        twist as rods; Lath Analysis's Saint-Venant twist remains the check
+        for them.
+      - On a triangulated mesh the traced polylines carry a normal curvature
+        of a few 1e-2 that the exact curve does not have (one asymptotic
+        family runs along the triangle diagonals, the other across them): the
+        developed band bows 5e-2 over a 5 m catenoid lath instead of 2e-3.
+- [ ] Lath Strip follow-ups: read the in-plane turning of the pattern from
+      the smooth normals (κn as in Lath Analysis) instead of the polyline, so
+      facet bias does not bow the pattern; let Lath Sweep, Lath Unroll and Net
+      Joints follow the developable (a Strip mode, appended after the Mite
+      Net bundle's Net input); Wunderlich's finite-width energy and the
+      thickness at which a lath leaves the ribbon regime; strips on the
+      refined AAG laths (needs the AAG refinement bundle); the Lath Strip in
+      the web app.
 
 ## F. Food4Rhino release assets
 

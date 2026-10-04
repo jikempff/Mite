@@ -327,6 +327,60 @@ public static class TestMeshes
         return new MeshData(verts.ToArray(), faces.ToArray());
     }
 
+
+    /// <summary>Catenoid x = (cosh v cos u, cosh v sin u, v): asymptotic line u = u0 + v, sampled at v.</summary>
+    public static Vec3d CatenoidAsymptoticPoint(double v, double u0 = 0) =>
+        new(Math.Cosh(v) * Math.Cos(u0 + v), Math.Cosh(v) * Math.Sin(u0 + v), v);
+
+    public static Vec3d CatenoidNormal(Vec3d p)
+    {
+        double r = Math.Sqrt(p.X * p.X + p.Y * p.Y);
+        return new Vec3d(p.X / r, p.Y / r, -Math.Sinh(p.Z)).Normalized();
+    }
+
+    /// <summary>
+    /// Smooth Darboux data of the catenoid asymptotic line at v: geodesic
+    /// curvature κg, geodesic torsion τg (u = n × t), and the angle of the
+    /// orthogonal developable's ruling κg n + τg t to the tangent, in degrees,
+    /// with the ruling oriented to +n. Central differences, h = 1e-4.
+    /// </summary>
+    public static (double kg, double tg, double thetaDeg, double eta) CatenoidAsymptoticDarboux(double v)
+    {
+        const double h = 1e-4;
+        Vec3d c0 = CatenoidAsymptoticPoint(v - h), c1 = CatenoidAsymptoticPoint(v), c2 = CatenoidAsymptoticPoint(v + h);
+        Vec3d d1 = (c2 - c0) / (2 * h), d2 = (c2 - 2 * c1 + c0) / (h * h);
+        double sp = d1.Length;
+        Vec3d t = d1 / sp;
+        Vec3d k = (d2 - Vec3d.Dot(d2, t) * t) / (sp * sp);           // curvature vector
+        Vec3d n = CatenoidNormal(c1);
+        Vec3d u = Vec3d.Cross(n, t);
+        Vec3d dn = (CatenoidNormal(c2) - CatenoidNormal(c0)) / (2 * h * sp); // dn/ds
+        double kg = Vec3d.Dot(k, u);
+        double tg = -Vec3d.Dot(dn, u);
+        Vec3d r = kg * n + tg * t;
+        if (kg < 0) r = -r;
+        double theta = Math.Acos(Vec3d.Dot(r.Normalized(), t)) * 180 / Math.PI;
+        return (kg, tg, theta, tg / kg);
+    }
+
+    /// <summary>Share of the catenoid asymptotic line v ∈ [v0, v1] (by arc length) where |τg| ≤ |κg| (Freddi et al.'s developable regime).</summary>
+    public static double CatenoidDevelopableShare(double v0, double v1, int samples = 4001)
+    {
+        double dev = 0, total = 0;
+        Vec3d prev = CatenoidAsymptoticPoint(v0);
+        for (int i = 1; i < samples; i++)
+        {
+            double v = v0 + (v1 - v0) * i / (samples - 1);
+            Vec3d p = CatenoidAsymptoticPoint(v);
+            double ds = (p - prev).Length;
+            var (kg, tg, _, _) = CatenoidAsymptoticDarboux(v - 0.5 * (v1 - v0) / (samples - 1));
+            total += ds;
+            if (Math.Abs(tg) <= Math.Abs(kg)) dev += ds;
+            prev = p;
+        }
+        return dev / total;
+    }
+
     public static double CatenoidGaussianCurvature(double z, double c = 1.0)
     {
         double ch = Math.Cosh(z / c);
