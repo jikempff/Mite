@@ -3636,5 +3636,132 @@
     "default": null
    }
   ]
+ },
+ {
+  "file": "NetDistributionsComponent.cs",
+  "name": "Net Distributions",
+  "nick": "NetDist",
+  "desc": "The whole spread of a net, not only its extremes: spacing across each family (measured perpendicular to the curves, on both sides of every sample), crossing angles between the families, and lath utilization — with histograms (Freedman–Diaconis bins) and the share within ±5 % / ±7.5 % of the target spacing.",
+  "tab": "Analysis",
+  "icon": "NetDistributions",
+  "guid": "6D1E2B7A-3C94-4F0B-9A55-2E8F71C4D0A3",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Mesh the curves lie on (its normals tell the two sides of a curve apart)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "A",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Curves of family A",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "B",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Curves of family B (optional; needed for crossing angles)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Spacing",
+    "nick": "Sp",
+    "type": "Number",
+    "desc": "Target spacing the shares refer to (0 = the median of the measured spacings)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Utilization",
+    "nick": "U",
+    "type": "Number",
+    "desc": "Utilization values to summarise, e.g. Lath Analysis MaxUtilization (optional)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Bins",
+    "nick": "N",
+    "type": "Integer",
+    "desc": "Histogram bins (0 = Freedman–Diaconis: width 2·IQR·n^(−1/3))",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Spacing",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Local spacing at every sample (the tighter side): branch {0} family A, {1} family B",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Sample points the spacings refer to (same tree)",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Angles",
+    "nick": "X",
+    "type": "Number",
+    "desc": "Crossing angle at every A × B crossing, degrees (0..90)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Crossings",
+    "nick": "Xp",
+    "type": "Point",
+    "desc": "Crossing points the angles refer to",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Counts",
+    "nick": "H",
+    "type": "Integer",
+    "desc": "Histogram counts: {0} spacing A, {1} spacing B, {2} angles, {3} utilization",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Edges",
+    "nick": "E",
+    "type": "Number",
+    "desc": "Histogram bin edges, one more than the counts (same tree)",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Summary statistics of every distribution",
+    "access": "item",
+    "default": null
+   }
+  ]
  }
 ]

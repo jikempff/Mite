@@ -315,7 +315,7 @@ remains the self-test review page.
 - [x] Kinetic demo: a "fold" slider that plays the state sequence of E on
       the hyperboloid twist and on the catenoid net — 2026-09-26 (Net
       Kinetics card, Kinetics tab).
-- [ ] Metrics with distributions, not only extremes: spacing histogram,
+- [x] Metrics with distributions, not only extremes: spacing histogram,
       crossing-angle histogram, utilisation histogram (small, consistent
       charts).
 - [ ] Colour-map legends identical to Mesh Colour Map in Grasshopper. (App:
@@ -359,6 +359,45 @@ remains the self-test review page.
       check them against Rhino's default grey viewport background.
 - [ ] Icons in black / white / neon (`tools/generate_icons.py`) after the Mite
       Net bundle (two new icons) is merged, then the Food4Rhino screenshots.
+      charts) — 2026-10-04 (session 2), `Analysis/NetDistributions`
+      (`Distribution`, `Histogram`, `FamilySpacing`, `CrossingAngles`,
+      `Utilization`), the Grasshopper **Net Distributions** component
+      (Analysis) and a bench card with three small histograms per net (saddle
+      fill continuous / classic, catenoid fill / web) and 7 self-tests.
+      Definitions: spacing is cut across the lath (plane normal to its tangent,
+      nearest cut on each side of the surface normal, 3D chord) — the strip
+      width of Pottmann et al. 2010, whose 5 % / 7.5 % breakpoint tolerances
+      give the "within" shares; histograms with Freedman & Diaconis 1981 bins
+      (Sturges when IQR = 0), type-7 quantiles (Hyndman & Fan 1996).
+      Closed forms: parallel lines exact, 720-gon rings 2e-6, sphere meridians
+      tan θ′ = tan θ / cos Δ 2e-6, exact catenoid asymptotic lines to 2e-4
+      (first-order law cosh v · Δc/√2, 7 % off at the rims for Δc = 15°), the
+      z = xy ruling crossings 3e-14°; traced nets: crossing angles within 0.84°
+      of the closed form on the saddle, 0.23° / 0.51° of 90° on the catenoid.
+      Findings:
+      - A continuous fill treats Spacing as the widest gap it tolerates, not
+        the typical one: median gap 0.82 Spacing (saddle and catenoid), P95
+        1.03–1.07, P5 0.44 (saddle; laths may converge to 0.15 Spacing). Only
+        20 % (saddle) / 14 % (catenoid) of the lath length is within ±5 % of
+        Spacing.
+      - A web from the rims shows the surface's own spacing: on the catenoid
+        Spacing at the rims, Spacing / cosh 1 at the waist (P5 0.189 vs 0.194),
+        median 0.73 Spacing.
+      - Classic mode: 30 of 492 crossings are more than 2° off the closed-form
+        angle (worst 22°), all next to T-junction tips — the end blend over two
+        Spacings bends the last part of a lath off the asymptotic direction;
+        its spacing histogram has a bar at 0 (the merging tips).
+- [ ] Fill calibration: decide whether `Spacing` means the median gap (scale the
+      seed offset by ~1.2 and re-measure with Net Distributions) or stays the
+      widest gap (document it on the component); compare with farthest-point
+      seeding (D) by the same histograms.
+- [ ] Classic-mode end blend: snap the tip onto the neighbour without bending
+      the last two Spacings (or blend over one segment) and re-check the
+      crossing angles next to T-junctions (bench: `dist.saddleClassic.angOff2`).
+- [ ] The same three histograms in the web app's quality card, and a coloured
+      spacing preview (points by local spacing) on the Grasshopper component
+      (with the custom preview item in B).
+- [ ] Colour-map legends identical to Mesh Colour Map in Grasshopper.
 - [ ] Search / filter (failing tests only, by component, by tab); keyboard
       navigation; ticked state summary exportable as a GitHub issue draft.
 - [ ] Component cards show the Grasshopper icon at readable size and the
@@ -959,6 +998,9 @@ Open
       writes a `components.json` entry from a component source — the Asymptotic
       Net entry has drifted, 9 of 11 inputs).
 
+- [x] 2026-10-04 (session 2, C): Net Distributions — spacing across each family,
+      crossing angles and utilization as histograms in the core, Grasshopper
+      and the bench (see C).
 - [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
       Gridshell Analysis joints inserted exactly (the snap had chained joints
       into a few nodes), supports fixed / pinned, joint stiffness, self-weight,

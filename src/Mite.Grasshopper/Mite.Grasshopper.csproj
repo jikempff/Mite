@@ -35,6 +35,7 @@
     <EmbeddedResource Include="Resources\ConjugateNet.png" />
     <EmbeddedResource Include="Resources\Umbilics.png" />
     <EmbeddedResource Include="Resources\GridshellAnalysis.png" />
+    <EmbeddedResource Include="Resources\NetDistributions.png" />
     <EmbeddedResource Include="Resources\LathUnroll.png" />
     <EmbeddedResource Include="Resources\LathStrip.png" />
     <EmbeddedResource Include="Resources\LathSegment.png" />
