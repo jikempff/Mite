@@ -877,6 +877,82 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     numbers["pull"] = new { maxDist = R3(circ.Zip(pulled, (a2, b2) => (a2 - b2).Length).Max()), radiusAfter = R3(faired.Select(p => p.Length).Average()) };
 }
 
+// ---------- Lath Strip: developable plank strips (Tang et al. 2016; Schling et al. 2022 §3.4; Starostin & van der Heijden 2007; Freddi et al. 2016) ----------
+{
+    object StripScene(DevelopableStrip.Result r, int stride)
+    {
+        // quads between every stride-th station, flagged developable when both ends are
+        var quads = new List<double[][]>(); var dev = new List<bool>(); var rul = new List<double[][]>();
+        int ns = r.Centre.Length;
+        var ks = Enumerable.Range(0, ns).Where(k => k % stride == 0).ToList(); if (ks[^1] != ns - 1) ks.Add(ns - 1);
+        for (int q = 0; q + 1 < ks.Count; q++)
+        {
+            int k0 = ks[q], k1 = ks[q + 1];
+            bool d = true; for (int k = k0; k <= k1; k++) d &= r.OnDevelopable[k];
+            quads.Add(new[] { P(r.EdgeA[k0]), P(r.EdgeA[k1]), P(r.EdgeB[k1]), P(r.EdgeB[k0]) }); dev.Add(d);
+        }
+        foreach (int k in ks) rul.Add(new[] { P(r.EdgeA[k]), P(r.EdgeB[k]) });
+        return new { quads, dev, rulings = rul, centre = Line(r.Centre, 2) };
+    }
+
+    // 1. catenoid z ∈ [−2, 2]: upright 80 mm planks on the traced asymptotic laths
+    var mesh = TestMeshes.CreateCatenoid(1.0, 4.0, 64, 64);
+    var pc = PrincipalCurvature.Compute(mesh);
+    var field = AsymptoticCurves.ComputeDirections(pc);
+    var tt = Stopwatch.StartNew();
+    var A = EvenlySpacedNet.TraceField(mesh, field.Family1, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.3 }, field.Family2);
+    var proj = new MeshProjection(mesh);
+    double w = 0.08, share = TestMeshes.CatenoidDevelopableShare(-2, 2), helicoid = Math.Sqrt(1 + w * w / 4) - 1;
+    var catR = A.Where(l => Math.Abs(l[0].Z - l[^1].Z) > 3.9).Select(l => DevelopableStrip.Build(proj, l, new DevelopableStrip.Options { Width = w, Upright = true })!).ToList();
+    tt.Stop();
+    // drawn 250 mm wide so the rulings read at page scale (the numbers are for 80 mm)
+    var shown = A.Where(l => Math.Abs(l[0].Z - l[^1].Z) > 3.9).Where((l, i) => i % 9 == 0).Take(3).Select(l => DevelopableStrip.Build(proj, l, new DevelopableStrip.Options { Width = 0.25, Upright = true })!).ToList();
+    scenes["stripCat"] = new { label = "catenoid z ∈ [−2, 2], upright planks on asymptotic laths (drawn 250 mm wide)", wire = Edges(mesh, 8), strips = shown.Select(r => StripScene(r, 3)).ToArray() };
+    numbers["stripCat"] = new { laths = catR.Count, shareMin = R3(catR.Min(r => r.DevelopableFraction)), shareMax = R3(catR.Max(r => r.DevelopableFraction)), shareTheory = R3(share), strain = catR.Max(r => r.EdgeStrain), strainTheory = helicoid, bow = R3(catR.Max(r => r.Bow)), planar = catR.Max(r => r.MaxPlanarity), width = w, ms = tt.ElapsedMilliseconds };
+
+    // 1b. exact asymptotic line v ∈ [1.2, 2.2] (|τ| < |κ| throughout): rulings → κg n + τg t at second order
+    var conv = new List<object>();
+    foreach (int count in new[] { 41, 81, 161 })
+    {
+        var pts = Enumerable.Range(0, count).Select(i => TestMeshes.CatenoidAsymptoticPoint(1.2 + 1.0 * i / (count - 1))).ToArray();
+        var r = DevelopableStrip.Build(pts, pts.Select(TestMeshes.CatenoidNormal).ToArray(), new DevelopableStrip.Options { Width = 0.1, Upright = true })!;
+        double err = Enumerable.Range(1, count - 2).Max(i => Math.Abs(r.RulingAngle[i] - TestMeshes.CatenoidAsymptoticDarboux(1.2 + 1.0 * i / (count - 1)).thetaDeg));
+        var sq = DevelopableStrip.Build(pts, pts.Select(TestMeshes.CatenoidNormal).ToArray(), new DevelopableStrip.Options { Width = 0.1, Upright = true, MaxLean = 0 })!;
+        conv.Add(new { count, angleErr = err, bow = r.Bow, planar = r.MaxPlanarity, developable = r.Developable, lean = R3(r.MaxDevelopableLean), squareStrain = sq.EdgeStrain });
+    }
+    numbers["stripExact"] = conv;
+
+    // 2. cylinder R = 1: flat 100 mm planks on geodesic helices at 60° and 30° to the axis
+    var cyl = TestMeshes.CreateCylinder(1.0, 2.0, 64, 32);
+    var projC = new MeshProjection(cyl);
+    var helixRows = new List<object>(); var helixScenes = new List<object>();
+    foreach (double deg in new[] { 60.0, 30.0 })
+    {
+        double al = deg * Math.PI / 180;
+        var g = GeodesicCurves.Trace(cyl, new[] { 16 * 64 }, new[] { new Vec3d(0, Math.Sin(al), Math.Cos(al)) }, new GeodesicCurves.Options { StepSize = 0.02, MaxSteps = 2000 })[0];
+        var r = DevelopableStrip.Build(projC, g, new DevelopableStrip.Options { Width = 0.1, Upright = false })!;
+        int ns = r.Centre.Length; var mid = Enumerable.Range(ns / 8, 3 * ns / 4).ToArray();
+        double axis = mid.Max(k => AngleDeg(r.Rulings[k], new Vec3d(0, 0, 1)));
+        double kn = Math.Sin(al) * Math.Sin(al), tg = Math.Sin(al) * Math.Cos(al);
+        double theory = deg > 45 ? 0 : Math.Sqrt(1 + 0.0025 * Math.Pow(tg - kn * kn / tg, 2)) - 1;
+        helixRows.Add(new { deg, share = R3(r.DevelopableFraction), axisDeg = R3(axis), bow = r.Bow, strain = r.EdgeStrain, strainTheory = theory, lean = R3(r.MaxDevelopableLean), leanTheory = 90 - deg });
+        helixScenes.Add(StripScene(r, 3));
+    }
+    scenes["stripCyl"] = new { label = "cylinder R = 1, flat 100 mm planks on helices at 60° (developable) and 30° (twists)", wire = RevolveWire(z => 1.0, -1, 1, 8, 16), strips = helixScenes.ToArray() };
+    numbers["stripCyl"] = helixRows;
+
+    // 3. hyperboloid x² + y² − z² = 1: a straight ruling has no developable; the plank twists as a helicoid
+    var hyp = TestMeshes.CreateHyperboloid(1.0, 1.0, 1.0, 64, 32);
+    var pcH = PrincipalCurvature.Compute(hyp);
+    var ruling = AsymptoticCurves.Trace(hyp, new[] { 16 * 64 }, pcH, false, new AsymptoticCurves.Options { StepSize = 0.02 })[0];
+    var rH = DevelopableStrip.Build(new MeshProjection(hyp), ruling, new DevelopableStrip.Options { Width = 0.1, Upright = true })!;
+    double zMin = ruling.Min(p => Math.Abs(p.Z));
+    double tauMax = 1 / (1 + 2 * zMin * zMin);
+    var rH25 = DevelopableStrip.Build(new MeshProjection(hyp), ruling, new DevelopableStrip.Options { Width = 0.25, Upright = true })!;
+    scenes["stripHyp"] = new { label = "hyperboloid x² + y² − z² = 1, upright plank on a ruling (drawn 250 mm wide)", wire = RevolveWire(z => Math.Sqrt(1 + z * z), -1, 1, 8, 16), strips = new[] { StripScene(rH25, 3) } };
+    numbers["stripHyp"] = new { share = R3(rH.DevelopableFraction), strain = rH.EdgeStrain, strainTheory = Math.Sqrt(1 + 0.0025 * tauMax * tauMax) - 1, lean = R3(rH.MaxDevelopableLean), length = R3(rH.Length) };
+}
+
 // ---------- kd-tree / projection scale ----------
 {
     var grid = TestMeshes.CreateQuadGrid(300, 300, 1.0);

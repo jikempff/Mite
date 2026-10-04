@@ -36,6 +36,7 @@
     <EmbeddedResource Include="Resources\Umbilics.png" />
     <EmbeddedResource Include="Resources\GridshellAnalysis.png" />
     <EmbeddedResource Include="Resources\LathUnroll.png" />
+    <EmbeddedResource Include="Resources\LathStrip.png" />
     <EmbeddedResource Include="Resources\LathSegment.png" />
     <EmbeddedResource Include="Resources\LathLabels.png" />
     <EmbeddedResource Include="Resources\LathPreview.png" />

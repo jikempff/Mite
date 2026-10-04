@@ -358,6 +358,29 @@ internal static class Tests
                         $"pattern is a closed band (diagonal {bbox.Diagonal.Length:F2})");
             });
 
+        TestComponent("Lath Strip",
+            new Mite.Grasshopper.Components.LathStripComponent(),
+            c =>
+            {
+                SetInputs(c, (0, sphere.DuplicateMesh()), (2, 0.1));
+                var circle = new Rhino.Geometry.Circle(Rhino.Geometry.Plane.WorldXY, 1.0);
+                SetCurveList(c, 1, circle.ToNurbsCurve());
+            },
+            c =>
+            {
+                // A flat plank on the equator: the tangent developable is the cylinder band,
+                // developable all round, no edge strain, a straight pattern ~2π long
+                var dev = Numbers(c, 4);
+                var strain = Numbers(c, 5);
+                var pattern = c.Params.Output[3].VolatileData.AllData(true)
+                    .OfType<Grasshopper.Kernel.Types.GH_Curve>().Select(x => x.Value).FirstOrDefault();
+                var bbox = pattern?.GetBoundingBox(false) ?? Rhino.Geometry.BoundingBox.Empty;
+                return Expect(dev.Count == 1 && dev[0] > 0.95 && strain.Count == 1 && strain[0] < 1e-3,
+                    $"equator strip developable {(dev.Count > 0 ? dev[0] : 0):P0}, edge strain {(strain.Count > 0 ? strain[0] : 1):E1}")
+                    && Expect(pattern != null && pattern.IsClosed && bbox.Diagonal.Length > 5.0 && bbox.Diagonal.Length < 7.0,
+                        $"pattern is a closed band (diagonal {bbox.Diagonal.Length:F2})");
+            });
+
         TestComponent("Lath Segment",
             new Mite.Grasshopper.Components.LathSegmentComponent(),
             c =>

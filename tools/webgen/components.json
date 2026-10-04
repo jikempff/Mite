@@ -1867,6 +1867,147 @@
   ]
  },
  {
+  "file": "LathStripComponent.cs",
+  "name": "Lath Strip",
+  "nick": "Strip",
+  "desc": "The strip a thin straight plank of width W forms along each lath: the developable that contains the lath and stands upright on the surface (asymptotic laths) or lies on it (geodesic laths). Its rulings lean by the ratio of twist to bend (r = κg n + τg t upright, τg t − κn u flat); its quads are planar, so the flat pattern is exact and comes out as a straight band on asymptotic / geodesic laths. Where the twist exceeds the bend (|τ| > |κ|, e.g. a lath crossing the waist of a catenoid, or a straight twisted lath) no such developable carries a narrow plank: the strip twists there and the plank's edges have to stretch (EdgeStrain).",
+  "tab": "Fabrication",
+  "icon": "LathStrip",
+  "guid": "5D92D9ED-2685-4D6D-8A5E-448437BF81A8",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Reference surface the laths lie on",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Curves",
+    "nick": "C",
+    "type": "Curve",
+    "desc": "Lath centrelines on the surface",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Plank width (default 0.1)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "False: the plank lies flat on the surface (geodesic laths). True: it stands upright on edge (asymptotic laths)",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "MaxLean",
+    "nick": "L",
+    "type": "Number",
+    "desc": "Largest lean of a ruling from square, degrees (default 45: the developable regime |κ| ≥ |τ| of a narrow plank, Freddi et al. 2016). 90 accepts any developable that clears its edge of regression; 0 gives the square strip of Lath Unroll",
+    "access": "item",
+    "default": "45.0"
+   },
+   {
+    "name": "Gap",
+    "nick": "G",
+    "type": "Number",
+    "desc": "Gap between laid-out patterns (default 0.05)",
+    "access": "item",
+    "default": "0.05"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Window",
+    "nick": "Wn",
+    "type": "Number",
+    "desc": "Arc length either side of a station over which its ruling is measured (0 = automatic: four mean mesh edges; rulings are a second-derivative quantity and need more smoothing than Lath Analysis's curvature)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Strips",
+    "nick": "S",
+    "type": "Mesh",
+    "desc": "3D strip per lath: one quad per segment, planar on the developable",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Rulings",
+    "nick": "R",
+    "type": "Line",
+    "desc": "Rulings across the strip, one branch per lath",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Edges",
+    "nick": "E",
+    "type": "Curve",
+    "desc": "The two long edges of each strip, one branch per lath",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Patterns",
+    "nick": "P",
+    "type": "Curve",
+    "desc": "Closed flat cutting patterns, laid out in a row (exact on the developable; where the strip twists, laid down with the lath's in-plane turning — an approximation)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Developable",
+    "nick": "D",
+    "type": "Number",
+    "desc": "Share of each lath (0–1, by length) on which the strip is the developable",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "EdgeStrain",
+    "nick": "Es",
+    "type": "Number",
+    "desc": "Membrane strain the plank's edges need where the strip twists (0 on the developable; (Wτ)²/8 on a straight twisted lath)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Bow",
+    "nick": "Bw",
+    "type": "Number",
+    "desc": "Largest distance of the developed centreline from straight (0 = the pattern is a straight band)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "Rp",
+    "type": "Text",
+    "desc": "Summary per lath",
+    "access": "list",
+    "default": null
+   }
+  ]
+ },
+ {
   "file": "MeanCurvatureComponent.cs",
   "name": "Mean Curvature",
   "nick": "MeanCurv",

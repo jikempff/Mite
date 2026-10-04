@@ -307,6 +307,10 @@ const builders = {
     if (strain) legend(el.dataset.id, [[WIRE(), 'catenoid (rest surface)'], [utilCss(0.35), 'utilization < 0.7'], [utilCss(0.9), '0.7 – 1'], [utilCss(1.15), 'over the strain limit'], [INK(), 'scissor joints']]);
     else legend(el.dataset.id, m === 'kinHyp' ? [[A(), 'family A rods'], [B(), 'family B rods'], [INK(), 'scissor joints (' + st.joints.length + ')']] : [[WIRE(), 'catenoid (rest surface)'], [A(), 'family A'], [B(), 'family B'], [INK(), 'scissor joints · dashed: actuator cables']]);
     return { view: { yaw: -0.6, pitch: 0.35 }, layers: L, points: pts }; },
+  strip(el){ const m = mode(el) || 'stripCat'; const sc = SC[m]; const verts = [], faces = [], colors = []; const dev = css('--acc'), tw = css('--warn');
+    sc.strips.forEach(st => st.quads.forEach((q, i) => { const b = verts.length; q.forEach(p => verts.push(p)); faces.push([b, b + 1, b + 2, b + 3]); colors.push(st.dev[i] ? dev : tw); }));
+    legend(el.dataset.id, [[WIRE(), sc.label], [dev, 'developable: planar quads, straight band'], [tw, 'twisted: |τ| > |κ|, edges stretch'], [INK(), 'rulings']]);
+    return { view: { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(sc.wire), { lines: sc.strips.flatMap(s => s.rulings), color: INK(), width: 0.6, alpha: 0.55 }, { lines: sc.strips.map(s => s.centre), color: INK(), width: 1.2 }], mesh: { verts, faces, colors } }; },
   pull(el){ const p = SC.pull; legend(el.dataset.id, [[WIRE(), 'sphere'], [MUTED(), 'input circle (floating)'], [A(), 'pulled + faired']]); return { layers: [wireLayer(p.wire), { lines: [p.before], color: MUTED(), width: 1.4, dash: [4,3] }, { lines: [p.after], color: A(), width: 2.2 }] }; },
 };
 ['minimal','fdm','dynrelax','planar'].forEach(k => builders[k] = el => { const m = mode(el) || 'after'; const s = SC[k]; const L = [];
