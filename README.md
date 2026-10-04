@@ -38,6 +38,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 ### Analysis
 - **Lath Analysis** — buildability check for strip laths: Darboux-frame decomposition (geodesic curvature, normal curvature, geodesic torsion) converted to bending strains against a material limit
 - **Gridshell Analysis** — linear statics of the whole lath network as a coupled 3D beam frame: every crossing a node (inserted exactly into the laths), rigid, scissor-hinged or semi-rigid joints about the surface normal, fixed or pinned supports, self-weight, area, line and point loads; displacements, reactions with an equilibrium check, and per-lath stress utilization with torsion (validated against Euler-Bernoulli closed forms)
+- **Net Distributions** — the whole spread of a net, not only its extremes: spacing across each family (cut perpendicular to every lath, both sides, as the strip width of Pottmann et al. 2010), crossing angles between the families and lath utilization, as histograms (Freedman–Diaconis bins) with P5 / median / P95 and the share within ±5 % / ±7.5 % of the target spacing
 
 ### Fabrication
 - **Lath Sweep** — extrudes on-surface curves (geodesic, asymptotic, streamline) into solid laths with a rectangular profile riding in the surface frame; flat mode for geodesic gridshells, upright (egg-crate) mode for asymptotic gridshells, with surface offset
@@ -63,7 +64,7 @@ All Grasshopper components weld coincident vertices on intake (STL imports, Brep
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (29 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (30 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -127,7 +128,7 @@ Components appear under the **Mite** tab:
 - **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines, Umbilics
 - **Form Finding** — Planarize Mesh, Minimal Surface, Force Density Method, Dynamic Relaxation
 - **Gridshells** — Asymptotic Web, Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
-- **Analysis** — Lath Analysis, Gridshell Analysis, Mesh Isocurves
+- **Analysis** — Lath Analysis, Gridshell Analysis, Net Distributions, Mesh Isocurves
 - **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview, Net Topology
 - **Kinetics** — Net Kinetics
 - **Util** — Mesh Cleanup, Pull To Mesh, Mesh Colour Map
@@ -139,6 +140,9 @@ split to stock with **Lath Segment**, and produce cutting patterns with **Lath U
 plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
+
+### Unreleased
+- **Net Distributions** (new component, Mite > Analysis; `Analysis/NetDistributions` in the core): spacing, crossing angles and utilization as distributions. Spacing is measured across the curves — at samples every Spacing/4 the plane normal to the lath is cut with the other laths of its family and the nearest cut on each side of the surface normal is that side's gap — so it is the strip width of Pottmann et al. 2010 and exact on parallel lines; crossing angles use tangents interpolated along the polylines; histograms use Freedman & Diaconis 1981 bins (2·IQR·n^(−1/3), Sturges when the IQR is 0) and type-7 quantiles. Closed-form tests: parallel lines and concentric circles to 2e-6, sphere meridians (tan θ′ = tan θ / cos Δ) to 2e-6, exact catenoid asymptotic lines (spacing cosh v · Δc/√2 to first order, the exact cut to 2e-4), the 81 ruling crossings of z = xy to 3e-14°. Finding: a continuous fill uses Spacing as the widest gap it tolerates, so its median gap is 0.82 Spacing on the saddle and the catenoid; a web from the rims shows the catenoid's own cosh spacing (Spacing at the rims, Spacing / cosh 1 at the waist). Bench: a Net Distributions card with spacing / angle / utilization histograms on four nets and 7 self-tests.
 
 ### 1.3.0
 - **Asymptotic Web** (new component, Mite > Gridshells; `Gridshells/AsymptoticWeb` in the core). An asymptotic parameterisation of a negatively curved surface is fixed up to u = f(ū), v = g(v̄) (Schling, Wang, Hoyer & Pottmann 2022), so placing nodes every Spacing along the two asymptotic curves through a seed fixes the whole net: every other node is the crossing of the curve of one family through a node of the first seed curve with the curve of the other family through a node of the second — Schling's "alternately drawing each curve and using their intersections as new starting points". No curve is inserted or stopped to keep a spacing, so there are no short stubs and no T-junctions; laths run border to border and the output includes the quad mesh of the nodes. The symmetry of the surface is carried into the net: a seed on a flat point (3-fold Enneper, monkey saddle) becomes a singular node where 2n asymptotic rays meet (found where the field points radially around the seed); a rotation about the seed normal is detected and one sector is traced and rotated; a surface of revolution gets N rotated copies of the two curves through the seed, N = round(2πρ / (√2·Spacing)), whose meridian diagonals are exact geodesics. Checked against the closed forms: catenoid nodes on the u ± v lattice to 0.6 % of Δφ, meridian diagonals planar to 1e-3; classical Enneper nodes on the u ± v lattice through the ray nodes to 3 % of the parameter step; the hyperbolic paraboloid web is its grid of rulings (straight to 0.01); 3-fold Enneper: six rays, 3-fold symmetry, crossings at 90° ± 3°.

@@ -404,6 +404,19 @@ def icon_lath_analysis():
     finish(img, "LathAnalysis")
 
 
+def icon_net_distributions():
+    img, d = canvas()
+    # a histogram of spacings: bars around the target, a target tick above
+    heights = [4.0, 9.0, 15.0, 12.0, 6.5, 3.0]
+    x = 3.0
+    for h in heights:
+        fill_poly(img, [P(x, 21), P(x + 3.0, 21), P(x + 3.0, 21 - h), P(x, 21 - h)], "math", width=0.7)
+        x += 3.0
+    stroke(d, [P(2.0, 21.2), P(22.0, 21.2)], "math", 1.0)
+    arrow(d, 10.5, 1.5, 10.5, 4.6, "math", 0.9, 1.6)
+    finish(img, "NetDistributions")
+
+
 def icon_gridshell_analysis():
     img, d = canvas()
     # arch lattice with a load arrow
@@ -565,7 +578,7 @@ def icon_tab():
 ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics,
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
        icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
-       icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,
+       icon_lath_analysis, icon_gridshell_analysis, icon_net_distributions, icon_mesh_isocurves,
        icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics,
        icon_mesh_cleanup, icon_pull_to_mesh, icon_mesh_colour_map, icon_tab]
 

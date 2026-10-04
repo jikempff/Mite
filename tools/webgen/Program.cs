@@ -590,6 +590,112 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     numbers["projection"] = new { vertices = grid.VertexCount, buildMs = t.ElapsedMilliseconds, queries = 20000, queryMs = t2.ElapsedMilliseconds, exact = ok };
 }
 
+// ---------- Net Distributions: spacing, crossing angles, utilization as distributions ----------
+{
+    object Stats(Distribution d, double target = double.NaN) => new
+    {
+        n = d.Count, min = R3(d.Min), p5 = R3(d.Quantile(0.05)), median = R3(d.Median), p95 = R3(d.Quantile(0.95)), max = R3(d.Max),
+        cv = R3(100 * d.CoefficientOfVariation),
+        within5 = double.IsNaN(target) ? -1 : R3(100 * d.ShareNear(target, 0.05)), within75 = double.IsNaN(target) ? -1 : R3(100 * d.ShareNear(target, 0.075)),
+        fdBins = d.Histogram().Bins, fdRule = d.Histogram().Rule
+    };
+    object Hist(Distribution d, double lo, double hi, int bins) { var h = d.Histogram(bins, lo, hi); return new { lo, hi, counts = h.Counts, below = h.Below, above = h.Above }; }
+
+    // 1. analytic ground truth
+    // parallel lines and concentric circles in a plane
+    Vec3d Up(Vec3d _) => new Vec3d(0, 0, 1);
+    var lines = Enumerable.Range(0, 9).Select(k => Enumerable.Range(0, 41).Select(i => new Vec3d(0.05 * i, 0.25 * k, 0)).ToArray()).ToList();
+    var rl = NetDistributions.FamilySpacing(lines, Up, new NetDistributions.SpacingOptions { Target = 0.25 });
+    var rings = Enumerable.Range(0, 6).Select(k => Enumerable.Range(0, 721).Select(i => { double a = 2 * Math.PI * (i % 720) / 720; return new Vec3d((1 + 0.2 * k) * Math.Cos(a), (1 + 0.2 * k) * Math.Sin(a), 0); }).ToArray()).ToList();
+    var rr = NetDistributions.FamilySpacing(rings, Up, new NetDistributions.SpacingOptions { Target = 0.2, MaxDistance = 0.5 });
+    // sphere meridians Δ = 30° apart: the cut at polar angle θ meets the next meridian at tan θ' = tan θ / cos Δ
+    double delta = 2 * Math.PI / 12;
+    var mer = Enumerable.Range(0, 12).Select(k => Enumerable.Range(0, 801).Select(i => { double th = 0.3 + (Math.PI - 0.6) * i / 800, ph = k * delta; return new Vec3d(Math.Sin(th) * Math.Cos(ph), Math.Sin(th) * Math.Sin(ph), Math.Cos(th)); }).ToArray()).ToList();
+    var rm = NetDistributions.FamilySpacing(mer, p => p.Normalized(), new NetDistributions.SpacingOptions { Step = 0.02, MaxDistance = 0.8 });
+    double merWorst = 0;
+    for (int i = 0; i < rm.Points.Length; i++)
+    {
+        double th = Math.Acos(Math.Max(-1, Math.Min(1, rm.Points[i].Z))), thq = Math.Atan2(Math.Sin(th), Math.Cos(th) * Math.Cos(delta));
+        double ex = (new Vec3d(Math.Sin(thq) * Math.Cos(delta), Math.Sin(thq) * Math.Sin(delta), Math.Cos(thq)) - new Vec3d(Math.Sin(th), 0, Math.Cos(th))).Length;
+        merWorst = Math.Max(merWorst, Math.Max(Math.Abs(rm.Left[i] - ex), Math.Abs(rm.Right[i] - ex)));
+    }
+    // catenoid asymptotic lines u − v = c, 24 around: spacing cosh v · Δc/√2 to first order
+    double dc = 2 * Math.PI / 24, waist = dc / Math.Sqrt(2);
+    Vec3d Xc(double u, double v) => new Vec3d(Math.Cosh(v) * Math.Cos(u), Math.Cosh(v) * Math.Sin(u), v);
+    var catLines = Enumerable.Range(0, 24).Select(k => Enumerable.Range(0, 1601).Select(i => { double v = -2 + 4.0 * i / 1600; return Xc(k * dc + v, v); }).ToArray()).ToList();
+    var rc = NetDistributions.FamilySpacing(catLines, p => { double u = Math.Atan2(p.Y, p.X); return new Vec3d(Math.Cos(u), Math.Sin(u), -Math.Sinh(p.Z)) / Math.Cosh(p.Z); }, new NetDistributions.SpacingOptions { Target = waist, Step = 0.02, MaxDistance = 1.5 * Math.Cosh(2) * waist });
+    double catShareTheory = Math.Sinh(Math.Log(1.05 + Math.Sqrt(1.05 * 1.05 - 1))) / Math.Sinh(2);
+    // hyperbolic paraboloid z = xy: rulings x = a and y = b cross at cos φ = |ab| / √((1 + a²)(1 + b²))
+    var vals = Enumerable.Range(0, 9).Select(i => -1 + 0.25 * i).ToArray();
+    var hA = vals.Select(a => Enumerable.Range(0, 23).Select(i => { double y = -1.1 + 0.1 * i; return new Vec3d(a, y, a * y); }).ToArray()).ToList();
+    var hB = vals.Select(b => Enumerable.Range(0, 23).Select(i => { double x = -1.1 + 0.1 * i; return new Vec3d(x, b, x * b); }).ToArray()).ToList();
+    var ha = NetDistributions.CrossingAngles(hA, hB);
+    double hypWorst = 0;
+    for (int i = 0; i < ha.Points.Length; i++) { double a = ha.Points[i].X, b = ha.Points[i].Y; hypWorst = Math.Max(hypWorst, Math.Abs(ha.PerCrossing[i] - Math.Acos(Math.Abs(a * b) / Math.Sqrt((1 + a * a) * (1 + b * b))) * 180 / Math.PI)); }
+    numbers["distAnalytic"] = new
+    {
+        linesWorst = rl.Spacing.Values.Max(v => Math.Abs(v - 0.25)), linesN = rl.Spacing.Count, linesOpen = rl.OpenSides,
+        ringsWorst = rr.Spacing.Values.Max(v => Math.Abs(v - 0.2)), ringsN = rr.Spacing.Count,
+        meridianWorst = merWorst, meridianN = 2 * rm.Points.Length, meridianEquator = R3(rm.Spacing.Max), meridianEquatorTheory = R3(2 * Math.Sin(delta / 2)),
+        catShare = R3(100 * rc.Within5), catShareTheory = R3(100 * catShareTheory), catWaist = R3(rc.Spacing.Min), catWaistTheory = R3(waist),
+        hypN = ha.Angles.Count, hypWorst, hypMin = R3(ha.Angles.Min), hypMax = R3(ha.Angles.Max),
+    };
+
+    // 2. traced nets: fill vs web on the catenoid, fill on the saddle
+    var distRows = new Dictionary<string, object>();
+    var cases = new (string key, string label, MeshData mesh, double spacing, NetLayout layout, bool continuous)[]
+    {
+        ("saddleFill", "saddle z = x² − y², fill (continuous)", TestMeshes.CreateSaddle(40, 2.0), 0.15, NetLayout.Fill, true),
+        ("saddleClassic", "saddle z = x² − y², fill (classic)", TestMeshes.CreateSaddle(40, 2.0), 0.15, NetLayout.Fill, false),
+        ("catFill", "catenoid, fill (continuous)", TestMeshes.CreateCatenoid(1, 2, 96, 48), 0.3, NetLayout.Fill, true),
+        ("catWeb", "catenoid, web from the rims", TestMeshes.CreateCatenoid(1, 2, 96, 48), 0.3, NetLayout.WebBorder, true),
+    };
+    foreach (var (key, label, mesh, spacing, layout, continuous) in cases)
+    {
+        var tt = Stopwatch.StartNew();
+        var pc = PrincipalCurvature.Compute(mesh);
+        var field = AsymptoticCurves.ComputeDirections(pc, mesh, 15.0);
+        var A = EvenlySpacedNet.TraceField(mesh, field.Family1, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = spacing, Layout = layout, Continuous = continuous }, field.Family2);
+        var B = EvenlySpacedNet.TraceField(mesh, field.Family2, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = spacing, Layout = layout, Continuous = continuous }, field.Family1);
+        var proj = new MeshProjection(mesh);
+        var t2 = Stopwatch.StartNew();
+        var sA = NetDistributions.FamilySpacing(proj, A, new NetDistributions.SpacingOptions { Target = spacing });
+        var sB = NetDistributions.FamilySpacing(proj, B, new NetDistributions.SpacingOptions { Target = spacing });
+        var ang = NetDistributions.CrossingAngles(A, B);
+        t2.Stop();
+        // upright 60 × 8 mm laths, timber strain limit: on an asymptotic lath the twist τg = √−K governs
+        var laths = A.Concat(B).Select(l => LathAnalysis.Analyze(proj, l, new LathAnalysis.Options { Width = 0.06, Thickness = 0.008, MaxStrain = 0.005, Upright = true })).ToList();
+        var uPer = NetDistributions.Utilization(laths);
+        var both = new Distribution(sA.Spacing.Values.Concat(sB.Spacing.Values));
+        // closed-form crossing angle: on z = x² − y² the asymptotic directions are
+        // (1, 1, 2(x − y)) and (1, −1, 2(x + y)); on the catenoid (H = 0) 90°
+        double angWorst = 0; int angOff2 = 0;
+        for (int i = 0; i < ang.Points.Length; i++)
+        {
+            var q = ang.Points[i]; double exact = 90;
+            if (key.StartsWith("saddle"))
+            {
+                var d1 = new Vec3d(1, 1, 2 * (q.X - q.Y)); var d2 = new Vec3d(1, -1, 2 * (q.X + q.Y));
+                exact = Math.Acos(Math.Abs(Vec3d.Dot(d1, d2)) / (d1.Length * d2.Length)) * 180 / Math.PI;
+            }
+            angWorst = Math.Max(angWorst, Math.Abs(ang.PerCrossing[i] - exact));
+            if (Math.Abs(ang.PerCrossing[i] - exact) > 2) angOff2++;
+        }
+        distRows[key] = new
+        {
+            label, spacing, a = A.Count, b = B.Count, msMeasure = t2.ElapsedMilliseconds,
+            spacingA = Stats(sA.Spacing, spacing), spacingB = Stats(sB.Spacing, spacing), spacingAll = Stats(both, spacing),
+            openA = sA.OpenSides, samplesA = sA.Points.Length,
+            angles = Stats(ang.Angles), angWorst = R3(angWorst), angOff2, tinyGaps = both.Values.Count(v => v < 0.15 * spacing), util = Stats(uPer), utilOver = R3(100 * uPer.ShareAbove(1)),
+            hA = Hist(new Distribution(sA.Spacing.Values.Select(v => v / spacing)), 0, 2.5, 25),
+            hB = Hist(new Distribution(sB.Spacing.Values.Select(v => v / spacing)), 0, 2.5, 25),
+            hAng = Hist(ang.Angles, 0, 90, 18),
+            hUtil = Hist(uPer, 0, 1.5, 15),
+        };
+    }
+    numbers["dist"] = distRows;
+}
+
 numbers["totalMs"] = sw.ElapsedMilliseconds;
 var opt = new JsonSerializerOptions { WriteIndented = false, IncludeFields = true };
 File.WriteAllText(Path.Combine(OutDir, "scenes.json"), JsonSerializer.Serialize(scenes, opt));

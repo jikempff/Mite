@@ -79,6 +79,11 @@ h4{margin:0 0 6px;font:600 11px/1 var(--mono);letter-spacing:.08em;text-transfor
 .demo.tall canvas{aspect-ratio:1/1}
 .demo[data-kind="sparkline"] canvas,.demo[data-kind="plot1d"] canvas{aspect-ratio:16/5}
 .demo[data-kind="plot2d"] canvas{aspect-ratio:16/6}
+.demo[data-kind="hist"] canvas{aspect-ratio:16/6;cursor:default}
+.demo[data-kind="hist"] .demo-ctl{position:static;background:none;padding:6px 8px 0}
+.demo[data-kind="hist"] .demo-legend{position:static;padding:4px 14px 10px}
+.hist-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 18px;padding:2px 14px 6px;font:11px/1.45 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+@media (max-width:560px){.hist-stats{grid-template-columns:1fr}}
 .demo-ctl{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:6px 10px;max-width:calc(100% - 16px);font:12px var(--sans);background:color-mix(in srgb,var(--surface) 85%,transparent);padding:4px 8px;border-radius:5px;z-index:2}
 .demo-ctl label{display:flex;gap:4px;align-items:center;cursor:pointer}
 .demo-ctl input{margin:0;accent-color:var(--acc)}
@@ -110,9 +115,9 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
 
 <div class="wrap">
   <header class="masthead">
-    <h1><small>Grasshopper plugin · version 1.3.0 · 29 components</small>Mite Bench</h1>
+    <h1><small>Grasshopper plugin · version 1.3.0 · 30 components</small>Mite Bench</h1>
     <p>Every component with its inputs, outputs and defaults, what it should do, a self-test run on the real Mite.Core library, and a live view of the result. Tick the ones that make sense, note what doesn't, and copy the summary back to the chat.</p>
-    <div class="progress"><b><span id="done">0</span> / 28</b>reviewed<div class="bar"><i id="barfill"></i></div></div>
+    <div class="progress"><b><span id="done">0</span> / <span id="total">29</span></b>reviewed<div class="bar"><i id="barfill"></i></div></div>
   </header>
 
   <nav class="nav" aria-label="Components">
@@ -150,7 +155,8 @@ function updateProgress(){
   let n = 0;
   document.querySelectorAll('[data-ok]').forEach(cb => { const card = cb.closest('.card'); card.classList.toggle('done', cb.checked); const dot = document.querySelector(`[data-nav="${cb.dataset.ok}"] .dot`); if (dot) dot.classList.toggle('on', cb.checked); if (cb.checked) n++; });
   document.getElementById('done').textContent = n;
-  document.getElementById('barfill').style.width = (100*n/28)+'%';
+  document.getElementById('total').textContent = ORDER.length;
+  document.getElementById('barfill').style.width = (100*n/ORDER.length)+'%';
 }
 document.querySelectorAll('[data-ok]').forEach(cb => { cb.checked = store.get('ok:'+cb.dataset.ok) === '1'; cb.addEventListener('change', () => { store.set('ok:'+cb.dataset.ok, cb.checked ? '1':'0'); updateProgress(); }); });
 document.querySelectorAll('[data-note]').forEach(ta => { ta.value = store.get('note:'+ta.dataset.note) || ''; ta.addEventListener('input', () => store.set('note:'+ta.dataset.note, ta.value)); });
@@ -167,7 +173,7 @@ function summary(){
     fails.push(...failed.map(f => name + ': ' + f));
     if (ticked || note) lines.push(`${ticked ? '[x]' : '[ ]'} ${name}${note ? ' — ' + note.replace(/\s+/g,' ') : ''}`);
   });
-  lines.splice(1, 0, `${ok} of 28 marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
+  lines.splice(1, 0, `${ok} of ${ORDER.length} marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
   return lines.join('\n');
 }
 function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
@@ -316,9 +322,46 @@ function sparkline(canvas, el){ const u = SC.lathUtil.util; const ctx = canvas.g
     ctx.fillStyle = css('--faint'); ctx.fillText('utilization along a torus meridian (r = 1) — expected 1.0 everywhere', pad, 14); }
   legend(el.dataset.id, []); new ResizeObserver(draw).observe(canvas); draw(); }
 
+
+// small multiples: spacing (A bars, B outline), crossing angles, utilization — fixed bins so nets compare
+function histPlot(canvas, el){ const ctx = canvas.getContext('2d');
+  function panel(x0, y0, pw, ph, title, h, opts){
+    const n = h.counts.length, mx = Math.max(1, ...h.counts, ...(opts.second ? opts.second.counts : [0]));
+    const X = v => x0 + pw * (v - h.lo) / (h.hi - h.lo), Y = c => y0 + ph - ph * c / mx;
+    ctx.fillStyle = css('--faint'); ctx.font = '10px ' + css('--mono'); ctx.fillText(title, x0, y0 - 6);
+    if (opts.band) { ctx.fillStyle = css('--good'); ctx.globalAlpha = 0.12; ctx.fillRect(X(opts.band[0]), y0, X(opts.band[1]) - X(opts.band[0]), ph); ctx.globalAlpha = 1; }
+    for (let i = 0; i < n; i++) { const a = h.lo + (h.hi - h.lo) * i / n, b = h.lo + (h.hi - h.lo) * (i + 1) / n;
+      ctx.fillStyle = opts.over != null && a >= opts.over - 1e-9 ? css('--bad') : css('--acc'); ctx.globalAlpha = opts.second ? 0.55 : 0.8;
+      ctx.fillRect(X(a) + 0.5, Y(h.counts[i]), Math.max(1, X(b) - X(a) - 1), y0 + ph - Y(h.counts[i])); }
+    ctx.globalAlpha = 1;
+    if (opts.second) { const g = opts.second; ctx.strokeStyle = css('--fam-b'); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(X(g.lo), Y(0));
+      for (let i = 0; i < g.counts.length; i++) { const a = g.lo + (g.hi - g.lo) * i / g.counts.length, b = g.lo + (g.hi - g.lo) * (i + 1) / g.counts.length; ctx.lineTo(X(a), Y(g.counts[i])); ctx.lineTo(X(b), Y(g.counts[i])); }
+      ctx.lineTo(X(g.hi), Y(0)); ctx.stroke(); }
+    ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, y0 + ph + 0.5); ctx.lineTo(x0 + pw, y0 + ph + 0.5); ctx.stroke();
+    if (opts.mark != null) { ctx.strokeStyle = css('--ink'); ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(X(opts.mark), y0); ctx.lineTo(X(opts.mark), y0 + ph); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.fillStyle = css('--faint'); opts.ticks.forEach(t => { const q = X(t); ctx.fillText(String(t), Math.min(x0 + pw - 14, q - 4), y0 + ph + 12); });
+  }
+  function draw(){ const dpr = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight; if (!w) return; canvas.width = w*dpr; canvas.height = h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+    const d = N.dist[mode(el) || 'saddleFill']; const gap = 18, pw = (w - 2*14 - 2*gap) / 3, y0 = 22, ph = h - y0 - 20;
+    const sa = d.spacingAll, an = d.angles, ut = d.util;
+    panel(14, y0, pw, ph, 'spacing / Spacing (' + d.spacing + ')', d.hA, { second: d.hB, band: [0.95, 1.05], mark: 1, ticks: [0, 0.5, 1, 1.5, 2, 2.5],
+});
+    panel(14 + pw + gap, y0, pw, ph, 'crossing angle (°)', d.hAng, { ticks: [0, 30, 60, 90] });
+    panel(14 + 2*(pw + gap), y0, pw, ph, 'utilization', d.hUtil, { over: 1, mark: 1, ticks: [0, 0.5, 1, 1.5] });
+    const out = hh => (hh.below || 0) + (hh.above || 0) ? ' · ' + ((hh.below || 0) + (hh.above || 0)) + ' off the chart' : '';
+    let st = el.querySelector('.hist-stats'); if (!st) { st = document.createElement('div'); st.className = 'hist-stats'; canvas.after(st); }
+    st.innerHTML = [['spacing', 'n ' + sa.n + ' · median ' + (sa.median/d.spacing).toFixed(2), 'P5–P95 ' + (sa.p5/d.spacing).toFixed(2) + '–' + (sa.p95/d.spacing).toFixed(2) + ' · CV ' + sa.cv.toFixed(0) + ' %', 'within ±5 % ' + sa.within5.toFixed(0) + ' % · ±7.5 % ' + sa.within75.toFixed(0) + ' %', 'open sides ' + d.openA + ' of ' + d.samplesA + ' (A)' + out(d.hA)],
+      ['angles', 'n ' + an.n + ' · median ' + an.median.toFixed(1) + '°', 'P5–P95 ' + an.p5.toFixed(1) + '–' + an.p95.toFixed(1) + '°', 'worst vs closed form ' + d.angWorst + '°'],
+      ['utilization', 'n ' + ut.n + ' laths · median ' + ut.median.toFixed(2), 'P5–P95 ' + ut.p5.toFixed(2) + '–' + ut.p95.toFixed(2), 'over 1: ' + d.utilOver.toFixed(0) + ' %' + out(d.hUtil)]]
+      .map(c => '<div>' + c.join('<br>') + '</div>').join('');
+    legend(el.dataset.id, [[css('--acc'), 'family A (bars)'], [css('--fam-b'), 'family B (outline)'], [css('--good'), '±5 % of Spacing'], [css('--bad'), 'over the limit']]); }
+  el.querySelectorAll('.demo-ctl input').forEach(r => r.addEventListener('change', draw));
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+  new ResizeObserver(draw).observe(canvas); draw(); }
+
 const viewers = [];
 document.querySelectorAll('.demo').forEach(el => { const canvas = el.querySelector('canvas'); const kind = el.dataset.kind;
-  if (kind === 'plot2d') return plot2d(canvas, el); if (kind === 'plot1d') return plot1d(canvas, el); if (kind === 'sparkline') return sparkline(canvas, el);
+  if (kind === 'hist') return histPlot(canvas, el); if (kind === 'plot2d') return plot2d(canvas, el); if (kind === 'plot1d') return plot1d(canvas, el); if (kind === 'sparkline') return sparkline(canvas, el);
   const b = builders[el.dataset.demo]; if (!b) return; const v = Viewer(canvas, () => b(el)); viewers.push(v); el.querySelectorAll('.demo-ctl input').forEach(r => { r.addEventListener('change', () => v.rebuild()); if (r.type === 'range') r.addEventListener('input', () => v.rebuild()); }); });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => viewers.forEach(v => v.rebuild()));
 new MutationObserver(() => viewers.forEach(v => v.rebuild())).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

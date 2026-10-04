@@ -66,7 +66,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 29 components", IconsLoad());
+        Check("Icons load for all 30 components", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -272,6 +272,42 @@ internal static class Tests
                 double err = System.Math.Abs(maxDisp - expected) / expected;
                 return Expect(CurveCount(c, 0) == 3, "3 deformed laths")
                     && Expect(err < 0.05, $"deflection {maxDisp:F3} vs analytic {expected:F3} ({err:P1})");
+            });
+
+        TestComponent("Net Distributions",
+            new Mite.Grasshopper.Components.NetDistributionsComponent(),
+            c =>
+            {
+                // latitudes at polar angles 60°..120° every 15° (A) and four meridians (B):
+                // the cut across a latitude follows the meridian, so every spacing is the
+                // chord 2 sin(7.5°) = 0.26105, and the families cross at 90°
+                var lats = new System.Collections.Generic.List<Rhino.Geometry.Curve>();
+                for (int k = 0; k < 5; k++)
+                {
+                    double th = (60 + 15 * k) * System.Math.PI / 180;
+                    var pl = new Rhino.Geometry.Plane(new Rhino.Geometry.Point3d(0, 0, System.Math.Cos(th)), Rhino.Geometry.Vector3d.ZAxis);
+                    lats.Add(new Rhino.Geometry.Circle(pl, System.Math.Sin(th)).ToNurbsCurve());
+                }
+                var mers = new System.Collections.Generic.List<Rhino.Geometry.Curve>();
+                for (int k = 0; k < 4; k++)
+                {
+                    double ph = k * System.Math.PI / 4;
+                    var pl = new Rhino.Geometry.Plane(Rhino.Geometry.Point3d.Origin, new Rhino.Geometry.Vector3d(System.Math.Cos(ph), System.Math.Sin(ph), 0), Rhino.Geometry.Vector3d.ZAxis);
+                    mers.Add(new Rhino.Geometry.Circle(pl, 1.0).ToNurbsCurve());
+                }
+                SetInputs(c, (0, sphere.DuplicateMesh()), (6, 0.001));
+                SetCurveList(c, 1, lats.ToArray());
+                SetCurveList(c, 2, mers.ToArray());
+            },
+            c =>
+            {
+                var sp = Numbers(c, 0).Where(v => !double.IsNaN(v)).OrderBy(v => v).ToList();
+                double med = sp.Count > 0 ? sp[sp.Count / 2] : 0;
+                double expected = 2 * System.Math.Sin(7.5 * System.Math.PI / 180);
+                var ang = Numbers(c, 2);
+                return Expect(System.Math.Abs(med - expected) < 0.01 * expected, $"median spacing {med:F4} vs 2 sin 7.5° = {expected:F4}")
+                    && Expect(ang.Count == 40 && ang.All(a => a > 89), $"{ang.Count} crossings (expected 5 × 4 × 2 = 40), all near 90°")
+                    && Expect(Texts(c, 6).Count == 1 && Texts(c, 6)[0].Contains("Spacing A"), "report written");
             });
 
         TestComponent("Lath Unroll",
@@ -498,9 +534,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 29)
+        if (comps.Count != 30)
         {
-            Console.WriteLine($"      expected 29 components, found {comps.Count}");
+            Console.WriteLine($"      expected 30 components, found {comps.Count}");
             return false;
         }
 

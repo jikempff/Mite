@@ -19,7 +19,7 @@ TAB_BLURB = {
 COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics",
               "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
               "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
-              "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
+              "Lath Analysis", "Gridshell Analysis", "Net Distributions", "Mesh Isocurves",
               "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
               "Net Kinetics",
               "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
@@ -61,7 +61,7 @@ for tab in TAB_ORDER:
         demo = note.get("demo")
         demo_html = ""
         if demo:
-            kind = "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sparkline" if demo == "lathUtil" else "3d"
+            kind = "hist" if note.get("hist") else "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sparkline" if demo == "lathUtil" else "3d"
             controls = ""
             if note.get("before_after"):
                 controls = '<div class="demo-ctl"><label><input type="radio" name="ba-' + slug(n) + '" value="before"> input</label><label><input type="radio" name="ba-' + slug(n) + '" value="after" checked> result</label><label><input type="radio" name="ba-' + slug(n) + '" value="both"> both</label></div>'

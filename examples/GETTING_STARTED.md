@@ -124,6 +124,15 @@ N/m², `Lp`/`F` point loads. The `Rp` report must show the reactions equal to th
 load (equilibrium error ≈ 1e-12); laths that no support reaches are listed and
 left out instead of making the frame singular.
 
+To see the whole spread rather than the worst lath, wire the two families into
+**Net Distributions** with the mesh (and, if you like, Lath Analysis `U` into its
+`U`). `S` / `P` give the local spacing at every sample (colour the points with
+Mesh Colour Map's gradient, or graph them), `X` the crossing angles, `H` / `E` the
+histograms for Quick Graph or a bar chart, and `R` a report with n, P5, median,
+P95, CV and the share within ±5 % / ±7.5 % of `Sp`. Expect a continuous fill to
+sit around 0.8 × Spacing (Spacing is its widest tolerated gap), a web to show the
+surface's own spacing, and 90° crossings on minimal surfaces.
+
 Sanity values: on an asymptotic lath `Kn` should sit near 0 (it is measured from
 the surface normal, so mesh facets do not spike it) and `Tg` near √−K of the
 surface — on a hyperboloid throat with K = −1 an upright 100 × 10 mm timber lath
