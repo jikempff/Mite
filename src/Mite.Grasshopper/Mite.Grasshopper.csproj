@@ -13,6 +13,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Right-click mode menus (MiteComponent.Modes.cs) build ToolStrip items. -->
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Mite.Core\Mite.Core.csproj" />
   </ItemGroup>
 

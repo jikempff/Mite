@@ -132,6 +132,14 @@ Components appear under the **Mite** tab:
 - **Kinetics** — Net Kinetics
 - **Util** — Mesh Cleanup, Pull To Mesh, Mesh Colour Map
 
+**Modes are one right-click away.** Inputs that pick a mode rather than a
+quantity (Layout, AutoSpace, Continuous, Upright, Shape, Palette, Symmetry, AAG …)
+are listed in a submenu of the component's right-click menu with every choice
+spelled out; picking one writes the input's own value (undoable), so saved
+definitions and wires keep working. The active modes are written under the
+component ("Fill · Continuous", "Upright · Rectangle"), and **Attach value lists**
+wires a named drop-down into every unwired mode input.
+
 A typical gridshell workflow: heal the mesh with **Mesh Cleanup**, trace a **Geodesic Net**
 or **Asymptotic Net**, check strips with **Lath Analysis** and the whole network with
 **Gridshell Analysis**, extrude with **Lath Sweep**, cut crossings with **Net Joints**,
@@ -139,6 +147,10 @@ split to stock with **Lath Segment**, and produce cutting patterns with **Lath U
 plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
+
+### Unreleased
+- **Mode menus** on 15 components (31 mode inputs): a right-click submenu per mode input with every option named (the input keeps its type, position and default; a menu pick sets its typed value with undo, or the selection of the value list feeding it), the active modes in the component's Message line (modes that do not apply, such as Layout with AutoSpace off, stay silent and are marked "not used now" in the menu), and **Attach value lists**. One catalogue (`Mite.Core.Modes.ModeCatalog`) drives the menu, the message, the value lists and the bench; tests check it against every component source, so a new switch-like input without a menu fails the build's tests. After Norman 1983 (mode errors come from missing feedback of the current state) and Raskin 2000 (state at the locus of attention).
+- Bench: parameter tables regenerated from the sources by `tools/webgen/extract_components.py` (15 inputs, 3 outputs and the Asymptotic Web component were missing), each mode input shows its menu, each card its Message at the defaults, one self-test per component that the menu matches its inputs, and an Asymptotic Web card with the catenoid lattice check.
 
 ### 1.3.0
 - **Asymptotic Web** (new component, Mite > Gridshells; `Gridshells/AsymptoticWeb` in the core). An asymptotic parameterisation of a negatively curved surface is fixed up to u = f(ū), v = g(v̄) (Schling, Wang, Hoyer & Pottmann 2022), so placing nodes every Spacing along the two asymptotic curves through a seed fixes the whole net: every other node is the crossing of the curve of one family through a node of the first seed curve with the curve of the other family through a node of the second — Schling's "alternately drawing each curve and using their intersections as new starting points". No curve is inserted or stopped to keep a spacing, so there are no short stubs and no T-junctions; laths run border to border and the output includes the quad mesh of the nodes. The symmetry of the surface is carried into the net: a seed on a flat point (3-fold Enneper, monkey saddle) becomes a singular node where 2n asymptotic rays meet (found where the field points radially around the seed); a rotation about the seed normal is detected and one sector is traced and rotated; a surface of revolution gets N rotated copies of the two curves through the seed, N = round(2πρ / (√2·Spacing)), whose meridian diagonals are exact geodesics. Checked against the closed forms: catenoid nodes on the u ± v lattice to 0.6 % of Δφ, meridian diagonals planar to 1e-3; classical Enneper nodes on the u ± v lattice through the ray nodes to 3 % of the parameter step; the hyperbolic paraboloid web is its grid of rulings (straight to 0.01); 3-fold Enneper: six rays, 3-fold symmetry, crossings at 90° ± 3°.

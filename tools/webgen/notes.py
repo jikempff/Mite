@@ -79,6 +79,12 @@ NOTES = {
             ("Web layout (Layout = 1) on the catenoid: every curve rim to rim, no T-junctions, within 0.05 edge of the closed form u ∓ v = const; direction field within 1° of 45° to the meridians", "[N.asymWeb.floatingEnds===0&&N.asymWeb.tEnds===0&&N.asymWeb.boundaryEnds===N.asymWeb.ends&&N.asymWeb.worstOffset<0.05*N.asymWeb.edge&&N.asymWeb.worstDirDeg<1.0,N.asymWeb.a+'+'+N.asymWeb.b+' curves, '+N.asymWeb.boundaryEnds+'/'+N.asymWeb.ends+' ends on the rims, worst offset from the exact curve '+N.asymWeb.worstOffset+' ('+(N.asymWeb.worstOffset/N.asymWeb.edge).toFixed(2)+' edges), direction error mean '+N.asymWeb.meanDirDeg+'° worst '+N.asymWeb.worstDirDeg+'° (was 0.4° / 8° before the border repair), '+N.asymWeb.ms+' ms']"),
             ("Catalogue: catenoid, Enneper 2/3, ruled patch, Schwarz D — no floating ends, families orthogonal on H = 0", "(()=>{const r=N.asymCatalogue;const ok=r.every(x=>x.floatingEnds===0&&x.positiveK===0&&x.a+x.b>=25)&&r.filter(x=>x.key!=='bilinear').every(x=>x.meanOrthDev<3);return [ok,r.map(x=>x.label.split(' (')[0]+': '+x.a+'+'+x.b+' curves, '+x.boundaryEnds+' border / '+x.tEnds+' T / '+x.floatingEnds+' floating ends, mean |H| '+x.meanAbsH+' vs k1 '+x.meanK1+', families '+(90-x.meanOrthDev).toFixed(1)+'° apart, '+x.ms+' ms').join('; ')];})()"),
             ("Cylinder (K = 0): no second family invented", "[N.asymHyp&&N.cylinder.asymVertices===0&&N.cylinder.asymCurves===0,N.cylinder.asymVertices+' of '+N.cylinder.vertices+' vertices flagged anticlastic, '+N.cylinder.asymCurves+' curves']")]),
+"Asymptotic Web": dict(demo="asymWebSchling", expect=[
+    "Schling's web: nodes every Spacing along the two asymptotic curves through the seed, every other node the crossing of the curves through them — a quad net with no stubs and no T-junctions that keeps the surface's symmetry.",
+    "On a surface of revolution (catenoid demo) the web is rotational: the meridian node diagonals are geodesics, which is an AAG web without any optimisation. On the catenoid the asymptotic lines are u ± v = const in the isothermal parameters, so every node must lie on the lattice spanned by the seed's nodes.",
+    "Right-click the component for its modes: Symmetry (detect / none / n-fold), AAG on or off, and which diagonal becomes geodesic (only used with AAG). The line under the component names the active ones."],
+    checks=[("Catenoid: rotational web, every node on the isothermal lattice u ± v = k Δφ", "[N.asymWebSchling.rotational&&N.asymWebSchling.latticeErr<0.01,N.asymWebSchling.nodes+' nodes on '+N.asymWebSchling.a+' + '+N.asymWebSchling.b+' laths, worst lattice offset '+N.asymWebSchling.latticeErr+' Δφ, '+N.asymWebSchling.ms+' ms']"),
+            ("Meridian diagonals are geodesics; the web keeps the rotation", "[N.asymWebSchling.meridianKg<1e-3&&N.asymWebSchling.symmetryError<1e-3,'mean |kg|·h on the meridians '+N.asymWebSchling.meridianKg.toExponential(1)+', symmetry error '+N.asymWebSchling.symmetryError.toExponential(1)]")]),
 "Geodesic Net": dict(demo="sphereGeo", shapes=[("sphereGeo", "saddle"), ("cylGeo", "cylinder")], expect=[
     "Cylinder truth: geodesics are helices (plus the rulings and the circles); a helix seeded at angle α from the axis keeps that angle and rises R cot α per unit of unwrapped angle. The tracer now parallel-transports its direction between tangent planes; flattening the projected travel instead drifted the 45° helix to 44.65° at step 0.02 and 42.2° at step 0.005 (the finer the step, the worse), which also bent every geodesic net slightly toward the facet tilt axis.",
     "Straightest geodesics from one seed, grown sideways at Spacing. Each new geodesic starts at the angle that keeps its strip closest to constant width along its whole length (Jacobi field J″ + K·J = 0, Pottmann et al. 2010) instead of parallel to its neighbour, so on the saddle every geodesic runs border to border with no merges; where a strip still closes the later curve ends on the earlier one as a T-junction, never in mid-air.",
@@ -201,3 +207,26 @@ NOTES = {
     "Values must be one per mesh vertex (as every Mite curvature output is)."],
     checks=[]),
 }
+
+
+# ---------- Mode menus (ROADMAP B) ----------
+# Every component with mode inputs gets one more self-test: its right-click
+# menu (Mite.Core.Modes.ModeCatalog, recorded by Program.cs into N.modes)
+# must name existing inputs with the registered type and default, and no
+# switch-like input may be left without a menu.
+import json as _json, os as _os
+_MODES = _json.load(open("numbers.json"))["modes"] if _os.path.exists("numbers.json") else {"byComponent": {}, "missing": []}
+
+
+def _mode_check(name):
+    q = _json.dumps(name)
+    js = ("(()=>{const m=N.modes.byComponent[%s];const pre=%s+'.';const bad=N.modes.problems.filter(p=>p.startsWith(pre));"
+          "const miss=N.modes.missing.filter(p=>p.startsWith(pre));"
+          "return [!!m&&bad.length===0&&miss.length===0,(m?m.modes.map(x=>x.input+' ('+x.options.length+')').join(', ')+' — at the defaults the component reads “'+m.message+'”':'no menu')"
+          "+(bad.length?'; mismatch: '+bad.join('; '):'')+(miss.length?'; no menu for '+miss.join(', '):'')];})()") % (q, q)
+    return ("Right-click mode menu matches the inputs (names, types, defaults)", js)
+
+
+for _name in sorted(set(_MODES["byComponent"]) | {m.split(".")[0] for m in _MODES["missing"]}):
+    if _name in NOTES:
+        NOTES[_name]["checks"] = list(NOTES[_name]["checks"]) + [_mode_check(_name)]
