@@ -42,15 +42,37 @@ def fmt_default(p):
 TYPE_LABEL = {"Mesh": "mesh", "Integer": "int", "Number": "num", "Vector": "vec", "Boolean": "bool", "Point": "pt", "Curve": "crv",
               "Angle": "angle", "Text": "text", "Plane": "plane", "Box": "box", "Line": "line", "Colour": "colour", "Interval": "domain", "Mite Net": "net"}
 
-def param_rows(ps):
+MODES = numbers.get("modes", {}).get("byComponent", {})
+
+
+def menu_html(comp, p):
+    """The right-click menu of a mode input (Mite.Core.Modes.ModeCatalog): options, default marked."""
+    m = next((x for x in MODES.get(comp, {}).get("modes", []) if x["input"] == p["name"]), None)
+    if not m: return ""
+    opts = " ".join(f'<span class="mo{" on" if o["v"] == m["def"] else ""}" title="{o["v"]}">{esc(o["label"])}</span>' for o in m["options"])
+    when = ""
+    if m.get("activeWhen"):
+        ctrl = next(x for x in MODES[comp]["modes"] if x["input"] == m["activeWhen"])
+        lab = next(o["label"] for o in ctrl["options"] if o["v"] == m["activeValue"])
+        when = f'<span class="mw">only with {esc(ctrl["input"])}: {esc(lab)}</span>'
+    return f'<div class="menu"><span class="ml">menu</span>{opts}{when}</div>'
+
+
+def param_rows(ps, comp=None):
     rows = []
     for p in ps:
         acc = {"item": "", "list": "list", "tree": "tree"}[p["access"]]
         opt = " optional" if p.get("optional") else ""
         rows.append(f'<tr><td class="pn"><span class="nick">{esc(p["nick"])}</span> {esc(p["name"])}</td>'
                     f'<td class="pt"><span class="ty">{TYPE_LABEL.get(p["type"], p["type"].lower())}{(" · " + acc) if acc else ""}</span>{("<span class=opt>optional</span>" if opt else "")}</td>'
-                    f'<td class="pd">{esc(p["desc"])}</td><td class="pv">{esc(fmt_default(p))}</td></tr>')
+                    f'<td class="pd">{esc(p["desc"])}{menu_html(comp, p) if comp else ""}</td><td class="pv">{esc(fmt_default(p))}</td></tr>')
     return "\n".join(rows)
+
+def msg_html(comp):
+    """The component's Message line at its defaults, as Grasshopper draws it under the component."""
+    m = MODES.get(comp)
+    return f'<span class="ghmsg" title="Grasshopper shows the active modes under the component; right-click it to change them">{esc(m["message"])}</span>' if m else ""
+
 
 cards = []
 nav = []
@@ -102,7 +124,7 @@ for tab in TAB_ORDER:
 <article class="card" id="{slug(n)}" data-name="{esc(n)}">
   <header class="card-h">
     <img src="{icons[c["icon"]]}" alt="" width="24" height="24" class="icon">
-    <div><h3>{esc(n)} <span class="nickname">{esc(c["nick"])}</span></h3><p class="desc">{esc(c["desc"])}</p></div>
+    <div><h3>{esc(n)} <span class="nickname">{esc(c["nick"])}</span>{msg_html(n)}</h3><p class="desc">{esc(c["desc"])}</p></div>
     <label class="ok"><input type="checkbox" data-ok="{slug(n)}"><span>Makes sense</span></label>
   </header>
   <div class="card-body">
@@ -115,7 +137,7 @@ for tab in TAB_ORDER:
     </div>
     <div class="col-b">
       <details open><summary>Inputs <span class="count">{len(c["inputs"])}</span></summary>
-      <div class="tbl"><table><thead><tr><th>Param</th><th>Type</th><th>Meaning</th><th>Default</th></tr></thead><tbody>{param_rows(c["inputs"])}</tbody></table></div></details>
+      <div class="tbl"><table><thead><tr><th>Param</th><th>Type</th><th>Meaning</th><th>Default</th></tr></thead><tbody>{param_rows(c["inputs"], n)}</tbody></table></div></details>
       <details open><summary>Outputs <span class="count">{len(c["outputs"])}</span></summary>
       <div class="tbl"><table><thead><tr><th>Param</th><th>Type</th><th>Meaning</th><th></th></tr></thead><tbody>{param_rows(c["outputs"])}</tbody></table></div></details>
       <label class="notes-l" for="note-{slug(n)}">Your notes</label>
@@ -135,5 +157,6 @@ from palette_css import palette_vars
 page = page.replace("/*__PALETTE_LIGHT__*/", palette_vars(numbers["palette"], "light")).replace("/*__PALETTE_DARK__*/", palette_vars(numbers["palette"], "dark"))
 page = page.replace("/*__NAV__*/", "".join(nav)).replace("/*__CARDS__*/", "".join(cards))
 page = page.replace("/*__SCENES__*/", json.dumps(scenes, separators=(",", ":"))).replace("/*__NUMBERS__*/", json.dumps(numbers)).replace("/*__ORDER__*/", json.dumps([slug(n) for n in COMP_ORDER]))
+page = page.replace('<span id="total">28</span>', f'<span id="total">{len(COMP_ORDER)}</span>')
 open("site/index.html", "w").write(page)
 print("bytes", len(page))

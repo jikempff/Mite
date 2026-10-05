@@ -120,6 +120,18 @@ single cross misses) with further seed crosses one spacing from the nearest
 curve, and only ends a curve early where it would touch a curve of its own
 family — the orange end squares in the web app.
 
+### Modes: right-click the component
+
+Layout, AutoSpace, Continuous, FromBorder, Upright, Shape and the other
+switch-like inputs do not need a number typed into them: right-click the
+component and pick from its submenus (`Layout: Evenly spaced fill ▸ Web from
+the border`). The line under the component always names the active modes —
+`Fill · Continuous` on a fresh Asymptotic Net, `Seeds` on a fresh Geodesic
+Net (AutoSpace off, so Layout does not apply and is not shown). If the input
+is wired to a value list, the menu moves the list; any other wire wins and the
+menu says so. **Attach value lists** in the same menu puts a named drop-down
+on every unwired mode input when you prefer to see them on the canvas.
+
 ## 3. Check buildability (2 minutes)
 
 Wire any net's curves into **Lath Analysis** together with the same mesh:

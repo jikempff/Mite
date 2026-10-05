@@ -18,7 +18,7 @@ namespace Mite.Grasshopper;
 /// diagnostics, Esc cancellation, seed resolution, scale-aware sampling and
 /// unit conversion.
 /// </summary>
-public abstract class MiteComponent : GH_Component
+public abstract partial class MiteComponent : GH_Component
 {
     private readonly string _iconResource;
 
@@ -26,6 +26,7 @@ public abstract class MiteComponent : GH_Component
         : base(name, nickname, description, "Mite", subCategory)
     {
         _iconResource = iconResource;
+        _modeKey = name;
     }
 
     protected override Bitmap? Icon

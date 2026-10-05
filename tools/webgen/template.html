@@ -101,6 +101,12 @@ td.pn{white-space:nowrap}
 .ty{font:11px var(--mono);color:var(--muted);white-space:nowrap}
 .opt{display:block;font:10px var(--mono);color:var(--faint)}
 td.pd{color:var(--ink)}
+td.pd .menu{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:5px}
+td.pd .menu .ml{font:600 9px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin-right:2px}
+td.pd .menu .mo{font:11px/1.2 var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:1px 5px}
+td.pd .menu .mo.on{color:var(--ink);border-color:var(--ink);font-weight:600}
+td.pd .menu .mw{font:10px var(--mono);color:var(--faint)}
+.card-h h3 .ghmsg{font:500 11px var(--mono);color:var(--surface);background:var(--muted);border-radius:3px;padding:1px 6px;margin-left:8px;vertical-align:2px}
 td.pv{font:12px var(--mono);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 details{margin-bottom:8px}
 summary{cursor:pointer;font:600 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:6px 0}
@@ -122,6 +128,7 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
     <h1><small>Grasshopper plugin · version 1.3.0 · 30 components</small>Mite Bench</h1>
     <p>Every component with its inputs, outputs and defaults, what it should do, a self-test run on the real Mite.Core library, and a live view of the result. Tick the ones that make sense, note what doesn't, and copy the summary back to the chat.</p>
     <div class="progress"><b><span id="done">0</span> / <span id="total">29</span></b>reviewed<div class="bar"><i id="barfill"></i></div></div>
+    <div class="progress"><b><span id="done">0</span> / <span id="total">28</span></b>reviewed<div class="bar"><i id="barfill"></i></div></div>
   </header>
 
   <nav class="nav" aria-label="Components">
@@ -162,6 +169,7 @@ function updateProgress(){
   document.getElementById('barfill').style.width = (100*n/ORDER.length)+'%'; document.getElementById('total').textContent = ORDER.length;
   document.getElementById('total').textContent = ORDER.length;
   document.getElementById('barfill').style.width = (100*n/ORDER.length)+'%';
+  document.getElementById('barfill').style.width = (100*n/document.querySelectorAll('.card').length)+'%';
 }
 document.querySelectorAll('[data-ok]').forEach(cb => { cb.checked = store.get('ok:'+cb.dataset.ok) === '1'; cb.addEventListener('change', () => { store.set('ok:'+cb.dataset.ok, cb.checked ? '1':'0'); updateProgress(); }); });
 document.querySelectorAll('[data-note]').forEach(ta => { ta.value = store.get('note:'+ta.dataset.note) || ''; ta.addEventListener('input', () => store.set('note:'+ta.dataset.note, ta.value)); });
@@ -179,6 +187,7 @@ function summary(){
     if (ticked || note) lines.push(`${ticked ? '[x]' : '[ ]'} ${name}${note ? ' — ' + note.replace(/\s+/g,' ') : ''}`);
   });
   lines.splice(1, 0, `${ok} of ${ORDER.length} marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
+  lines.splice(1, 0, `${ok} of ${document.querySelectorAll('.card').length} marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
   return lines.join('\n');
 }
 function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
@@ -321,6 +330,7 @@ const builders = {
     sc.strips.forEach(st => st.quads.forEach((q, i) => { const b = verts.length; q.forEach(p => verts.push(p)); faces.push([b, b + 1, b + 2, b + 3]); colors.push(st.dev[i] ? dev : tw); }));
     legend(el.dataset.id, [[WIRE(), sc.label], [dev, 'developable: planar quads, straight band'], [tw, 'twisted: |τ| > |κ|, edges stretch'], [INK(), 'rulings']]);
     return { view: { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(sc.wire), { lines: sc.strips.flatMap(s => s.rulings), color: INK(), width: 0.6, alpha: 0.55 }, { lines: sc.strips.map(s => s.centre), color: INK(), width: 1.2 }], mesh: { verts, faces, colors } }; },
+  asymWebSchling(el){ const w = SC.asymWebSchling; legend(el.dataset.id, [[WIRE(), 'catenoid'], [A(), 'family A laths'], [B(), 'family B laths (rotational web: meridian diagonals geodesic)']]); return { view: { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(w.wire), { lines: w.A, color: A(), width: 1.6 }, { lines: w.B, color: B(), width: 1.6 }] }; },
   pull(el){ const p = SC.pull; legend(el.dataset.id, [[WIRE(), 'sphere'], [MUTED(), 'input circle (floating)'], [A(), 'pulled + faired']]); return { layers: [wireLayer(p.wire), { lines: [p.before], color: MUTED(), width: 1.4, dash: [4,3] }, { lines: [p.after], color: A(), width: 2.2 }] }; },
 };
 ['minimal','fdm','dynrelax','planar'].forEach(k => builders[k] = el => { const m = mode(el) || 'after'; const s = SC[k]; const L = [];

@@ -1125,6 +1125,60 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         };
     }
     numbers["dist"] = distRows;
+// ---------- Asymptotic Web (Schling): catenoid rotational web against the isothermal lattice ----------
+{
+    var mesh = AnalyticShapes.Build("catenoid", 1.0, 1.2, 0, 64).ToTriangulated();
+    var t = Stopwatch.StartNew();
+    var pcW = PrincipalCurvature.Compute(mesh, 2);
+    var w = AsymptoticWeb.Build(mesh, pcW, -1, new AsymptoticWeb.Options { Spacing = 0.3 });
+    t.Stop();
+    // asymptotic lines of the catenoid are u ± v = const (u azimuth, v = z): every node on the lattice of the seed's nodes
+    double dphi = 2 * Math.PI / Math.Max(1, w.A.Count), u0 = Math.Atan2(w.Seed.Y, w.Seed.X), lat = 0;
+    foreach (var p in w.Nodes)
+        foreach (double x in new[] { Math.Atan2(p.Y, p.X) + p.Z, Math.Atan2(p.Y, p.X) - p.Z })
+        { double r = (x - u0) / dphi; lat = Math.Max(lat, Math.Abs(r - Math.Round(r))); }
+    numbers["asymWebSchling"] = new { nodes = w.Nodes.Count, a = w.A.Count, b = w.B.Count, rotational = w.RotationalWeb, latticeErr = R3(lat), meridianKg = w.DiagonalGeodesicError[0], symmetryError = w.SymmetryError, ms = t.ElapsedMilliseconds };
+    scenes["asymWebSchling"] = new { wire = Edges(mesh, 16), A = w.A.Select(l => Line(l, 4)).ToArray(), B = w.B.Select(l => Line(l, 4)).ToArray() };
+}
+
+// ---------- Mode menus: the catalogue against the parameter tables (components.json) ----------
+{
+    var comps = JsonDocument.Parse(File.ReadAllText("components.json")).RootElement;
+    var rows = new Dictionary<string, object>();
+    var problems = new List<string>();
+    var missing = new List<string>();
+    int inputs = 0;
+    foreach (var c in comps.EnumerateArray())
+    {
+        string name = c.GetProperty("name").GetString()!;
+        var modes = Mite.Core.Modes.ModeCatalog.For(name);
+        foreach (var p in c.GetProperty("inputs").EnumerateArray())
+        {
+            string type = p.GetProperty("type").GetString()!, access = p.GetProperty("access").GetString()!, pn = p.GetProperty("name").GetString()!;
+            string desc = p.GetProperty("desc").GetString()!;
+            bool modeLike = access == "item" && (type == "Boolean" || (type == "Integer"
+                && System.Text.RegularExpressions.Regex.IsMatch(desc, @"(?<![\d\-−])0 =") && System.Text.RegularExpressions.Regex.IsMatch(desc, @"(?<![\d\-−])1 =")));
+            if (modeLike && modes.All(m => m.Input != pn)) missing.Add(name + "." + pn);
+        }
+        if (modes.Count == 0) continue;
+        var list = new List<object>();
+        foreach (var m in modes)
+        {
+            inputs++;
+            JsonElement? src = null;
+            foreach (var p in c.GetProperty("inputs").EnumerateArray()) if (p.GetProperty("name").GetString() == m.Input) src = p;
+            string want = m.Kind == Mite.Core.Modes.ModeKind.Boolean ? "Boolean" : "Integer";
+            string? def = src?.GetProperty("default").GetString();
+            int? defVal = def == "true" ? 1 : def == "false" ? 0 : int.TryParse(def?.Replace("−", "-"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int dv) ? dv : null;
+            if (src == null) problems.Add($"{name}.{m.Input}: no such input");
+            else if (src.Value.GetProperty("type").GetString() != want) problems.Add($"{name}.{m.Input}: type {src.Value.GetProperty("type").GetString()}, catalogue {want}");
+            else if (defVal != m.Default) problems.Add($"{name}.{m.Input}: default {def}, catalogue {m.Default}");
+            list.Add(new { input = m.Input, def = m.Default, activeWhen = m.ActiveWhenInput, activeValue = m.ActiveWhenValue,
+                options = m.Options.Select(o => new { v = o.Value, label = o.Label, shortLabel = o.Short }).ToArray() });
+        }
+        rows[name] = new { message = Mite.Core.Modes.ModeCatalog.Message(name, _ => null), modes = list };
+    }
+    numbers["modes"] = new { components = rows.Count, inputs, problems, missing, byComponent = rows };
 }
 
 numbers["totalMs"] = sw.ElapsedMilliseconds;

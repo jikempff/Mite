@@ -239,8 +239,48 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 - [ ] Replace boolean switches that are really modes (AutoSpace,
       Continuous, Upright, MaxDir, Shape) by a right-click mode menu or an
       auto-attached value list; keep the inputs for compatibility.
+- [ ] A `Mite Net` data type (GH_Goo) carrying mesh + families + contacts +
+      per-family profile, so Net Joints, Net Topology, Gridshell Analysis,
+      Lath Segment, Lath Labels and Net Kinetics (E) take one wire.
+- [ ] Custom viewport preview on the net components: family colours,
+      T-junction and border-end markers, contact dots; consistent colours
+      across components and the bench.
+- [x] Mode menus — 2026-10-05 (session 2). One catalogue,
+      `Mite.Core.Modes.ModeCatalog` (new API, nothing existing changed):
+      31 mode inputs on 15 components (AutoSpace, Layout, Continuous,
+      FromBorder, MaxDir, Upright, Shape, SupportType, Symmetry, AAG,
+      Diagonal, Palette, Smooth, UnifyWinding), each with named options, a
+      short Message word per option, the registered default and the input it
+      depends on (Layout / Continuous / FromBorder need AutoSpace, Diagonal
+      needs AAG). `MiteComponent.Modes.cs` turns it into (1) a right-click
+      submenu per mode that writes the input's own persistent value with
+      undo, or moves the value list feeding it, and says "set by a wire"
+      otherwise; (2) the Message line under the component, built after every
+      solve from the values that actually arrived ("Fill · Continuous",
+      "Seeds", "Layout mixed"; modes that do not apply stay silent and are
+      marked "not used now" in the menu); (3) "Attach value lists", one undo
+      step. Inputs keep type, position and default, so saved definitions are
+      untouched. Literature: Norman 1983 (mode errors come from missing
+      feedback of the state: remove modes, mark them distinctly, or use
+      distinct commands), Raskin 2000 (not modal while the state is at the
+      locus of attention), McNeel's "Custom Component Options" pattern.
+      Tests: `ModeCatalogTests` (28) check the catalogue against every
+      component source (names, types, defaults, tooltips explaining each
+      integer value) and fail when an item Boolean or an integer whose
+      tooltip enumerates "0 = … 1 = …" has no menu. Smoke test: catalogue
+      against the live params, Message after a Lath Sweep solve.
+      Not done / follow-ups: (a) no automatic value list on placement — it
+      would also fire when a file is opened unless Read() is used to tell
+      the two apart; menus are on demand instead. (b) After merging the
+      unmerged bundles: the curvature-measures `Method` input (0/1/2) and
+      the Mite Net component's switches must be catalogued — the test fails
+      until they are, by design; the palette bundle may rename Mesh Colour
+      Map palettes. (c) Check in Rhino: menu text width, value-list
+      placement left of the grip, undo of a menu pick and of the attach.
 - [ ] Progress and cancellation feedback: percentage in the component
-      message while tracing / solving, Esc already cancels.
+      message while tracing / solving, Esc already cancels. The Message
+      line now carries the modes (above): show progress in front of them
+      during a solve and restore them in AfterSolveInstance.
 - [ ] Runtime messages with the fix in the message ("spacing 0.02 is below
       the mesh edge 0.05: raise Spacing or subdivide").
 - [ ] Interactive seed picking (Rhino point pick button on the component)
@@ -316,6 +356,16 @@ remains the self-test review page.
       the hyperboloid twist and on the catenoid net — 2026-09-26 (Net
       Kinetics card, Kinetics tab).
 - [x] Metrics with distributions, not only extremes: spacing histogram,
+- [x] Parameter tables from the sources — 2026-10-05 (session 2):
+      `tools/webgen/extract_components.py` regenerates `components.json` and
+      `icons.json` (the hand-kept file had lost 15 inputs — Continuous,
+      MinAngle, FromBorder, BorderAngle, six Gridshell Analysis inputs — three
+      outputs and the whole Asymptotic Web component). It keeps the file order
+      and is idempotent; after merging bundles that touch components,
+      regenerate instead of hand-merging. Asymptotic Web now has a bench card
+      (catenoid web on the isothermal lattice, meridian diagonals geodesic).
+      The review counter counts the cards instead of a fixed 28.
+- [ ] Metrics with distributions, not only extremes: spacing histogram,
       crossing-angle histogram, utilisation histogram (small, consistent
       charts).
 - [ ] Colour-map legends identical to Mesh Colour Map in Grasshopper. (App:
@@ -1001,6 +1051,10 @@ Open
 - [x] 2026-10-04 (session 2, C): Net Distributions — spacing across each family,
       crossing angles and utilization as histograms in the core, Grasshopper
       and the bench (see C).
+- [x] 2026-10-05 (session 2, B): mode menus — right-click submenus, the
+      Message line and value lists from one `ModeCatalog`, checked against
+      the component sources; bench parameter tables regenerated from the
+      sources, menus and Messages on the cards, Asymptotic Web card.
 - [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
       Gridshell Analysis joints inserted exactly (the snap had chained joints
       into a few nodes), supports fixed / pinned, joint stiffness, self-weight,

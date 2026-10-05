@@ -616,6 +616,18 @@ internal static class Tests
         // lines of family A and one of family B on a 4 × 4 plate: 2 joints; B ends
         // on the border (x = ±2), A's second lath starts on B (a T-junction)
         Check("Mite Net → Net Joints / Lath Labels / Net Topology (one wire)", NetWire());
+        // Mode menus (ROADMAP B): the catalogue names live inputs of the right type and default
+        Check("Mode menus: every catalogued input exists with its type and default", ModesMatch());
+
+        TestComponent("Mode menus: Message shows the active modes after a solve",
+            new Mite.Grasshopper.Components.LathSweepComponent(),
+            c =>
+            {
+                SetInputs(c, (0, sphere.DuplicateMesh()), (2, 0.1), (3, 0.02), (4, true));
+                var circle = new Rhino.Geometry.Circle(Rhino.Geometry.Plane.WorldXY, 1.0);
+                SetCurveList(c, 1, circle.ToNurbsCurve());
+            },
+            c => Expect(c.Message == "Upright · Rectangle", $"Message \"Upright · Rectangle\", got \"{c.Message}\""));
 
         Console.WriteLine();
         Console.WriteLine($"=== {_passed} passed, {_failed} failed ===");
@@ -701,6 +713,35 @@ internal static class Tests
     {
         if (!ok) Console.WriteLine($"      expected {what}");
         return ok;
+    }
+
+    private static bool ModesMatch()
+    {
+        var asm = typeof(Mite.Grasshopper.Components.PrincipalCurvatureComponent).Assembly;
+        bool ok = true; int n = 0;
+        foreach (var t in asm.GetTypes().Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t)))
+        {
+            var comp = (Grasshopper.Kernel.GH_Component)Activator.CreateInstance(t)!;
+            foreach (var m in Mite.Core.Modes.ModeCatalog.For(comp.Name))
+            {
+                n++;
+                var p = comp.Params.Input.FirstOrDefault(q => q.Name == m.Input);
+                int? def = p switch
+                {
+                    Grasshopper.Kernel.Parameters.Param_Boolean b when m.Kind == Mite.Core.Modes.ModeKind.Boolean =>
+                        b.PersistentData.AllData(true).OfType<Grasshopper.Kernel.Types.GH_Boolean>().Select(g => g.Value ? 1 : 0).Cast<int?>().FirstOrDefault(),
+                    Grasshopper.Kernel.Parameters.Param_Integer i when m.Kind == Mite.Core.Modes.ModeKind.Integer =>
+                        i.PersistentData.AllData(true).OfType<Grasshopper.Kernel.Types.GH_Integer>().Select(g => g.Value).Cast<int?>().FirstOrDefault(),
+                    _ => null,
+                };
+                if (def != m.Default)
+                {
+                    Console.WriteLine($"      {comp.Name}.{m.Input}: param {p?.GetType().Name ?? "missing"}, default {def?.ToString() ?? "?"}, catalogue {m.Default}");
+                    ok = false;
+                }
+            }
+        }
+        return Expect(ok && n >= 30, $"30+ catalogued mode inputs on live components, checked {n}");
     }
 
     private static bool IconsLoad()

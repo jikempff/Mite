@@ -6,6 +6,7 @@ live 3D/2D views of the actual output on analytic shapes.
 
 ```bash
 cd tools/webgen
+python3 extract_components.py   # components.json + icons.json from the sources
 dotnet run -c Release      # runs the library, writes scenes.json + numbers.json
 python3 build.py           # assembles site/index.html from template.html + notes.py
 ```
