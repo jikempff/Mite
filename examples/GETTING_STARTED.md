@@ -315,6 +315,13 @@ from the mesh size, so they work at any scale; the fixed defaults of the
 fabrication inputs (Width 0.1, Thickness 0.01, StockLength 3) assume
 metre-scale models — scale them up ~1000x if you model in millimetres.
 
+If the numbers do not fit the model, the component says so with the value to
+use: Width 80 on laths a few metres long reads "if you meant millimetres,
+enter Width 0.08 and Thickness 0.012"; a Spacing below the mesh edge names
+the edge and how many subdivisions would make it fit; a MinAngle that leaves
+out the whole saddle names the angles at which the families actually cross.
+Hover the orange or grey balloon on the component to read the message.
+
 ## Form finding
 
 - **Minimal Surface** and **Force Density Method** fix the mesh boundary when

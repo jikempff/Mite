@@ -76,6 +76,7 @@ public class NetJointsComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width and Thickness must be positive.");
             return;
         }
+        CheckSection(width, thickness, System.Linq.Enumerable.Concat(curvesA, curvesB));
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);

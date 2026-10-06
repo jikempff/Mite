@@ -1270,6 +1270,70 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         rows[name] = new { message = Mite.Core.Modes.ModeCatalog.Message(name, _ => null), modes = list };
     }
     numbers["modes"] = new { components = rows.Count, inputs, problems, missing, byComponent = rows };
+// ---- Runtime messages with the fix (Mite.Core.Diagnostics.InputAdvice) ----
+{
+    // z = x² − 0.01 y² on [−0.3, 0.3]²: a saddle so shallow that the families
+    // cross at 11.4° (centre) to 13.3°, so the default MinAngle 15° leaves nothing
+    const double a = 0.01, h = 0.3;
+    var shallow = AnalyticShapes.Grid((x, y) => new Vec3d(x, y, x * x - a * y * y), -h, h, -h, h, 30, 30);
+    double Exact(Vec3d p)
+    {
+        double m = 1 / Math.Sqrt(a);
+        var tp = new Vec3d(1, m, 2 * p.X - 2 * a * p.Y * m); var tm = new Vec3d(1, -m, 2 * p.X + 2 * a * p.Y * m);
+        return Math.Acos(Math.Min(1, Math.Abs(Vec3d.Dot(tp, tm)) / (tp.Length * tm.Length))) * 180 / Math.PI;
+    }
+    var pcS = PrincipalCurvature.Compute(shallow);
+    var census = Mite.Core.Diagnostics.InputAdvice.CountSaddle(pcS, 15);
+    var adv = Mite.Core.Diagnostics.InputAdvice.SaddleRegion(pcS, 15, shallow.BoundingBoxDiagonal());
+    var fieldFix = AsymptoticCurves.ComputeDirections(pcS, shallow, adv[0].Suggested);
+    var famFix = EvenlySpacedNet.TraceField(shallow, fieldFix.Family1, fieldFix.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.06 }, fieldFix.Family2);
+    var minAngleRow = new
+    {
+        code = adv[0].Code, message = adv[0].Message, usable15 = census.Usable, saddle = census.Saddle,
+        minCross = R3(census.MinCrossing), maxCross = R3(census.MaxCrossing),
+        exactMin = R3(shallow.Vertices.Min(Exact)), exactMax = R3(shallow.Vertices.Max(Exact)),
+        suggested = adv[0].Suggested, usableFix = fieldFix.Exists.Count(e => e), curvesFix = famFix.Count
+    };
+
+    // Spacing against the region: half the region → one or two curves; the suggested tenth fills it
+    var sad = TestMeshes.CreateSaddle(30, 2.0);
+    var pcSad = PrincipalCurvature.Compute(sad);
+    var fSad = AsymptoticCurves.ComputeDirections(pcSad, sad, 15);
+    var projSad = new MeshProjection(sad);
+    double region = Mite.Core.Diagnostics.InputAdvice.RegionSize(sad, fSad.Exists);
+    var oBig = new EvenlySpacedNet.Options { Spacing = 0.55 * region };
+    int nBig = EvenlySpacedNet.TraceField(sad, fSad.Family1, fSad.Exists, -1, oBig, fSad.Family2).Count;
+    var advR = Mite.Core.Diagnostics.InputAdvice.Spacing(oBig.ResolvedSpacing, true, oBig.ResolvedStepSize, false, projSad.AverageEdgeLength, region);
+    var oFix = new EvenlySpacedNet.Options { Spacing = advR[0].Suggested };
+    int nFix = EvenlySpacedNet.TraceField(sad, fSad.Family1, fSad.Exists, -1, oFix, fSad.Family2).Count;
+    var advE = Mite.Core.Diagnostics.InputAdvice.Spacing(0.5 * projSad.AverageEdgeLength, true, 0.05 * projSad.AverageEdgeLength, false, projSad.AverageEdgeLength, region);
+    var spacingRow = new
+    {
+        region = R3(region), spacing = R3(oBig.ResolvedSpacing), curves = nBig, code = advR[0].Code, message = advR[0].Message,
+        suggested = advR[0].Suggested, curvesFix = nFix, edge = R3(projSad.AverageEdgeLength), edgeCode = advE[0].Code, edgeMessage = advE[0].Message
+    };
+
+    // Unit slips on the lath section (lengths of the saddle net in metres / millimetres)
+    var lengths = EvenlySpacedNet.TraceField(sad, fSad.Family1, fSad.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.15 }, fSad.Family2).Select(ArcLen).ToArray();
+    var mmInM = Mite.Core.Diagnostics.InputAdvice.SectionScale(80, 12, lengths, 1.0, "Meters");
+    var mInMm = Mite.Core.Diagnostics.InputAdvice.SectionScale(0.08, 0.012, lengths.Select(l => 1000 * l), 0.001, "Millimeters");
+    var okM = Mite.Core.Diagnostics.InputAdvice.SectionScale(0.08, 0.012, lengths, 1.0, "Meters");
+    var unitsRow = new { mmInM = mmInM?.Message, mmSuggested = mmInM?.Suggested, mInMm = mInMm?.Message, mSuggested = mInMm?.Suggested, silent = okM == null };
+
+    // No false alarms on the bench's own shapes and spacings
+    int alarms = 0; var alarmText = new List<string>();
+    foreach (var (name, mesh, sp) in new (string, MeshData, double)[] {
+        ("saddle", sad, 0.15), ("saddle auto", sad, 0), ("hyperboloid", TestMeshes.CreateHyperboloid(), 0.25),
+        ("catenoid", TestMeshes.CreateCatenoid(), 0.2), ("Enneper 2", TestMeshes.CreateEnneper(2), 0) })
+    {
+        var pcX = PrincipalCurvature.Compute(mesh); var fX = AsymptoticCurves.ComputeDirections(pcX, mesh, 15); var pX = new MeshProjection(mesh);
+        var oX = new EvenlySpacedNet.Options { Spacing = sp };
+        EvenlySpacedNet.TraceField(mesh, fX.Family1, fX.Exists, -1, oX, fX.Family2);
+        var l = Mite.Core.Diagnostics.InputAdvice.Spacing(oX.ResolvedSpacing, sp > 0, oX.ResolvedStepSize, false, pX.AverageEdgeLength, Mite.Core.Diagnostics.InputAdvice.RegionSize(mesh, fX.Exists));
+        l.AddRange(Mite.Core.Diagnostics.InputAdvice.SaddleRegion(pcX, 15, mesh.BoundingBoxDiagonal()).Where(x => x.Level == Mite.Core.Diagnostics.AdviceLevel.Warning));
+        alarms += l.Count; alarmText.AddRange(l.Select(x => name + ": " + x.Code));
+    }
+    numbers["advice"] = new { minAngle = minAngleRow, spacing = spacingRow, units = unitsRow, falseAlarms = alarms, falseAlarmText = alarmText };
 }
 
 numbers["totalMs"] = sw.ElapsedMilliseconds;

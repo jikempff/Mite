@@ -76,6 +76,7 @@ public class LathAnalysisComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness, and MaxStrain must be positive.");
             return;
         }
+        CheckSection(width, thickness, curves);
         if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, 1.0, curves.Count, out LathProfile profile)) return;
 
         var proj = new MeshProjection(input.Data);

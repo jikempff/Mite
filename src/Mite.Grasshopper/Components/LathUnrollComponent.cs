@@ -59,6 +59,7 @@ public class LathUnrollComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width must be positive.");
             return;
         }
+        CheckSection(width, double.NaN, curves);
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
