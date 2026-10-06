@@ -77,11 +77,12 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
         X_u ± X_v, families orthogonal within 0.8°, 34 + 34 curves rim to rim;
       - 3-fold Enneper: directions within 1.6° of the Hopf-differential
         prediction θ = (±π/2 − arg w)/2; the flat point at the centre turns
-        the asymptotic cross by 180° per loop, so the two families are ONE
-        family globally — 17 laths end on neighbours as T-junctions, none
-        floating. This is the monkey-saddle case the old roadmap asked for;
-        the per-vertex A/B labelling cannot be made consistent there, only a
-        global family assignment by continuation could (open item below);
+        the asymptotic cross by 180° per loop. CORRECTED 2026-10-06: a 180°
+        turn maps each line onto itself, so the families stay separate all
+        the way round; the "one family globally" reading came from the
+        uncombed per-vertex labels. The T-junctions seen there were curves
+        of the fill jumping to the other family next to the flat point
+        (14 of 56), fixed by the twist labels below;
       - ruled surface as a skew bilinear patch: directions within 0.02° of
         the two rulings, every net curve straight (bow < 0.013);
       - Schwarz D (Schling's pavilion surface): nodal approximation by
@@ -97,11 +98,38 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       (nodal forms sin x cos y + sin y cos z + sin z cos x = 0 and
       cos x + cos y + cos z = 0), for the kinetic Schwarz D prototype of
       Wan, Crolla & Schling 2025.
-- [ ] Global family assignment for surfaces with flat points (3-fold
-      Enneper, monkey saddle z = x³ − 3xy²): continuation of the asymptotic
-      cross along a spanning tree with a branch cut, so A/B are consistent
-      except across one seam; Umbilics should flag flat points (k1 = k2 = 0)
-      as well as umbilics.
+- [x] Global family assignment for surfaces with flat points (3-fold
+      Enneper, monkey saddle z = x³ − 3xy²) — 2026-10-06. No continuation
+      or seam is needed: the two asymptotic directions through a point have
+      geodesic torsion +√−K and −√−K (Beltrami–Enneper; τg = (k2 − k1)
+      sin α cos α, "negatives of one another"), a sign that cannot change
+      where K < 0, does not depend on the sign of the tangent or of the
+      normal, and so labels the families exactly, vertex by vertex: A =
+      right-handed (`AsymptoticCurves.GeodesicTorsion`, `LabelByTwist`). A
+      family exchange around a singularity would need index ±1/4, which a
+      pair of conjugate line fields cannot have (Vaxman et al. 2016 §5.1);
+      the families change only on a curve passing exactly through a K = 0
+      point (the rays of a singular web). The 1.2.2 breadth-first combing
+      was the defect: on a 48 × 48 monkey saddle one wrong neighbour
+      comparison next to the flat point relabelled 575 of 2396 vertices;
+      separate saddle regions (the wave) were labelled independently. With
+      exact labels every curve is traced in its own family
+      (`LockFamily`, default on): 3-fold Enneper fill 14 / 56 curves in the
+      other family → 0, Schwarz D web 3 / 59 + 102 stray samples → 0 + 2,
+      wave web 2 / 40 + 100 → 0 + 2; saddle, catenoid, hyperboloid, Enneper,
+      ruled patch and torus nets keep the same curve counts and lengths. Tests:
+      `AsymptoticFamilyTests` (12), bench: two self-tests and a monkey-saddle
+      web on the Asymptotic Net card.
+- [ ] Umbilics should flag flat points (k1 = k2 = 0, K ≤ 0 around them) as
+      well as umbilics, and report the index of the asymptotic cross
+      (Hopf differential wⁿ dw² on minimal surfaces: each family turns by
+      −nπ per loop); the Asymptotic Web already finds them by its rays.
+- [ ] Field tracing across a K = 0 point: a curve through a flat point
+      continues in the other family (monkey saddle: the line at 30° is A on
+      one side and B beyond). What locked tracing does on such a curve is not
+      tested yet; decide whether Asymptotic Net should end it on the point
+      (as the web's rays do) — none of the bench nets passes exactly
+      through one.
 - [ ] Origin-point strategies of the submission (p. 48): seeds along a
       middle curve, along a diagonal pulled to the surface, along a
       projected curve — expose as "seed curve" input on the nets and test
@@ -260,8 +288,8 @@ remains the self-test review page.
       (§4 evolution), border seeding; regions unreachable by sideways growth
       get their own seed (field nets) — 1.2.2. Asymptotic families are combed
       over the mesh and a MinAngle input keeps nets out of the near-parabolic
-      band — 1.2.2. Still open: farthest-point seeding (next item) and a check
-      that combing handles the 3-fold Enneper flat point (A).
+      band — 1.2.2. Still open: farthest-point seeding (next item). The
+      combing is replaced by exact twist labels (A, 2026-10-06).
 - [ ] Evenly spaced curve families on surfaces: Jobard & Lefer 1997
       (Creating evenly-spaced streamlines of arbitrary density); Mebarki,
       Alliez & Devillers 2005 (Farthest point seeding for efficient
@@ -540,8 +568,10 @@ Open
 - [ ] Speed: the AAG solve is ~2 s natively / ~12 s in the browser for 385
       nodes (envelope LDLᵀ of 6N unknowns): nested dissection or a
       supernodal factorisation.
-- [ ] Global family assignment across flat points for the older Asymptotic
-      Net layouts (the web already handles them by rays).
+- [x] Global family assignment across flat points for the older Asymptotic
+      Net layouts — 2026-10-06, by the sign of the geodesic torsion (see A).
+      The web's own ray logic is untouched; its labels now come from the
+      same exact rule (all AsymptoticWeb tests unchanged).
 
 ## F. Food4Rhino release assets
 
@@ -560,6 +590,10 @@ Open
 
 ## Done
 
+- [x] 2026-10-06 (session 1, A/D/G): asymptotic families labelled by the
+      sign of their geodesic torsion (A right-handed, B left-handed) instead
+      of breadth-first combing; curves locked to their family; exact tests on
+      helices, hyperboloid rulings, monkey saddle and 3-fold Enneper.
 - [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
       Gridshell Analysis joints inserted exactly (the snap had chained joints
       into a few nodes), supports fixed / pinned, joint stiffness, self-weight,

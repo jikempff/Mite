@@ -128,7 +128,7 @@ public class MinimalSurfaceCatalogueTests
     }
 
     [Fact]
-    public void Enneper3_DirectionsFollowTheHopfDifferential_FamiliesSwapAroundTheFlatPoint()
+    public void Enneper3_DirectionsFollowTheHopfDifferential_FamiliesStaySeparateAroundTheFlatPoint()
     {
         var mesh = TestMeshes.CreateEnneper(3, 0.9, 24, 72, out var uv);
         var pc = PrincipalCurvature.Compute(mesh);
@@ -149,12 +149,15 @@ public class MinimalSurfaceCatalogueTests
         Assert.True(worstDir < 2.5, $"3-fold Enneper asymptotic directions should follow θ = (±π/2 − arg w)/2, worst deviation {worstDir:F2}°");
         Assert.True(worstOrth < 3.0, $"Families should be orthogonal (H = 0), worst deviation {worstOrth:F2}°");
 
-        // The Hopf differential has a double zero at the origin: one turn around
-        // it rotates the asymptotic cross by 180°, so the two families are one
-        // connected family globally and the per-vertex labels cannot separate
-        // them. What the net must still guarantee is that no lath ends in the
-        // middle of the surface.
+        // The Hopf differential w dw² has a simple zero at the origin: one turn
+        // around it rotates the asymptotic cross by 180°, which maps each line
+        // onto itself, so the families stay separate all the way round (the
+        // 2026-09-25 note that they were "one family" read the uncombed
+        // per-vertex labels). With the labels set by the sign of the geodesic
+        // torsion and every curve locked to its family, no sample follows the
+        // other family and no lath ends in the middle of the surface.
         var net = AsymptoticNet(mesh, pc, field, 0.12);
+        Assert.True(net.wrongFamily == 0, $"{net.wrongFamily} of {net.samples} samples follow the other family");
         Assert.True(net.floating == 0, $"No floating ends allowed: {net.border} border, {net.onCurve} T-junction, {net.floating} floating of {net.ends} ends");
         Assert.True(net.a.Count + net.b.Count >= 40, $"Net should fill the surface, got {net.a.Count + net.b.Count} curves");
     }

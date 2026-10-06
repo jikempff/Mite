@@ -64,7 +64,12 @@ under self-weight and 0.5 kN/m² drops from 1.7 m (quads) to 11 mm (AAG).
   mid-surface
 
 You get two crossing curve families that only exist where K < 0 (the `K`
-output flags those vertices). These are the layouts buildable from straight
+output flags those vertices). `A` is always the right-handed family and `B`
+the left-handed one: the two asymptotic curves through a point twist in
+opposite senses (geodesic torsion +√−K and −√−K), so the colours mean the same
+thing on every surface — on both sides of a flat point, on separate saddle
+regions, on a hyperboloid (`A` = the rulings that wind like a right-hand
+screw). Use that when one family is to be built upright and the other flat. These are the layouts buildable from straight
 flat strips held upright. Seeds can be vertex indices (`S`) or points (`P`);
 with AutoSpace only the first one matters.
 

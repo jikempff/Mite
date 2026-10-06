@@ -88,7 +88,7 @@
     "name": "FamilyA",
     "nick": "A",
     "type": "Curve",
-    "desc": "First asymptotic curve family",
+    "desc": "Right-handed asymptotic family (geodesic torsion +√−K)",
     "access": "list",
     "default": null
    },
@@ -96,7 +96,7 @@
     "name": "FamilyB",
     "nick": "B",
     "type": "Curve",
-    "desc": "Second asymptotic curve family",
+    "desc": "Left-handed asymptotic family (geodesic torsion −√−K)",
     "access": "list",
     "default": null
    },

@@ -288,8 +288,11 @@ public static class TestMeshes
     /// differential is f g' dw² = (n−1) w^(n−2) dw², and asymptotic directions
     /// dw = e^(iθ) satisfy Re((n−1) w^(n−2) e^(2iθ)) = 0, i.e.
     /// θ = (±π/2 − (n−2) arg w) / 2. For n = 2 this is θ = ±45°: X_u ± X_v.
-    /// For n ≥ 3 the two families rotate with arg w and swap after one turn
-    /// around the flat point at the origin (a monkey-saddle-like singularity).
+    /// For n ≥ 3 the two families rotate with arg w: one turn around the flat
+    /// point at the origin (a monkey-saddle-like singularity) turns each by
+    /// (n − 2)π, which maps every line onto itself, so "plus" stays one family
+    /// all the way round (atan2's jump at arg w = π changes θ by a multiple of
+    /// π only).
     /// </summary>
     public static (Vec3d plus, Vec3d minus) EnneperAsymptoticDirections(int n, double u, double v)
     {
