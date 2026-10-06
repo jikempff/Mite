@@ -441,6 +441,97 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     }
     numbers["asymCatalogue"] = rows;
 
+    // Family labels by the sign of the geodesic torsion (Beltrami–Enneper:
+    // the asymptotic directions twist +√−K and −√−K): exact against closed
+    // forms, and no curve changes family next to a flat point
+    {
+        (int mislabeled, int jumps, int samples, int curves) Purity(MeshData mesh, PrincipalCurvature.Result pc, AsymptoticCurves.DirectionField field, List<Vec3d[]> a, List<Vec3d[]> b)
+        {
+            var pj = new MeshProjection(mesh);
+            int mis = 0, jumps = 0, samples = 0;
+            foreach (var (fam, sign) in new[] { (a, 1), (b, -1) })
+                foreach (var c in fam)
+                {
+                    int pos = 0, neg = 0;
+                    for (int i = 1; i < c.Length; i++)
+                    {
+                        var t = c[i] - c[i - 1]; if (t.LengthSquared < 1e-20) continue;
+                        int v = pj.NearestVertexGlobal(0.5 * (c[i] + c[i - 1])); if (!field.Exists[v]) continue;
+                        double tau = AsymptoticCurves.GeodesicTorsion(pc, v, t.Normalized());
+                        if (Math.Abs(tau) < 0.5 * AsymptoticCurves.GeodesicTorsion(pc, v, field.Family1[v])) continue;
+                        if (tau > 0) pos++; else neg++;
+                    }
+                    samples += pos + neg; jumps += Math.Min(pos, neg);
+                    if (pos + neg > 0 && (pos >= neg ? 1 : -1) != sign) mis++;
+                }
+            return (mis, jumps, samples, a.Count + b.Count);
+        }
+
+        // monkey saddle z = x³ − 3xy²: exact τg from the Hessian (upward normal)
+        var monkey = AnalyticShapes.Build("monkey", 2.0, 1.0, 0, 48);
+        var pcM = PrincipalCurvature.Compute(monkey);
+        var fM = AsymptoticCurves.ComputeDirections(pcM, monkey, 15.0);
+        int monkeyN = 0, monkeyWrong = 0;
+        for (int v = 0; v < monkey.VertexCount; v++)
+        {
+            var q = monkey.Vertices[v];
+            if (!fM.Exists[v] || q.X * q.X + q.Y * q.Y < 0.0025) continue;
+            double fx = 3 * q.X * q.X - 3 * q.Y * q.Y, fy = -6 * q.X * q.Y, w = Math.Sqrt(1 + fx * fx + fy * fy);
+            var nrm = new Vec3d(-fx, -fy, 1) / w;
+            double Tau(Vec3d t) { t = t.Normalized(); var u = Vec3d.Cross(nrm, t); return (6 * q.X * t.X * u.X - 6 * q.Y * (t.X * u.Y + t.Y * u.X) - 6 * q.X * t.Y * u.Y) / w; }
+            monkeyN++;
+            if (!(Tau(fM.Family1[v]) > 0 && Tau(fM.Family2[v]) < 0)) monkeyWrong++;
+        }
+        // 3-fold Enneper: Hopf differential w dw², "plus" is one family all the way round
+        var enn = TestMeshes.CreateEnneper(3, 0.9, 24, 72, out var uvE);
+        var pcE = PrincipalCurvature.Compute(enn);
+        var fE = AsymptoticCurves.ComputeDirections(pcE, enn, 15.0);
+        int onPlus = 0, onMinus = 0;
+        for (int v = 0; v < enn.VertexCount; v++)
+        {
+            if (!fE.Exists[v] || uvE[v].u * uvE[v].u + uvE[v].v * uvE[v].v < 0.01) continue;
+            var (pl, mi) = TestMeshes.EnneperAsymptoticDirections(3, uvE[v].u, uvE[v].v);
+            if (AngleDeg(fE.Family1[v], pl) < AngleDeg(fE.Family1[v], mi)) onPlus++; else onMinus++;
+        }
+        // hyperboloid x² + y² − z² = 1: family 1 = the right-handed rulings, τg = +√−K
+        var hy = TestMeshes.CreateHyperboloid(1.0, 1.0, 1.0, 64, 32);
+        var pcH = PrincipalCurvature.Compute(hy);
+        var fH = AsymptoticCurves.ComputeDirections(pcH, hy, 15.0);
+        var bH = hy.BuildBoundaryVertexFlags();
+        int hyN = 0, hyWrong = 0; double hyTau = 0;
+        for (int v = 0; v < hy.VertexCount; v++)
+        {
+            if (!fH.Exists[v] || bH[v]) continue;
+            var (pl, mi) = TestMeshes.HyperboloidRulings(hy.Vertices[v]);
+            hyN++;
+            if (AngleDeg(fH.Family1[v], pl) > AngleDeg(fH.Family1[v], mi)) hyWrong++;
+            double root = Math.Sqrt(-TestMeshes.HyperboloidGaussianCurvature(hy.Vertices[v].Z));
+            hyTau = Math.Max(hyTau, Math.Abs(AsymptoticCurves.GeodesicTorsion(pcH, v, fH.Family1[v]) - root) / root);
+        }
+        // nets next to flat points and on the triply periodic patch: locked (default) and unlocked tracing
+        var netRows = new List<object>();
+        foreach (var (shape, layout, label) in new[] { ("enneper3", NetLayout.Fill, "Enneper 3, fill"), ("monkey", NetLayout.WebBorder, "monkey saddle, web"), ("schwarzd", NetLayout.WebBorder, "Schwarz D, web"), ("wave", NetLayout.WebBorder, "wave, web") })
+        {
+            var m = AnalyticShapes.Build(shape, 0, 0, 0, 48).ToTriangulated();
+            var pcN = PrincipalCurvature.Compute(m);
+            var fN = AsymptoticCurves.ComputeDirections(pcN, m, 15.0);
+            double sp = 0.05 * m.BoundingBoxDiagonal();
+            var res = new Dictionary<bool, (int mislabeled, int jumps, int samples, int curves)>();
+            List<Vec3d[]> lockedA = new(), lockedB = new();
+            foreach (bool lk in new[] { true, false })
+            {
+                var A = EvenlySpacedNet.TraceField(m, fN.Family1, fN.Exists, -1, new EvenlySpacedNet.Options { Spacing = sp, Layout = layout, LockFamily = lk }, fN.Family2);
+                var B = EvenlySpacedNet.TraceField(m, fN.Family2, fN.Exists, -1, new EvenlySpacedNet.Options { Spacing = sp, Layout = layout, LockFamily = lk }, fN.Family1);
+                res[lk] = Purity(m, pcN, fN, A, B);
+                if (lk) { lockedA = A; lockedB = B; }
+            }
+            if (shape == "monkey")
+                scenes["asymCat_monkeyWeb"] = new { label = "monkey saddle, web (families by twist)", wire = Edges(m, 4), a = lockedA.Select(l => Line(l, 3)).ToArray(), b = lockedB.Select(l => Line(l, 3)).ToArray() };
+            netRows.Add(new { label, curves = res[true].curves, mislabeled = res[true].mislabeled, jumps = res[true].jumps, samples = res[true].samples, unlockedMislabeled = res[false].mislabeled, unlockedJumps = res[false].jumps, unlockedCurves = res[false].curves });
+        }
+        numbers["asymFam"] = new { monkeyN, monkeyWrong, onPlus, onMinus, hyN, hyWrong, hyTau = R3(hyTau), nets = netRows };
+    }
+
     // Web layout on the catenoid: every curve rim to rim, no T-junctions, and the
     // closed-form check u ∓ v = const (isothermal coordinates, II = −du² + dv²)
     {

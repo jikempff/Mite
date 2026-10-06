@@ -7,7 +7,7 @@ using Mite.Core.Gridshells;
 
 namespace Mite.Tests;
 
-/// <summary>Combing and usable-angle mask of the asymptotic direction field.</summary>
+/// <summary>Family labels and usable-angle mask of the asymptotic direction field.</summary>
 public class AsymptoticFieldTests
 {
     private static double LabelSwapFraction(MeshData mesh, AsymptoticCurves.DirectionField f)
@@ -31,20 +31,28 @@ public class AsymptoticFieldTests
     }
 
     [Fact]
-    public void Combing_MakesFamilyLabelsConsistent_OnTheWave()
+    public void Labels_AreConsistentBetweenNeighbours_OnTheWave()
     {
+        // The labels come from the sign of the geodesic torsion
+        // (AsymptoticFamilyTests checks them against closed forms); the
+        // neighbour-alignment count that the old combing minimised is kept as
+        // a sanity check. What remains (≈0.4 %) are edges in the band near
+        // the parabolic lines where the two families are only 15–30° apart
+        // and a neighbour's cross turns by more than half that angle — not
+        // label swaps.
         var wave = AnalyticShapes.Build("wave", 2.0, 0.3, 2.0, 40);
         var pc = PrincipalCurvature.Compute(wave);
         var raw = AsymptoticCurves.ComputeDirections(pc);
-        var combed = AsymptoticCurves.ComputeDirections(pc, wave, 15.0);
-        double rawSwaps = LabelSwapFraction(wave, raw);
-        double combedSwaps = LabelSwapFraction(wave, combed);
-        Assert.True(combedSwaps < 0.03, $"combed field still swaps labels on {combedSwaps:P1} of edges (raw {rawSwaps:P1})");
-        Assert.True(combedSwaps <= rawSwaps, "combing must not increase swaps");
+        var masked = AsymptoticCurves.ComputeDirections(pc, wave, 15.0);
+        Assert.True(LabelSwapFraction(wave, raw) < 0.01, $"raw field: {LabelSwapFraction(wave, raw):P2} of edges misaligned");
+        Assert.True(LabelSwapFraction(wave, masked) < 0.01, $"masked field: {LabelSwapFraction(wave, masked):P2} of edges misaligned");
+        // with or without the mesh and the mask, a vertex has the same labels
+        for (int v = 0; v < wave.VertexCount; v++)
+            if (masked.Exists[v]) Assert.True(Math.Abs(Vec3d.Dot(raw.Family1[v], masked.Family1[v])) > 1 - 1e-12);
     }
 
     [Fact]
-    public void Combing_IsExactOnTheSaddle()
+    public void Labels_AreExactOnTheSaddle()
     {
         var saddle = TestMeshes.CreateSaddle(30, 2.0);
         var pc = PrincipalCurvature.Compute(saddle);

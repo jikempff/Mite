@@ -1,3 +1,10 @@
+// Family labels by the sign of the geodesic torsion (2026-10-06). Sources:
+// Beltrami–Enneper theorem (K = −τ² along an asymptotic curve; e.g. Düldül &
+// Düldül 2019, Int. Electron. J. Geom. 12(2)); geodesic torsion
+// τg = (k2 − k1) sin α cos α (Encyclopaedia of Mathematics, "Geodesic
+// torsion"; do Carmo 1976); Vaxman et al. 2016, "Directional field synthesis,
+// design, and processing", CGF 35(2), §5.1 (2²-fields: index ±1/2 only);
+// Garcia & Sotomayor 2005 (foliations labelled by the sign of τg).
 using System;
 using System.Collections.Generic;
 using Mite.Core.Geometry;
@@ -46,6 +53,15 @@ public static class AsymptoticCurves
         /// <see cref="ComputeDirections(PrincipalCurvature.Result, MeshData?, double)"/>.
         /// </summary>
         public double MinCrossingAngle { get; set; } = 15.0;
+
+        /// <summary>
+        /// Every curve follows its own family only (default). The families are
+        /// labelled exactly by the sign of their geodesic torsion, so a curve
+        /// never needs the other family to stay continuous; false restores the
+        /// behaviour of Mite 1.3.0 and earlier, where each sample took whichever family was
+        /// best aligned and a curve passing near a flat point could jump.
+        /// </summary>
+        public bool LockFamily { get; set; } = true;
     }
 
     public readonly struct DirectionField
@@ -76,15 +92,12 @@ public static class AsymptoticCurves
     /// <summary>
     /// As above, with two refinements for nets:
     /// <list type="bullet">
-    /// <item>When a mesh is given, the principal direction field is combed
-    /// first (sign propagation over the vertex graph from the vertex with the
-    /// strongest anticlastic curvature). Family 1 is "rotate D1 by +t", so the
-    /// labels of the two families depend on the sign of D1, which is arbitrary
-    /// per vertex; without combing the same geometric family carries both
-    /// labels across the surface and traced nets colour their families at
-    /// random. Combing is exact away from umbilics; around an umbilic a seam
-    /// remains (a line field of index 1/2 cannot be combed), which the tracer
-    /// crosses by continuity.</item>
+    /// <item>The two families are labelled by the sign of their geodesic
+    /// torsion (<see cref="LabelByTwist"/>): Family1 twists one way, Family2
+    /// the other, at every vertex, so the labels are consistent over the
+    /// whole anticlastic region — around flat points and across separate
+    /// saddle regions — without any propagation over the mesh. The mesh
+    /// argument is kept for compatibility; it is no longer needed.</item>
     /// <item>minCrossingAngle (degrees) restricts Exists to vertices where the
     /// two families cross at more than that angle (the angle is 2t). Near the
     /// parabolic line K = 0 the families collapse onto each other: curves
@@ -128,56 +141,79 @@ public static class AsymptoticCurves
             exists[i] = true;
         }
 
-        if (mesh != null && mesh.VertexCount == nv) CombFamilies(mesh, f1, f2, exists);
+        LabelByTwist(curvature, f1, f2, exists);
         return new DirectionField(f1, f2, exists);
     }
 
     /// <summary>
-    /// Makes the family labels continuous over the usable region: breadth-first
-    /// from the most anticlastic vertex of each connected region, every vertex
-    /// takes as "family 1" whichever of its two asymptotic lines is closer to
-    /// family 1 of the neighbour that reached it. The raw labels ("rotate D1 by
-    /// +t") swap wherever the sign of D1 flips and wherever k1 and k2 exchange
-    /// roles (D1 turns by 90°), which happens all over a general surface.
+    /// Geodesic torsion of the tangent direction t at vertex i, read from the
+    /// curvature tensor: τg(t) = II(t, n × t), i.e. (k2 − k1) sin α cos α for
+    /// t at angle α from D1 (Bonnet; Encyclopaedia of Mathematics, "Geodesic
+    /// torsion"), in the Darboux frame (t, u = n × t, n) with
+    /// n' = −kn t − τg u. Mite's principal curvatures are positive where the
+    /// surface bends away from its normal (a cylinder reads k1 = +1/R with
+    /// outward normals), the opposite of the textbook II = ⟨x'', n⟩, so the
+    /// sum Σ kⱼ (t·Dⱼ)(u·Dⱼ) is negated here: a right-handed helix on a
+    /// cylinder reads +sinθ cosθ / R, its Frenet torsion. The value does not depend on the
+    /// sign of t, of D1, D2 or of the normal (II and n × t both change sign
+    /// with n), nor on whether the frame (D1, D2, n) is right-handed or the
+    /// principal curvatures are ordered: only on the surface and the
+    /// orientation of space. On an asymptotic direction it equals the Frenet
+    /// torsion of the asymptotic curve, ±√−K (Beltrami–Enneper).
     /// </summary>
-    internal static void CombFamilies(MeshData mesh, Vec3d[] f1, Vec3d[] f2, bool[] exists)
+    public static double GeodesicTorsion(PrincipalCurvature.Result curvature, int i, Vec3d t)
     {
-        int nv = mesh.VertexCount;
-        var nbrs = mesh.BuildVertexNeighbors();
-        var done = new bool[nv];
-        var queue = new Queue<int>();
-        var K = new double[nv];
-        for (int i = 0; i < nv; i++) K[i] = exists[i] ? -Math.Abs(Vec3d.Dot(f1[i], f2[i])) : 1; // most orthogonal families first
-        for (int start = 0; start < nv; start++)
+        Vec3d n = curvature.Normals != null && i < curvature.Normals.Length && curvature.Normals[i].LengthSquared > 1e-20
+            ? curvature.Normals[i].Normalized()
+            : Vec3d.Cross(curvature.D1[i], curvature.D2[i]).Normalized();
+        Vec3d u = Vec3d.Cross(n, t);
+        Vec3d d1 = curvature.D1[i], d2 = curvature.D2[i];
+        return -(curvature.K1[i] * Vec3d.Dot(t, d1) * Vec3d.Dot(u, d1)
+               + curvature.K2[i] * Vec3d.Dot(t, d2) * Vec3d.Dot(u, d2));
+    }
+
+    /// <summary>
+    /// Labels the two asymptotic families by the sign of their geodesic
+    /// torsion, vertex by vertex: Family1 is the right-handed family
+    /// (τg = +√−K: its asymptotic curves twist like a right-handed screw, as
+    /// the rulings (cos φ − s sin φ, sin φ + s cos φ, s) of the hyperboloid
+    /// x² + y² − z² = 1), Family2 the left-handed one (τg = −√−K). This is
+    /// the label "rotate D1 by +t towards D2" gives in the right-handed
+    /// (D1, D2, n) frame with k1 ≥ k2 that
+    /// <see cref="PrincipalCurvature.Compute(MeshData, int)"/> returns, so
+    /// nets traced before keep their A and B.
+    /// <para>
+    /// Why this is global and exact: the two asymptotic directions through a
+    /// point have geodesic torsions ±√−K, "negatives of one another"
+    /// (Beltrami–Enneper: K = −τ² along an asymptotic curve, Düldül &amp;
+    /// Düldül 2019; τg(α) = (k2 − k1) sin α cos α is odd in α). τg is continuous and never 0 where K &lt; 0, so
+    /// following one family along any path in the anticlastic region keeps
+    /// its sign — the families can never exchange, not even around a flat
+    /// point (a monkey saddle, the centre of a 3-fold Enneper surface), where
+    /// each family turns by a multiple of π per loop; an exchange would need
+    /// an index ±1/4 singularity, which a pair of conjugate line fields does
+    /// not have (Vaxman et al. 2016 §5.1: 2²-fields have singularities of
+    /// index ±1/2). The labels change only on a curve that passes exactly
+    /// through a point with K = 0. Garcia &amp; Sotomayor label the two
+    /// foliations of their mean-curvature lines the same way, by the sign of
+    /// the geodesic torsion.
+    /// </para>
+    /// <para>
+    /// This replaces the breadth-first "combing" of 1.2.2, which compared the
+    /// cross of each vertex with its neighbour's by alignment: one wrong
+    /// comparison (two vertices whose cross turns by about 45°, as next to a
+    /// flat point) relabelled the whole subtree behind it — 575 of 2396
+    /// vertices on a 48 × 48 monkey saddle. Labels are unchanged wherever the
+    /// combing was right, so saved definitions keep their families.
+    /// </para>
+    /// </summary>
+    internal static void LabelByTwist(PrincipalCurvature.Result curvature, Vec3d[] f1, Vec3d[] f2, bool[] exists)
+    {
+        for (int i = 0; i < exists.Length; i++)
         {
-            if (done[start] || !exists[start]) continue;
-            // find the component's best-conditioned vertex
-            int best = start;
-            var comp = new List<int>();
-            var seen = new HashSet<int> { start };
-            var stack = new Stack<int>(); stack.Push(start);
-            while (stack.Count > 0)
-            {
-                int v = stack.Pop();
-                comp.Add(v);
-                if (K[v] < K[best]) best = v;
-                foreach (int n in nbrs[v]) if (exists[n] && !done[n] && seen.Add(n)) stack.Push(n);
-            }
-            done[best] = true;
-            queue.Enqueue(best);
-            while (queue.Count > 0)
-            {
-                int v = queue.Dequeue();
-                foreach (int n in nbrs[v])
-                {
-                    if (done[n] || !exists[n]) continue;
-                    double same = Math.Abs(Vec3d.Dot(f1[v], f1[n]));
-                    double other = Math.Abs(Vec3d.Dot(f1[v], f2[n]));
-                    if (other > same) { var t = f1[n]; f1[n] = f2[n]; f2[n] = t; }
-                    done[n] = true;
-                    queue.Enqueue(n);
-                }
-            }
+            if (!exists[i]) continue;
+            if (GeodesicTorsion(curvature, i, f1[i]) < GeodesicTorsion(curvature, i, f2[i]))
+                (f1[i], f2[i]) = (f2[i], f1[i]);
         }
     }
 
@@ -194,13 +230,11 @@ public static class AsymptoticCurves
         var proj = new MeshProjection(mesh);
         var field = ComputeDirections(curvature, mesh, options.MinCrossingAngle);
 
-        // Both families are passed to the tracer: the family labels are derived
-        // from principal directions whose signs are arbitrary per vertex, so a
-        // single label does not identify a geometrically consistent family. The
-        // tracer keeps continuity by picking the best-aligned candidate; the
-        // primary field only selects which family the curve starts in.
+        // The families are labelled exactly (sign of the geodesic torsion), so
+        // a curve follows its own family; unlocked, the tracer may pick the
+        // best-aligned candidate of either family at every sample.
         var primary = secondFamily ? field.Family2 : field.Family1;
-        var secondary = secondFamily ? field.Family1 : field.Family2;
+        Vec3d[]? secondary = options.LockFamily ? null : secondFamily ? field.Family1 : field.Family2;
 
         double step = TraceDefaults.ResolveStep(options.StepSize, 0, proj);
         int maxSteps = TraceDefaults.ResolveMaxSteps(options.MaxSteps, step, proj);

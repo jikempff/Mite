@@ -38,8 +38,8 @@ public class AsymptoticNetComponent : MiteComponent
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
     {
-        pManager.AddCurveParameter("FamilyA", "A", "First asymptotic curve family", GH_ParamAccess.list);
-        pManager.AddCurveParameter("FamilyB", "B", "Second asymptotic curve family", GH_ParamAccess.list);
+        pManager.AddCurveParameter("FamilyA", "A", "Right-handed asymptotic family (geodesic torsion +√−K)", GH_ParamAccess.list);
+        pManager.AddCurveParameter("FamilyB", "B", "Left-handed asymptotic family (geodesic torsion −√−K)", GH_ParamAccess.list);
         pManager.AddBooleanParameter("Anticlastic", "K", "Per input vertex: true where asymptotic directions exist (K < 0)", GH_ParamAccess.list);
         RegisterNetOutput(pManager); // 3
     }

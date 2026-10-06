@@ -127,6 +127,21 @@ public static class EvenlySpacedNet
         public double MinCurveLength { get; set; } = 0.0;
 
         /// <summary>
+        /// Two-family fields (a secondary field given): when true (default),
+        /// every curve follows its own family only; the secondary field still
+        /// ranks seeds by how widely the families cross. This needs labels that
+        /// are consistent over the surface, which the asymptotic families of
+        /// <see cref="AsymptoticCurves.ComputeDirections(Curvature.PrincipalCurvature.Result, MeshData?, double)"/>
+        /// are (labelled by the sign of their geodesic torsion). False restores
+        /// the behaviour of Mite 1.3.0 and earlier: each sample continues in whichever
+        /// family is best aligned with the travel direction — needed only for
+        /// a field whose labels swap from vertex to vertex, and it lets a curve
+        /// jump to the other family wherever the two are close or turn fast
+        /// (next to a flat point, near a parabolic line).
+        /// </summary>
+        public bool LockFamily { get; set; } = true;
+
+        /// <summary>
         /// Optional cancellation probe checked between curves; return true to
         /// stop tracing and keep the curves produced so far (e.g. wire this to
         /// the host's Esc-key check so long solves stay interruptible).
@@ -156,8 +171,9 @@ public static class EvenlySpacedNet
     /// Fills the surface with evenly-spaced curves following a per-vertex
     /// direction field (principal or asymptotic directions). Pass firstSeed -1
     /// to start from the masked vertex nearest the mesh centroid. A secondary
-    /// field (the other asymptotic family) may be supplied so traces keep
-    /// continuity across per-vertex family label swaps.
+    /// field (the other asymptotic family) ranks seeds by how widely the two
+    /// families cross; with <see cref="Options.LockFamily"/> off it is also a
+    /// candidate for every sample.
     /// </summary>
     public static List<Vec3d[]> TraceField(
         MeshData mesh, Vec3d[] dirs, bool[]? mask, int firstSeed, Options? options = null,
@@ -184,7 +200,7 @@ public static class EvenlySpacedNet
 
         Vec3d[] TraceFrom(Vec3d pos, int hint, Vec3d? initialDir)
         {
-            var line = FieldTracer.TraceBoth(proj, pos, hint, dirs, secondaryDirs, mask,
+            var line = FieldTracer.TraceBoth(proj, pos, hint, dirs, options.LockFamily ? null : secondaryDirs, mask,
                 step, maxSteps, stop, out bool startNear, out bool endNear, options.MinFieldMagnitude, initialDir);
             line = SnapEnds(proj, registry, line, startNear, endNear, spacing);
             return line.Length > 1 ? CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses) : line;
@@ -296,7 +312,7 @@ public static class EvenlySpacedNet
             if (mask != null && !mask[v]) return false;
             if (dirs[v].LengthSquared < 1e-20) return false;
             if (registry.HasPointWithin(hit.Point, 0.7 * spacing)) return false;
-            var curve = FieldTracer.TraceBoth(proj, hit.Point, v, dirs, secondaryDirs, mask,
+            var curve = FieldTracer.TraceBoth(proj, hit.Point, v, dirs, options.LockFamily ? null : secondaryDirs, mask,
                 step, maxSteps, null, options.MinFieldMagnitude);
             curve = CutAtContact(proj, registry, curve, hit.Point, options.MergeFactor * spacing, spacing);
             if (curve.Length < 3 || ArcLength(curve) < minLen) return false;
@@ -342,7 +358,7 @@ public static class EvenlySpacedNet
         {
             Vec3d p0 = at ?? mesh.Vertices[v];
             if (mask != null && !mask[v]) return 0;
-            var cross = FieldTracer.TraceBoth(proj, p0, v, other, secondaryDirs == null ? null : dirs, mask,
+            var cross = FieldTracer.TraceBoth(proj, p0, v, other, secondaryDirs == null || options.LockFamily ? null : dirs, mask,
                 step, maxSteps, null, options.MinFieldMagnitude);
             if (cross.Length < 2) return 0;
             int ic = 0; double bd = double.MaxValue;
