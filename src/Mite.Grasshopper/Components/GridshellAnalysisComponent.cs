@@ -110,6 +110,7 @@ public class GridshellAnalysisComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness, E and Allowable must be positive.");
             return;
         }
+        CheckSection(width, thickness, curves);
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);

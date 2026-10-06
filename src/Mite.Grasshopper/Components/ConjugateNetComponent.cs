@@ -57,7 +57,7 @@ public class ConjugateNetComponent : MiteComponent
 
         var data = input.Data;
         var proj = new MeshProjection(data);
-        int firstSeed = seedPoint.IsValid ? proj.NearestVertexGlobal(MeshConvert.ToVec3d(seedPoint)) : input.ToTopo(seed);
+        int firstSeed = seedPoint.IsValid ? SeedPointVertex(proj, seedPoint, 0) : input.ToTopo(seed);
 
         var opts = new EvenlySpacedNet.Options
         {
@@ -67,7 +67,7 @@ public class ConjugateNetComponent : MiteComponent
         };
 
         var net = ConjugateNet.Trace(data, firstSeed, opts);
-        ReportTracing(opts, "Conjugate net");
+        ReportTracing(opts, "Conjugate net", proj);
         if (spacing <= 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
 

@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Drawing;
 using System.Reflection;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
 using Rhino;
 using Rhino.Geometry;
+using Mite.Core.Diagnostics;
 using Mite.Core.Geometry;
 using Mite.Core.Gridshells;
 
@@ -81,37 +83,89 @@ public abstract class MiteComponent : GH_Component
     {
         var seeds = new List<int>();
         var seen = new HashSet<int>();
-        int skipped = 0;
+        var outOfRange = new List<int>();
 
         if (indices != null)
             foreach (int s in indices)
             {
                 int t = input.ToTopo(s);
-                if (t < 0) { skipped++; continue; }
+                if (t < 0) { outOfRange.Add(s); continue; }
                 if (seen.Add(t)) seeds.Add(t);
             }
 
         if (points != null)
-            foreach (var p in points)
+            for (int i = 0; i < points.Count; i++)
             {
-                int t = proj.NearestVertexGlobal(MeshConvert.ToVec3d(p));
-                if (t < 0) { skipped++; continue; }
+                int t = SeedPointVertex(proj, points[i], i);
+                if (t < 0) continue;
                 if (seen.Add(t)) seeds.Add(t);
             }
 
-        if (skipped > 0)
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"{skipped} out-of-range seed(s) skipped.");
+        Report(InputAdvice.SeedIndices(outOfRange, input.RhinoVertexCount));
         return seeds;
     }
 
-    /// <summary>Warns when the evenly-spaced tracer stopped early (cap or Esc).</summary>
-    protected void ReportTracing(EvenlySpacedNet.Options opts, string what)
+    /// <summary>
+    /// Nearest welded vertex of a seed point; adds a note (with the distance)
+    /// when the point lies well off the mesh.
+    /// </summary>
+    internal int SeedPointVertex(MeshProjection proj, Point3d point, int index)
+    {
+        var p = MeshConvert.ToVec3d(point);
+        int t = proj.NearestVertexGlobal(p);
+        if (t < 0) return t;
+        var hit = proj.ClosestPoint(p, t);
+        Report(InputAdvice.SeedPoint(index, (hit.Point - p).Length, proj.AverageEdgeLength, proj.Mesh.BoundingBoxDiagonal()));
+        return t;
+    }
+
+    /// <summary>Adds an advice as a runtime message of its level, once per solve.</summary>
+    internal void Report(Advice? advice)
+    {
+        if (advice == null) return;
+        var level = advice.Level == AdviceLevel.Error ? GH_RuntimeMessageLevel.Error
+            : advice.Level == AdviceLevel.Warning ? GH_RuntimeMessageLevel.Warning
+            : GH_RuntimeMessageLevel.Remark;
+        if (RuntimeMessages(level).Contains(advice.Message)) return;
+        AddRuntimeMessage(level, advice.Message);
+    }
+
+    /// <summary>Adds every advice of the list (see <see cref="Report(Advice?)"/>).</summary>
+    internal void Report(IEnumerable<Advice> advice)
+    {
+        foreach (var a in advice) Report(a);
+    }
+
+    /// <summary>
+    /// Checks a lath section against the lengths of the laths it is applied
+    /// to, so unit slips (millimetres in a metre model) are named with the
+    /// value to enter. Thickness NaN for components with a width only.
+    /// </summary>
+    internal void CheckSection(double width, double thickness, IEnumerable<Curve?> curves)
+    {
+        var lengths = new List<double>();
+        foreach (var c in curves) if (c != null && c.IsValid) lengths.Add(c.GetLength());
+        var doc = RhinoDoc.ActiveDoc;
+        string unit = doc != null ? doc.ModelUnitSystem.ToString() : "model units";
+        Report(InputAdvice.SectionScale(width, thickness, lengths, ModelToMeters(), unit));
+    }
+
+    /// <summary>
+    /// Warns when the evenly-spaced tracer stopped early (cap or Esc); with the
+    /// projection, also checks Spacing and Step against the mesh edge and the
+    /// size of the region the family can fill (<paramref name="region"/>: the
+    /// usable vertices, all when null).
+    /// </summary>
+    protected void ReportTracing(EvenlySpacedNet.Options opts, string what, MeshProjection? proj = null, bool[]? region = null)
     {
         if (opts.Cancelled)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{what}: cancelled with Esc, output is partial.");
         if (opts.ReachedMaxCurves)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
                 $"{what}: stopped at the MaxCurves cap ({opts.MaxCurves}); increase MaxCurves or Spacing for full coverage.");
+        if (proj != null)
+            Report(InputAdvice.Spacing(opts.ResolvedSpacing, opts.Spacing > 0, opts.ResolvedStepSize, opts.StepSize > 0,
+                proj.AverageEdgeLength, InputAdvice.RegionSize(proj.Mesh, region)));
     }
 
     /// <summary>Chord tolerance for sampling curves onto a mesh (0 = automatic, 2% of the average edge length).</summary>

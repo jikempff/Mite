@@ -141,6 +141,7 @@ public class NetKineticsComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness and MaxStrain must be positive.");
             return;
         }
+        CheckSection(width, thickness, System.Linq.Enumerable.Concat(curvesA, curvesB));
         if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, 1.0, curvesA.Count + curvesB.Count, out Mite.Core.Fabrication.LathProfile profile)) return;
 
         if (movePts.Count > 0 && toPts.Count == 0)

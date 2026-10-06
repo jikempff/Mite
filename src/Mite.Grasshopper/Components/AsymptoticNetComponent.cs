@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
 using Mite.Core.Curvature;
+using Mite.Core.Diagnostics;
 using Mite.Core.Geometry;
 using Mite.Core.Gridshells;
 
@@ -73,10 +74,13 @@ public class AsymptoticNetComponent : MiteComponent
 
         int anticlastic = 0;
         foreach (bool e in field.Exists) if (e) anticlastic++;
+        var region = InputAdvice.SaddleRegion(curvature, minAngle, data.BoundingBoxDiagonal());
+        Report(region);
         if (anticlastic == 0)
         {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
-                "The mesh has no anticlastic (K < 0) region, so no asymptotic curves exist.");
+            if (region.Count == 0)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                    "The mesh has no anticlastic (K < 0) region, so no asymptotic curves exist.");
             DA.SetDataList(2, new bool[input.RhinoVertexCount]);
             return;
         }
@@ -96,14 +100,14 @@ public class AsymptoticNetComponent : MiteComponent
                     "No seed lies in the anticlastic region; starting from the region nearest the centroid instead.");
 
             familyA = EvenlySpacedNet.TraceField(data, field.Family1, field.Exists, firstSeed, opts, field.Family2);
-            ReportTracing(opts, "Family A");
+            ReportTracing(opts, "Family A", proj, field.Exists);
             var optsB = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
                 MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous, Layout = netLayout
             };
             familyB = EvenlySpacedNet.TraceField(data, field.Family2, field.Exists, firstSeed, optsB, field.Family1);
-            ReportTracing(optsB, "Family B");
+            ReportTracing(optsB, "Family B", proj, field.Exists);
             if (spacing <= 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
         }

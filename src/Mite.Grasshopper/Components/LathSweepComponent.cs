@@ -61,6 +61,7 @@ public class LathSweepComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width and Thickness must be positive.");
             return;
         }
+        CheckSection(width, thickness, curves);
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);

@@ -73,7 +73,7 @@ public class ChebyshevNetComponent : MiteComponent
 
         var data = input.Data;
         int topoSeed = seedPoint.IsValid
-            ? new MeshProjection(data).NearestVertexGlobal(MeshConvert.ToVec3d(seedPoint))
+            ? SeedPointVertex(new MeshProjection(data), seedPoint, 0)
             : input.ToTopo(seed);
         if (topoSeed < 0)
         {

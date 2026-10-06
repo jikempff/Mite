@@ -78,7 +78,7 @@ public class StreamlinesComponent : MiteComponent
                 Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
             };
             lines = EvenlySpacedNet.TraceField(data, dirs, null, seeds.Count > 0 ? seeds[0] : -1, opts);
-            ReportTracing(opts, "Streamlines");
+            ReportTracing(opts, "Streamlines", proj);
             if (spacing <= 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
         }

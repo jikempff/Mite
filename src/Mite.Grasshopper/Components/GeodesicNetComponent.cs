@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
+using Mite.Core.Diagnostics;
 using Mite.Core.Geometry;
 using Mite.Core.Gridshells;
 
@@ -77,23 +78,22 @@ public class GeodesicNetComponent : MiteComponent
         // pairing when a seed is skipped
         var seeds = new List<int>();
         var dirs = new List<Vec3d>();
-        int skipped = 0;
+        var outOfRange = new List<int>();
         for (int i = 0; i < seedIdx.Count; i++)
         {
             int t = input.ToTopo(seedIdx[i]);
-            if (t < 0) { skipped++; continue; }
+            if (t < 0) { outOfRange.Add(seedIdx[i]); continue; }
             seeds.Add(t);
             dirs.Add(MeshConvert.ToVec3d(directions[Math.Min(i, directions.Count - 1)]));
         }
         for (int i = 0; i < seedPts.Count; i++)
         {
-            int t = proj.NearestVertexGlobal(MeshConvert.ToVec3d(seedPts[i]));
-            if (t < 0) { skipped++; continue; }
+            int t = SeedPointVertex(proj, seedPts[i], i);
+            if (t < 0) continue;
             seeds.Add(t);
             dirs.Add(MeshConvert.ToVec3d(directions[Math.Min(seedIdx.Count + i, directions.Count - 1)]));
         }
-        if (skipped > 0)
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"{skipped} out-of-range seed(s) skipped.");
+        Report(InputAdvice.SeedIndices(outOfRange, input.RhinoVertexCount));
         if (seeds.Count == 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Provide at least one seed (Seeds or SeedPoints).");
@@ -111,7 +111,7 @@ public class GeodesicNetComponent : MiteComponent
                 Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
             };
             lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], opts);
-            ReportTracing(opts, "Geodesics");
+            ReportTracing(opts, "Geodesics", proj);
             if (spacing <= 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
         }

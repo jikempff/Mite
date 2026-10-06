@@ -168,8 +168,44 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       auto-attached value list; keep the inputs for compatibility.
 - [ ] Progress and cancellation feedback: percentage in the component
       message while tracing / solving, Esc already cancels.
-- [ ] Runtime messages with the fix in the message ("spacing 0.02 is below
-      the mesh edge 0.05: raise Spacing or subdivide").
+- [x] Runtime messages with the fix in the message — 2026-10-06 (session
+      2). `Mite.Core.Diagnostics.InputAdvice` (new API, pure, tested): every
+      message is problem + number, reason, fix + number, with a stable code
+      and the measured / limit / suggested values as fields. Checks: Spacing
+      below the mean mesh edge (raise to the edge or subdivide ⌈log₂(e/s)⌉×);
+      Spacing ≥ half the diagonal of the usable region (→ one or two curves;
+      suggests a tenth); Step > Spacing / 4 or > one edge (suggests the
+      automatic step); no K < 0 / flat mesh; MinAngle leaving out every saddle
+      vertex (the crossing range found, 2·min(t, 90° − t) with
+      tan t = √(−k1/k2), and the MinAngle that keeps half / all of it) or
+      ≥ 25 % of it (Remark); SeedPoints more than two edges off the mesh;
+      Seeds out of range; Width / Thickness > ¼ or < 1/10 000 of the median
+      lath (named as a mm/m slip with the values to enter when the swapped
+      reading fits). Wired through `MiteComponent` (Report, ResolveSeeds,
+      SeedPointVertex, ReportTracing(…, proj, region), CheckSection) into
+      Asymptotic, Geodesic, Conjugate and Chebyshev Net, Curvature
+      Streamlines, Lath Sweep / Analysis / Segment / Unroll, Gridshell
+      Analysis, Net Joints and Net Kinetics; one call per component, no
+      input or output changed. Literature: Shneiderman 1982 (specific,
+      constructive, positive tone), Neusesser & Sunwall 2023 (NN/g
+      guidelines and rubric: precise, constructive, no blame, by impact,
+      safeguard likely mistakes), Becker et al. 2019 (context, hints,
+      logical argumentation, right time). Finding: on z = x² − 0.01y² (K < 0
+      at every vertex, families crossing at 11.4°–13.3°) Asymptotic Net used
+      to say "no anticlastic (K < 0) region" — false; the default MinAngle
+      15° was the cause. Tests: `InputAdviceTests` (13) check each message
+      against closed forms, that the suggested value fixes the case, and
+      that the bench shapes at their spacings raise none.
+      Not done / follow-ups: (a) Asymptotic Web Spacing and Chebyshev
+      EdgeLength against the mesh edge; (b) mesh intake: non-manifold edges
+      and disconnected pieces with "run Mesh Cleanup" (needs a manifold
+      check in the core); (c) the generic "No curves traced" endings of
+      Geodesic / Conjugate Net should name their cause; (d) E / Allowable
+      unit slips (MPa typed as Pa) in Gridshell Analysis and Net Kinetics;
+      (e) after the mode-menus bundle: "Spacing has no effect without
+      AutoSpace"-type notes from the catalogue's dependencies; (f) check in
+      Rhino that long balloon texts wrap and that a message is not repeated
+      for families A and B (deduplicated through RuntimeMessages(level)).
 - [ ] Interactive seed picking (Rhino point pick button on the component)
       and a Bake that writes families to layers with their colours.
 - [ ] Example definitions per typology shipped in the yak package
@@ -560,6 +596,9 @@ Open
 
 ## Done
 
+- [x] 2026-10-06 (session 2, B): runtime messages with the fix in them —
+      `InputAdvice` checks of spacing, step, saddle region / MinAngle, seeds
+      and lath sections, wired into 12 components, bench self-tests.
 - [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
       Gridshell Analysis joints inserted exactly (the snap had chained joints
       into a few nodes), supports fixed / pinned, joint stiffness, self-weight,

@@ -76,6 +76,7 @@ public class LathSegmentComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "SpliceLength must be between 0 and StockLength.");
             return;
         }
+        CheckSection(width, thickness, curves);
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
