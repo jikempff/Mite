@@ -136,6 +136,15 @@ Net (AutoSpace off, so Layout does not apply and is not shown). If the input
 is wired to a value list, the menu moves the list; any other wire wins and the
 menu says so. **Attach value lists** in the same menu puts a named drop-down
 on every unwired mode input when you prefer to see them on the canvas.
+`3` (farthest-point fill; Asymptotic Net, Conjugate Net, Curvature
+Streamlines) is a second kind of fill: instead of starting each new curve one
+spacing beside an existing one, it starts it in the middle of the widest gap
+left, and stops when no gap is wider than 1.6 × `Sp`. You get fewer curves of
+the same length and fewer T-junctions, and the typical gap is closer to `Sp`
+(fill `0` lets curves converge to 0.7–0.8 × `Sp` after starting exactly `Sp`
+apart), but the gaps vary more: anything from 0.8 to 1.6 × `Sp` where the
+surface spreads the curves. On a torus the meridians come out as 2, 4, 8 …
+2^k evenly spread circles. Geodesic Net ignores `3` and uses `0`.
 
 ## 3. Check buildability (2 minutes)
 

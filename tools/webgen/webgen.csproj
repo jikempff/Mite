@@ -9,5 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Mite.Core/Mite.Core.csproj" />
     <Compile Include="../../tests/Mite.Tests/TestMeshes.cs" />
+    <Compile Include="../../tests/Mite.Tests/PlacementMetrics.cs" />
   </ItemGroup>
 </Project>

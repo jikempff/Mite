@@ -31,7 +31,7 @@ public class StreamlinesComponent : MiteComponent
         pManager.AddNumberParameter("Spacing", "Sp", "Target distance between adjacent lines (AutoSpace; 0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddIntegerParameter("MaxCurves", "Mx", "Cap on the number of lines (AutoSpace, default 200)", GH_ParamAccess.item, 200);
         pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
-        pManager.AddIntegerParameter("Layout", "Ly", "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates", GH_ParamAccess.item, 0);
+        pManager.AddIntegerParameter("Layout", "Ly", "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed), 3 = farthest-point fill (each new curve starts in the middle of the widest gap left, Mebarki et al. 2005: no gap wider than 1.6 x Spacing, fewer T-junctions, gaps less uniform than 0). Webs never merge; their spacing away from the seed line is what the surface dictates", GH_ParamAccess.item, 0);
         pManager[1].Optional = true;
         pManager[5].Optional = true;
     }
@@ -75,7 +75,7 @@ public class StreamlinesComponent : MiteComponent
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps, ShouldCancel = Cancelled,
                 MaxCurves = Math.Max(1, maxCurves), Continuous = continuous,
-                Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
+                Layout = ToNetLayout(layout)
             };
             lines = EvenlySpacedNet.TraceField(data, dirs, null, seeds.Count > 0 ? seeds[0] : -1, opts);
             ReportTracing(opts, "Streamlines", proj);

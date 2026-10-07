@@ -112,6 +112,9 @@ public class GeodesicNetComponent : MiteComponent
                 FromBorder = fromBorder, BorderAngle = borderAngle,
                 Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
             };
+            if (layout == 3)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                    "Layout 3 (farthest-point fill) needs a direction field; a geodesic family has none, so the evenly spaced fill (0) is used.");
             lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], opts);
             ReportTracing(opts, "Geodesics", proj);
             netSpacing = opts.ResolvedSpacing;

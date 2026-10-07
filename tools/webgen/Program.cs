@@ -1334,6 +1334,69 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         alarms += l.Count; alarmText.AddRange(l.Select(x => name + ": " + x.Code));
     }
     numbers["advice"] = new { minAngle = minAngleRow, spacing = spacingRow, units = unitsRow, falseAlarms = alarms, falseAlarmText = alarmText };
+// ---------- Farthest-point seeding (Layout 3; Mebarki, Alliez & Devillers 2005) ----------
+{
+    var t = Stopwatch.StartNew();
+    // 1. uniform field on a 2 × 2 plane: the curves must sit at the centres of the
+    //    successive widest voids (frame ½ Spacing outside the border, voids split
+    //    while wider than 1.6 Spacing)
+    int gn = 40; double gs = 2.0, sp = 0.13;
+    var gv = new List<Vec3d>(); var gf = new List<int[]>();
+    for (int j = 0; j <= gn; j++) for (int i = 0; i <= gn; i++) gv.Add(new Vec3d(-gs / 2 + gs * i / gn, -gs / 2 + gs * j / gn, 0));
+    for (int j = 0; j < gn; j++) for (int i = 0; i < gn; i++) { int a = j * (gn + 1) + i; gf.Add(new[] { a, a + 1, a + gn + 2 }); gf.Add(new[] { a, a + gn + 2, a + gn + 1 }); }
+    var flat = new MeshData(gv.ToArray(), gf.ToArray());
+    var uni = Enumerable.Repeat(new Vec3d(1, 0, 0), flat.VertexCount).ToArray();
+    var fl = EvenlySpacedNet.TraceField(flat, uni, null, -1, new EvenlySpacedNet.Options { Spacing = sp, Layout = NetLayout.FillFarthest, Continuous = false });
+    var cuts = new List<double> { -1 - 0.5 * sp, 0, 1 + 0.5 * sp }; var expect = new List<double> { 0 };
+    while (true)
+    {
+        cuts.Sort(); int bi = -1; double bw = 1.6 * sp - 1e-12;
+        for (int i = 0; i + 1 < cuts.Count; i++) if (cuts[i + 1] - cuts[i] >= bw) { bw = cuts[i + 1] - cuts[i]; bi = i; }
+        if (bi < 0) break;
+        double m = 0.5 * (cuts[bi] + cuts[bi + 1]); cuts.Add(m); expect.Add(m);
+    }
+    expect.Sort();
+    var ys = fl.Select(c => c.Average(q => q.Y)).OrderBy(y => y).ToList();
+    double planeErr = ys.Count == expect.Count ? ys.Zip(expect, (a, b) => Math.Abs(a - b) / sp).Max() : double.NaN;
+    // 2. torus (R = 3, r = 1) max-curvature lines = meridians: 2^k of them, every outer gap in [0.8, 1.6) Spacing
+    var torus = AnalyticShapes.Build("torus", 3, 1, 0, 64);
+    var tpc = PrincipalCurvature.Compute(torus, 2);
+    double ts = 0.37;
+    var mer = EvenlySpacedNet.TraceField(torus, tpc.D1, null, -1, new EvenlySpacedNet.Options { Spacing = ts, Layout = NetLayout.FillFarthest, Continuous = false });
+    var us = mer.Select(c => Math.Atan2(c.Average(q => q.Y), c.Average(q => q.X))).OrderBy(u => u).ToList();
+    var outer = us.Select((u, i) => 2 * 4.0 * Math.Sin(((i + 1 < us.Count ? us[i + 1] : us[0] + 2 * Math.PI) - u) / 2) / ts).ToList();
+    int merExpected = 1; while (2 * 4.0 * Math.Sin(Math.PI / (2 * merExpected)) >= 0.8 * ts) merExpected *= 2;
+    var merJl = EvenlySpacedNet.TraceField(torus, tpc.D1, null, -1, new EvenlySpacedNet.Options { Spacing = ts, Continuous = false });
+    var usJ = merJl.Select(c => Math.Atan2(c.Average(q => q.Y), c.Average(q => q.X))).OrderBy(u => u).ToList();
+    var outerJ = usJ.Select((u, i) => 2 * 4.0 * Math.Sin(((i + 1 < usJ.Count ? usJ[i + 1] : usJ[0] + 2 * Math.PI) - u) / 2) / ts).ToList();
+    numbers["torusFarthest"] = new { curves = mer.Count, expected = merExpected, minGap = R3(outer.Min()), maxGap = R3(outer.Max()), fillCurves = merJl.Count, fillMinGap = R3(outerJ.Min()), fillMaxGap = R3(outerJ.Max()) };
+    scenes["torusFarthest"] = new { wire = TorusWire(3, 1, 64, 32, 8, 8), max = mer.Select(l => Line(l, 3)).ToArray() };
+    // 3. the neighbour fill and the farthest-point fill side by side (family A, classic mode, Spacing = diagonal / 25)
+    var rows = new List<object>();
+    foreach (var name in new[] { "saddle", "catenoid", "hyperboloid" })
+    {
+        var mesh = AnalyticShapes.Build(name, 0, 0, 0, 48);
+        var pc = PrincipalCurvature.Compute(mesh, 2);
+        var field = AsymptoticCurves.ComputeDirections(pc, mesh, 15.0);
+        double s = mesh.BoundingBoxDiagonal() / 25.0;
+        object Row(NetLayout lay)
+        {
+            var o = new EvenlySpacedNet.Options { Spacing = s, Layout = lay, Continuous = false };
+            var c = EvenlySpacedNet.TraceField(mesh, field.Family1, field.Exists, -1, o, field.Family2);
+            var m = PlacementMetrics.Measure(mesh, field.Exists, c, s);
+            return new { curves = m.Curves, length = R3(m.TotalLength), freeEnds = m.FreeEnds, ends = m.Ends, p5 = R3(m.GapP5), median = R3(m.GapMedian), p95 = R3(m.GapP95), near = R3(100 * m.GapNear), interiorVoid = R3(m.LargestInteriorVoid), rejected = o.RejectedSeeds };
+        }
+        rows.Add(new { name, fill = Row(NetLayout.Fill), far = Row(NetLayout.FillFarthest) });
+    }
+    // scene: the saddle of the card, both families by farthest-point seeding
+    var saddle = TestMeshes.CreateSaddle(40, 2.0);
+    var spc = PrincipalCurvature.Compute(saddle);
+    var sf = AsymptoticCurves.ComputeDirections(spc);
+    var fa = EvenlySpacedNet.TraceField(saddle, sf.Family1, sf.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.15, Layout = NetLayout.FillFarthest }, sf.Family2);
+    var fb = EvenlySpacedNet.TraceField(saddle, sf.Family2, sf.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.15, Layout = NetLayout.FillFarthest }, sf.Family1);
+    scenes["asymCat_farthest"] = new { label = "saddle, farthest-point fill (Layout 3)", wire = SaddleWire(40, 2.0, 5), a = fa.Select(l => Line(l, 3)).ToArray(), b = fb.Select(l => Line(l, 3)).ToArray() };
+    t.Stop();
+    numbers["farthest"] = new { planeCurves = ys.Count, planeExpected = expect.Count, planeErr = R3(planeErr), rows, sceneA = fa.Count, sceneB = fb.Count, ms = t.ElapsedMilliseconds };
 }
 
 numbers["totalMs"] = sw.ElapsedMilliseconds;

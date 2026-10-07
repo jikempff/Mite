@@ -21,9 +21,17 @@ public enum NetLayout
     WebBorder,
     /// <summary>Web seeded every Spacing along the crossing curve through the seed; every curve border to border.</summary>
     WebCross,
+    /// <summary>
+    /// Evenly spaced fill by farthest-point seeding (Mebarki, Alliez &amp; Devillers
+    /// 2005): every new curve starts at the point farthest from all curves and
+    /// from the border, until no gap is wider than Saturation · Spacing. Direction
+    /// fields only (asymptotic, principal, conjugate); geodesic families treat it
+    /// as Fill.
+    /// </summary>
+    FillFarthest,
 }
 
-public static class EvenlySpacedNet
+public static partial class EvenlySpacedNet
 {
     public class Options
     {
@@ -110,6 +118,27 @@ public static class EvenlySpacedNet
         /// </summary>
         public bool WebFillGaps { get; set; } = true;
 
+        /// <summary>
+        /// FillFarthest only: Mebarki, Alliez &amp; Devillers' saturation ratio. A
+        /// new curve is seeded wherever the empty disc around the farthest point
+        /// has a diameter above Saturation · Spacing, so seeds start at least
+        /// ½ Saturation · Spacing from every curve and, at the end, no point of
+        /// the region is farther than that from a curve (default 1.6, the value
+        /// of all their experiments; clamped to at least 1).
+        /// </summary>
+        public double Saturation { get; set; } = 1.6;
+
+        /// <summary>
+        /// Set after a FillFarthest run: the diameter of the widest gap left
+        /// (twice the largest distance from a usable vertex to the nearest curve
+        /// or, padded by half a Spacing, to the border), counting the
+        /// neighbourhoods of seeds that could not grow a curve.
+        /// </summary>
+        public double LargestGap { get; internal set; }
+
+        /// <summary>Set after a FillFarthest run: seeds whose curve was too short to keep (their neighbourhood is left empty).</summary>
+        public int RejectedSeeds { get; internal set; }
+
         /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
         public int SmoothingPasses { get; set; } = 10;
 
@@ -180,6 +209,8 @@ public static class EvenlySpacedNet
         Vec3d[]? secondaryDirs = null)
     {
         options ??= new Options();
+        if (options.Layout == NetLayout.FillFarthest)
+            return TraceFieldFarthest(mesh, dirs, mask, firstSeed, options, secondaryDirs);
         if (options.Layout != NetLayout.Fill)
             return TraceFieldWeb(mesh, dirs, mask, firstSeed, options, secondaryDirs,
                 options.Layout == NetLayout.WebCross ? WebSeeding.Cross : WebSeeding.Border);
@@ -446,7 +477,12 @@ public static class EvenlySpacedNet
         Func<Vec3d[], int, Vec3d, Vec3d, Vec3d, double>? seedAngle = K == null ? null :
             (parent, index, point, tangent, side) => JacobiStartAngle(proj, K, parent, index, spacing, maxAngle);
 
-        bool web = options.Layout != NetLayout.Fill;
+        // FillFarthest is a fill for direction fields only: a geodesic family has
+        // no direction of its own in the middle of a void (a geodesic carried
+        // there parallel to its nearest neighbour crossed the others and left
+        // 60 of 112 free ends on the saddle), so geodesics keep the neighbour
+        // fill, where every new geodesic starts beside its parent (Jacobi angle)
+        bool web = options.Layout == NetLayout.WebBorder || options.Layout == NetLayout.WebCross;
         var border = options.FromBorder || options.Layout == NetLayout.WebBorder
             ? BorderSeeds(proj, spacing, options.BorderAngle * Math.PI / 180.0, proj.Mesh.Vertices[firstSeed]) : null;
         if (web && options.Layout == NetLayout.WebCross)

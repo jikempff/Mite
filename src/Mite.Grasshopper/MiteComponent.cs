@@ -239,6 +239,10 @@ public abstract partial class MiteComponent : GH_Component
         Report(InputAdvice.SectionScale(width, thickness, lengths, ModelToMeters(), unit));
     }
 
+    /// <summary>The Layout input of the field-based net components: 0 fill, 1 border web, 2 cross web, 3 farthest-point fill.</summary>
+    protected static NetLayout ToNetLayout(int layout) =>
+        layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : layout == 3 ? NetLayout.FillFarthest : NetLayout.Fill;
+
     /// <summary>
     /// Warns when the evenly-spaced tracer stopped early (cap or Esc); with the
     /// projection, also checks Spacing and Step against the mesh edge and the
@@ -247,6 +251,9 @@ public abstract partial class MiteComponent : GH_Component
     /// </summary>
     protected void ReportTracing(EvenlySpacedNet.Options opts, string what, MeshProjection? proj = null, bool[]? region = null)
     {
+        if (opts.Layout == NetLayout.FillFarthest && opts.RejectedSeeds > 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                $"{what}: {opts.RejectedSeeds} farthest-point seed(s) could not grow a curve of the minimum length (2 x Spacing); those gaps stay open, up to {opts.LargestGap:G3} wide.");
         if (opts.Cancelled)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{what}: cancelled with Esc, output is partial.");
         if (opts.ReachedMaxCurves)

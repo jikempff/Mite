@@ -532,10 +532,50 @@ remains the self-test review page.
       band — 1.2.2. Still open: farthest-point seeding (next item). The
       combing is replaced by exact twist labels (A, 2026-10-06).
 - [ ] Evenly spaced curve families on surfaces: Jobard & Lefer 1997
+      band — 1.2.2. Farthest-point seeding done 2026-10-07 (next item). Still
+      open: a check that combing handles the 3-fold Enneper flat point (A).
+- [x] Evenly spaced curve families on surfaces: Jobard & Lefer 1997
       (Creating evenly-spaced streamlines of arbitrary density); Mebarki,
       Alliez & Devillers 2005 (Farthest point seeding for efficient
-      placement of streamlines) — farthest-point seeding gives longer,
-      better-spaced curves than the neighbour-offset seeding used now.
+      placement of streamlines) — 2026-10-07: `NetLayout.FillFarthest`
+      (Layout = 3 on Asymptotic Net, Conjugate Net, Curvature Streamlines;
+      `EvenlySpacedNet.Farthest.cs`; new API only: `Options.Saturation`,
+      `LargestGap`, `RejectedSeeds`). Read from INRIA RR-5524 and CGAL's
+      Stream_lines_2 source. Their parameters disagree by a factor 2 (prose:
+      seed voids whose circumcircle *diameter* exceeds saturation × spacing;
+      CGAL: circumradius ≥ dSep·dRat, stop at dSep, frame dSep outside); both
+      agree with Mite's Spacing S = 2·dSep: seeds ≥ 0.8 S from every curve,
+      frame ½ S outside the border (no seed on the border itself), stop
+      distance kept as TestFactor / MergeFactor so the two fills differ only
+      in where curves start. On the mesh the Delaunay voids are a vertex
+      distance field (Dijkstra carrying the nearest curve point, Euclidean
+      re-measure), the seed refined to the empty circle's centre by a ray
+      scan and a compass search with exact polyline / border distances.
+      Exact checks: uniform field on a plane — all 15 curves at the
+      predicted void centres within 0.0002 S; torus meridians — exactly 2^k,
+      every outer gap in [0.8, 1.6] S (Layout 0: 56 meridians, 0.89–1.89 S).
+      Saddle / catenoid / hyperboloid (family A, classic): 25 / 27 / 35
+      curves instead of 31 / 33 / 39, same mean length, free ends 0 / 0 / 0
+      instead of 4 / 0 / 0, median gap 0.85 / 0.89 / 0.81 S instead of
+      0.83 / 0.73 / 0.72, but p95 1.39 / 1.35 / 1.28 instead of ≈ 1.0.
+      Finding: the paper's "longer streamlines" did not show on these
+      surfaces (mean length equal) — Mite's continuous tracing already runs
+      curves border to border; what FPS changes is fewer T-junctions and a
+      spacing that honours S in the median instead of converging below it.
+      Not done / follow-ups:
+      - Geodesic families keep Layout 0: a geodesic has no direction of its
+        own in the middle of a void; seeding it parallel to the nearest
+        curve (transported) gave 60 of 112 free ends on the saddle and
+        4 rejected seeds on a cylinder vault. A geodesic FPS would need the
+        Jacobi start angle of the neighbour fill at the void centre.
+      - The web app has no Layout 3 yet (its Layout 3 is the asymptotic
+        web): add a "farthest" chip in `Api.Net` (e.g. Layout 4).
+      - Mebarki's multiresolution (lengthen existing curves before densifying)
+        and variable density (spacing from a field, e.g. utilisation) are
+        not implemented.
+      - A tapering / Turk–Banks pass for the gaps that end up near 1.6 S.
+      - Cost: 0.8–2.5 s per family against 0.2–0.6 s for Layout 0 (the
+        vertex scan per seed is O(n); a heap of vertex keys would remove it).
 - [ ] Asymptotic gridshells: Schling, Hitrec & Barthel 2017 (Designing Grid
       Structures Using Asymptotic Curve Networks, Humanizing Digital
       Reality / AAG); Schling, Wang, Hoyer & Pottmann 2018 (Design and
@@ -1134,6 +1174,11 @@ Open
 - [x] 2026-10-06 (session 2, B): runtime messages with the fix in them —
       `InputAdvice` checks of spacing, step, saddle region / MinAngle, seeds
       and lath sections, wired into 12 components, bench self-tests.
+- [x] 2026-10-07 (session 1, D): farthest-point seeding (Mebarki, Alliez &
+      Devillers 2005) as Layout 3 of the field nets, with exact plane and
+      torus placements and a side-by-side measure against the neighbour
+      fill (`PlacementMetrics`, bench checks on Asymptotic Net and Curvature
+      Streamlines).
 - [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
       Gridshell Analysis joints inserted exactly (the snap had chained joints
       into a few nodes), supports fixed / pinned, joint stiffness, self-weight,
