@@ -123,5 +123,10 @@ if os.path.exists("favicon.svg"):
     page = page.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,' + fav + '">', 1)
 page = page.replace("/*__NAV__*/", "".join(nav)).replace("/*__CARDS__*/", "".join(cards))
 page = page.replace("/*__SCENES__*/", json.dumps(scenes, separators=(",", ":"))).replace("/*__NUMBERS__*/", json.dumps(numbers)).replace("/*__ORDER__*/", json.dumps([slug(n) for n in COMP_ORDER]))
+# review tools (find / filter, keyboard, GitHub issue draft) live in their own files and are
+# appended here instead of being edited into template.html; the script runs after the page script
+if os.path.exists("review.js"):
+    page = page.replace("</style>", open("review.css").read() + "</style>", 1)
+    page += "\n<script>\n" + open("review.js").read() + "</script>\n"
 open("site/index.html", "w").write(page)
 print("bytes", len(page))
