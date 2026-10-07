@@ -98,6 +98,16 @@ single cross misses) with further seed crosses one spacing from the nearest
 curve, and only ends a curve early where it would touch a curve of its own
 family — the orange end squares in the web app.
 
+`3` (farthest-point fill; Asymptotic Net, Conjugate Net, Curvature
+Streamlines) is a second kind of fill: instead of starting each new curve one
+spacing beside an existing one, it starts it in the middle of the widest gap
+left, and stops when no gap is wider than 1.6 × `Sp`. You get fewer curves of
+the same length and fewer T-junctions, and the typical gap is closer to `Sp`
+(fill `0` lets curves converge to 0.7–0.8 × `Sp` after starting exactly `Sp`
+apart), but the gaps vary more: anything from 0.8 to 1.6 × `Sp` where the
+surface spreads the curves. On a torus the meridians come out as 2, 4, 8 …
+2^k evenly spread circles. Geodesic Net ignores `3` and uses `0`.
+
 ## 3. Check buildability (2 minutes)
 
 Wire any net's curves into **Lath Analysis** together with the same mesh:

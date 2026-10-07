@@ -78,7 +78,7 @@
     "name": "Layout",
     "nick": "Ly",
     "type": "Integer",
-    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
+    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed), 3 = farthest-point fill (each new curve starts in the middle of the widest gap left, Mebarki et al. 2005: no gap wider than 1.6 x Spacing, fewer T-junctions, gaps less uniform than 0). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
    }
@@ -298,7 +298,7 @@
     "name": "Layout",
     "nick": "Ly",
     "type": "Integer",
-    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
+    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed), 3 = farthest-point fill (each new curve starts in the middle of the widest gap left, Mebarki et al. 2005: no gap wider than 1.6 x Spacing, fewer T-junctions, gaps less uniform than 0). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
    }
@@ -660,7 +660,7 @@
     "name": "Layout",
     "nick": "Ly",
     "type": "Integer",
-    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
+    "desc": "Layout of the family: 0 = evenly spaced fill (new geodesics beside existing ones, stopped where they converge; T-junctions), 1 = web from the border edge nearest the seed (every geodesic runs until it leaves the mesh, seeds every Spacing along the edge at BorderAngle), 2 = web from the seed cross (seeds every Spacing along the geodesic through the seed perpendicular to Direction, each parallel-transported). Webs never merge; geodesics converge where K > 0 and diverge where K < 0 (Jacobi), so their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
    }
@@ -2464,7 +2464,7 @@
     "name": "Layout",
     "nick": "Ly",
     "type": "Integer",
-    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
+    "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed), 3 = farthest-point fill (each new curve starts in the middle of the widest gap left, Mebarki et al. 2005: no gap wider than 1.6 x Spacing, fewer T-junctions, gaps less uniform than 0). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
    }
