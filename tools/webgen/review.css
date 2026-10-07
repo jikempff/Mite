@@ -1,0 +1,25 @@
+/* Mite Bench review tools (review.js): find box, facets, empty state, shortcut list. */
+[hidden]{display:none!important}
+.finder{display:grid;gap:6px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.finder-l{font:600 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:4px}
+.finder-q{display:flex;gap:6px}
+.finder input[type=search]{flex:1;min-width:0;font:13px var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.finder select{font:12.5px var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 6px}
+.finder-s{display:flex;flex-wrap:wrap;gap:4px}
+.finder-s button{padding:3px 8px;border-radius:12px;font-size:12px}
+.finder-s button .n{font:11px var(--mono);color:var(--muted)}
+.finder-s button[aria-pressed="true"]{background:var(--acc);border-color:var(--acc);color:var(--surface)}
+.finder-s button[aria-pressed="true"] .n{color:inherit}
+.finder-s button:disabled{opacity:.45;cursor:default;border-color:var(--line)}
+.finder-st{margin:2px 0 0;font:12px var(--mono);color:var(--muted)}
+.finder-empty{background:var(--surface);border:1px dashed var(--line);border-radius:8px;padding:18px;margin:22px 0;color:var(--muted)}
+.finder-empty p{margin:0 0 10px}
+.card h3:focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:2px}
+.card:focus-within{border-color:var(--acc)}
+.keys-dlg{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:18px 20px;max-width:min(440px,calc(100vw - 32px))}
+.keys-dlg::backdrop{background:rgba(0,0,0,.35)}
+.keys-dlg h2{font:600 18px/1.2 var(--disp);margin:0 0 10px}
+.keys-dlg td{border:0;padding:3px 10px 3px 0}
+kbd{font:12px var(--mono);background:var(--surface2);border:1px solid var(--line);border-radius:4px;padding:1px 6px;white-space:nowrap}
+.keys-on{display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:500}
+.keys-note{color:var(--muted);font-size:12.5px;margin:6px 0 12px}

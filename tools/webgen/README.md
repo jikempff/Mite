@@ -20,6 +20,13 @@ python3 build.py           # assembles site/index.html from template.html + note
 - `notes.py` — per component: which demo to show, "what to expect" bullets,
   and self-test checks as JavaScript expressions over `N` (numbers) and `SC` (scenes).
 - `template.html` / `build.py` — page shell and assembly.
+- `review.js` / `review.css` — the review tools (find box and facets with
+  counts, keyboard shortcuts, GitHub issue draft); `build.py` appends them to
+  the page. Their pure functions are tested in
+  `tests/Mite.Tests/BenchReviewTests.cs`.
+- `bench-smoke.js` — headless check of the built page: every self-test chip
+  PASS, then the find box, facets, keys and issue link driven in Chromium:
+  `node bench-smoke.js site/index.html [light|dark]` (needs `playwright`).
 
 `site/index.html` is self-contained (≈1 MB) and is published as a Claude
 artifact; open it locally in any browser as well.

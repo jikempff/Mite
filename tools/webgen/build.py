@@ -16,16 +16,7 @@ TAB_BLURB = {
     "Kinetics": "Nets that move: scissor-jointed asymptotic grids as mechanisms.",
     "Util": "Mesh intake, projection and colouring helpers.",
 }
-COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics",
-              "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
-              "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Mite Net", "Asymptotic Web",
-              "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
-              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Strip", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
-              "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
-              "Lath Analysis", "Gridshell Analysis", "Net Distributions", "Mesh Isocurves",
-              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
-              "Net Kinetics",
-              "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
+COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation", "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Mite Net", "Asymptotic Web", "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves", "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Strip", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology", "Net Distributions", "Net Kinetics", "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 byname = {c["name"]: c for c in comps}
 assert set(byname) == set(COMP_ORDER), set(byname) ^ set(COMP_ORDER)
 
@@ -158,5 +149,10 @@ page = page.replace("/*__PALETTE_LIGHT__*/", palette_vars(numbers["palette"], "l
 page = page.replace("/*__NAV__*/", "".join(nav)).replace("/*__CARDS__*/", "".join(cards))
 page = page.replace("/*__SCENES__*/", json.dumps(scenes, separators=(",", ":"))).replace("/*__NUMBERS__*/", json.dumps(numbers)).replace("/*__ORDER__*/", json.dumps([slug(n) for n in COMP_ORDER]))
 page = page.replace('<span id="total">28</span>', f'<span id="total">{len(COMP_ORDER)}</span>')
+# review tools (find / filter, keyboard, GitHub issue draft) live in their own files and are
+# appended here instead of being edited into template.html; the script runs after the page script
+if os.path.exists("review.js"):
+    page = page.replace("</style>", open("review.css").read() + "</style>", 1)
+    page += "\n<script>\n" + open("review.js").read() + "</script>\n"
 open("site/index.html", "w").write(page)
 print("bytes", len(page))

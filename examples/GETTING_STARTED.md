@@ -315,6 +315,16 @@ subdivides the laths so they can bend between joints, at several times the
 solve time (the twist energy does not change: a lath twists uniformly between
 hinges).
 
+## Reviewing a release on the Mite Bench
+
+The bench page (`tools/webgen`, see its README) runs every component on
+analytic shapes and shows the result. To review it quickly: type part of a
+name or an input in **Find a component** (or press `/`), pick **Failing** to
+see only components whose self-test fails, then walk the cards with `j` / `k`,
+tick with `x` and write a note with `n` (`?` lists the keys; they can be
+switched off there). **Open as GitHub issue** turns the ticks and notes into a
+new issue on the Mite repository.
+
 ## Units
 
 All lengths (Spacing, Step, EdgeLength, Width, Thickness, Offset, Margin,

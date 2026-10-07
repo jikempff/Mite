@@ -515,8 +515,46 @@ remains the self-test review page.
       spacing preview (points by local spacing) on the Grasshopper component
       (with the custom preview item in B).
 - [ ] Colour-map legends identical to Mesh Colour Map in Grasshopper.
-- [ ] Search / filter (failing tests only, by component, by tab); keyboard
-      navigation; ticked state summary exportable as a GitHub issue draft.
+- [x] Search / filter (failing tests only, by component, by tab); keyboard
+      navigation; ticked state summary exportable as a GitHub issue draft —
+      2026-10-07 (session 2). `tools/webgen/review.js` + `review.css`,
+      appended by `build.py` (template.html untouched, so the bundles that
+      edit it do not conflict here). Literature: Shneiderman 1994 (dynamic
+      queries: rapid, incremental, reversible, feedback within 100 ms —
+      measured 8 ms median, 65 ms worst per keystroke on the 28-card page),
+      Hearst 2009 ch. 8 (facets with query previews, no empty result sets,
+      keyword search inside the facets, one click to clear), WAI-ARIA APG
+      keyboard interface (shortcuts never replace Tab; avoid browser/AT
+      keys; never lose focus), WCAG 2.1 SC 2.1.4 (single-key shortcuts can be
+      switched off) and 4.1.3 (result count in a role=status region), GitHub
+      Docs on issues/new query parameters. Find box over name, nickname, tab,
+      description, expectations, self-test names and parameter rows (case,
+      accents, minus/superscripts folded; terms AND-ed; "quoted phrases");
+      facets All / Failing / To review / Reviewed / With notes and a tab
+      picker, each showing the count that choosing it would give, disabled at
+      0 except the active one; empty state with "Clear the filters"; state in
+      the URL (?q=&show=&tab=). Keys `/` `j` `k` `x` `n` `f` `?` and Esc,
+      inert in text fields and with Ctrl/Alt/Meta; a switch in the `?` dialog
+      turns the single keys off (remembered per browser). "Open as GitHub
+      issue" / "Copy as Markdown": a task list with failing self-tests first,
+      title "Mite Bench review: a/b make sense, n self-tests failing"; title
+      and body only (labels/assignees 404 for anyone without triage rights,
+      per GitHub's docs); bodies over an 8 000-character URL budget are cut at
+      whole lines with a note, the full text goes to the clipboard (28 cards
+      ticked with 150-character notes: 6 131 characters, fits).
+      Tests: `BenchReviewTests` (30, Jint 4.16.4 runs the pure functions:
+      folding, AND/phrase queries, every facet count equal to the size of
+      the result of choosing it over 120 states, key map incl. SC 2.1.4,
+      URL round trip, exact Markdown, URL budget at 8 000 and 3 000 with
+      multi-byte notes); `tools/webgen/bench-smoke.js` drives the built page
+      in Chromium (40 checks, light and dark).
+      Open: (a) GitHub's real URL limit is undocumented and could not be
+      probed from the session (the proxy answered 403); 8 000 is an
+      assumption — José can try a long review once. (b) Mode-menus bundle:
+      its Message lines and menu tables are not in the search text yet
+      (add their selectors to `textOf` after merging). (c) Per-card "copy link" to a
+      filtered view; arrow-key roving focus inside the facet group (APG
+      toolbar pattern) if the chips grow.
 - [ ] Component cards show the Grasshopper icon at readable size and the
       parameter order as it appears on the canvas (icons refreshed
       2026-09-25).
@@ -1179,6 +1217,8 @@ Open
       torus placements and a side-by-side measure against the neighbour
       fill (`PlacementMetrics`, bench checks on Asymptotic Net and Curvature
       Streamlines).
+- [x] 2026-10-07 (session 2, C): Mite Bench review tools — find box,
+      facets with counts, keyboard shortcuts, GitHub issue draft.
 - [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
       Gridshell Analysis joints inserted exactly (the snap had chained joints
       into a few nodes), supports fixed / pinned, joint stiffness, self-weight,
