@@ -9,7 +9,16 @@ cd tools/webgen
 python3 extract_components.py   # components.json + icons.json from the sources
 dotnet run -c Release      # runs the library, writes scenes.json + numbers.json
 python3 build.py           # assembles site/index.html from template.html + notes.py
+cd ../.. && node tools/webgen/selftest.js --min 71   # all self-tests, light and dark
 ```
+
+`selftest.js` opens the page in headless Chromium once per colour scheme and
+prints `light: 71 PASS, 0 FAIL, 0 not run, 0 page errors`; it exits 1 on any
+FAIL, a check that did not run, a page error, or fewer checks than `--min`.
+It needs Playwright (`npm i playwright`, or `NODE_PATH` pointing at an
+install; `CHROMIUM_PATH` selects a browser binary). CI
+(`.github/workflows/ci.yml`) runs it on every push and keeps the page as a
+build artifact; raise `--min` there when `notes.py` gains checks.
 
 - `Program.cs` — runs the algorithms on the test shapes and records geometry
   (`scenes.json`) and measurements (`numbers.json`).

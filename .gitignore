@@ -12,3 +12,7 @@ dist/*.gha
 dist/*.dll
 dist/*.yak
 dist/*.png
+
+# Python bytecode (tools/generate_icons.py, tools/webgen/build.py)
+__pycache__/
+*.pyc

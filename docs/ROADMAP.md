@@ -2507,6 +2507,28 @@ Open
       light Rhino UI, no other plugins visible.
 - [ ] Description text and version notes from README's Unreleased section;
       bump the yak manifest.
+- [x] CI and release hygiene (2026-10-08, session 2; step 4 of the 1.4.0
+      integration): `.github/workflows/ci.yml` (Linux, .NET 10: Core +
+      Grasshopper build, tests, bench build + `tools/webgen/selftest.js`
+      light/dark, web publish + `tools/web-smoke.js`); `ReleaseConsistencyTests`
+      (one version in 9 places, component count in 5 places = component
+      classes, panel count, README list by panel, icons drawn / embedded / on
+      disk, bytecode ignored); `build-yak.sh` for the Mac; `build.py` makes
+      `site/` and uses UTF-8; the committed `.pyc` untracked.
+      Findings: GitHub's default `run` shell is `bash -e` without pipefail, so
+      `node web-smoke.js | tee` would have hidden a failure — the workflow sets
+      `shell: bash` (= `-eo pipefail`). `build.py` failed on a fresh clone
+      (`site/` is git-ignored and was never created). The bench has cards for
+      28 of the 30 components (Asymptotic Web, Flat Kit missing).
+- [ ] Watch the first CI run on GitHub (not observable from the sessions):
+      runner time of the web job (~4 min smoke test here) and whether
+      `playwright install --with-deps chromium` needs a newer Playwright than
+      1.56.0 on the then-current ubuntu-latest image.
+- [ ] Raise the bench self-test floor (`--min 71` in ci.yml) after the 1.4.0
+      integration adds checks; consider deriving it from `notes.py`.
+- [ ] A tag-triggered workflow that attaches the bench page and the web
+      site zip to a GitHub release (the .yak still needs Rhino's yak, so it
+      stays a local `build-yak.sh` / `build-yak.ps1` step).
 
 ## Done
 
@@ -2638,6 +2660,8 @@ Open
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench
       self-tests (75 PASS).
+- [x] 2026-10-08 (session 2, release hygiene): CI workflow, release
+      consistency tests, `build-yak.sh`, bench self-test runner (see F).
 - [x] 2026-10-08 (session 1, D/A): exact geodesic paths by edge flips
       (FlipOut + signposts + Steiner-graph start) for Geodesic Path, exact
       global closest point, the polyhedral cone as a test typology with its

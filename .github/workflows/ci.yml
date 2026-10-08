@@ -1,0 +1,134 @@
+# Continuous integration for Mite: the core and the Grasshopper plugin build,
+# the test suite passes, the Mite Bench page builds and all its self-tests
+# pass in light and dark, and the browser app publishes and passes its smoke
+# test. Everything runs on Linux: Mite.Grasshopper targets net48 and builds
+# against the reference assemblies, so no Rhino is needed. The Windows smoke
+# test (tools/Mite.SmokeTest) loads Rhino and is not run here.
+#
+# Action versions (checked 2026-10-08): checkout v7, setup-dotnet v6,
+# setup-node v7, setup-python v7, upload-artifact v7 — all node24 actions,
+# which GitHub-hosted runners support. Browsers are installed the way
+# Playwright's CI guide does it (`playwright install --with-deps`), for
+# Chromium only.
+name: CI
+
+on:
+  push:
+    branches: [main, 'release-*', 'session/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # explicit bash = bash -eo pipefail, so `node … | tee` fails with node
+    shell: bash
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  PLAYWRIGHT_VERSION: 1.56.0
+
+jobs:
+  build-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Build Mite.Core (net10.0 + net48)
+        run: dotnet build src/Mite.Core/Mite.Core.csproj -c Release
+      - name: Build Mite.Grasshopper (net48)
+        run: dotnet build src/Mite.Grasshopper/Mite.Grasshopper.csproj -c Release
+      - name: Test
+        run: dotnet test tests/Mite.Tests -c Release --logger "trx;LogFileName=mite-tests.trx" --results-directory TestResults
+      - name: Test count
+        if: always()
+        run: |
+          f=TestResults/mite-tests.trx
+          if [ -f "$f" ]; then
+            line=$(grep -o '<Counters [^>]*>' "$f" | head -n 1)
+            echo "$line"
+            echo "### Tests" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`$line\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test-results
+          path: TestResults
+
+  bench:
+    name: Mite Bench page and self-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - name: Run the core on the test shapes
+        working-directory: tools/webgen
+        run: dotnet run -c Release
+      - name: Assemble the page
+        working-directory: tools/webgen
+        run: python3 build.py
+      - name: Install Playwright and Chromium
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw"
+          npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock "playwright@$PLAYWRIGHT_VERSION"
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Self-tests, light and dark (0 FAIL, no page errors)
+        # --min is a floor: raise it when notes.py gains checks
+        run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node tools/webgen/selftest.js tools/webgen/site/index.html --min 71
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mite-bench
+          path: tools/webgen/site/index.html
+          if-no-files-found: ignore
+
+  web:
+    name: Web app publish and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+      - name: Publish src/Mite.Web (no AOT)
+        run: dotnet publish src/Mite.Web -c Release -o "$RUNNER_TEMP/miteweb" -p:RunAOTCompilation=false
+      - name: Install Playwright and Chromium
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw"
+          npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock "playwright@$PLAYWRIGHT_VERSION"
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Serve and smoke-test
+        run: |
+          (cd "$RUNNER_TEMP/miteweb/wwwroot" && python3 -m http.server 8765 >/dev/null 2>&1 &)
+          for _ in $(seq 1 30); do curl -sf http://localhost:8765/ >/dev/null && break; sleep 1; done
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node tools/web-smoke.js http://localhost:8765 | tee web-smoke.txt
+          echo "### Web smoke test" >> "$GITHUB_STEP_SUMMARY"
+          echo "$(grep -c '^PASS' web-smoke.txt) PASS, $(grep -c '^FAIL' web-smoke.txt) FAIL" >> "$GITHUB_STEP_SUMMARY"
