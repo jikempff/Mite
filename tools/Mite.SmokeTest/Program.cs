@@ -408,6 +408,21 @@ internal static class Tests
                     $"quarter great circle, length {len:F3}");
             });
 
+        TestComponent("Geodesic Path (Method 0, curve shortening)",
+            new Mite.Grasshopper.Components.GeodesicPathComponent(),
+            c =>
+            {
+                SetInputs(c, (0, sphere.DuplicateMesh()), (5, 0));
+                SetPointList(c, 1, new Rhino.Geometry.Point3d(1, 0, 0));
+                SetPointList(c, 2, new Rhino.Geometry.Point3d(0, 1, 0));
+            },
+            c =>
+            {
+                var len = Numbers(c, 1).FirstOrDefault();
+                return Expect(CurveCount(c, 0) == 1 && System.Math.Abs(len - System.Math.PI / 2) < 0.05,
+                    $"quarter great circle by curve shortening, length {len:F3}");
+            });
+
         TestComponent("Net Topology",
             new Mite.Grasshopper.Components.NetTopologyComponent(),
             c =>

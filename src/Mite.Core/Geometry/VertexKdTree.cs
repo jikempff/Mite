@@ -113,4 +113,23 @@ internal sealed class VertexKdTree
         if (diff * diff < bestDist)
             NearestRecursive(p, farLo, farHi, depth + 1, ref best, ref bestDist);
     }
+
+    /// <summary>Indices of all vertices within distance r of p (exact).</summary>
+    public void WithinRadius(Vec3d p, double r, System.Collections.Generic.List<int> result)
+    {
+        if (_root < 0) return;
+        WithinRecursive(p, r * r, r, 0, _order.Length, 0, result);
+    }
+
+    private void WithinRecursive(Vec3d p, double r2, double r, int lo, int hi, int depth, System.Collections.Generic.List<int> result)
+    {
+        if (lo >= hi) return;
+        int mid = (lo + hi) / 2;
+        int idx = _order[mid];
+        if ((_points[idx] - p).LengthSquared <= r2) result.Add(idx);
+        int axis = depth % 3;
+        double diff = Axis(p, axis) - Axis(_points[idx], axis);
+        if (diff <= r) WithinRecursive(p, r2, r, lo, mid, depth + 1, result);
+        if (diff >= -r) WithinRecursive(p, r2, r, mid + 1, hi, depth + 1, result);
+    }
 }

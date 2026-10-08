@@ -163,7 +163,7 @@ public static class MeshCleanup
     /// BFS over face adjacency, flipping faces so shared edges are always
     /// traversed in opposite directions by the two adjacent faces.
     /// </summary>
-    private static void UnifyWinding(List<int[]> faces)
+    internal static void UnifyWinding(List<int[]> faces)
     {
         // Edge -> list of (face, direction the edge is used in)
         var edgeUse = new Dictionary<(int, int), List<(int face, int dir)>>();

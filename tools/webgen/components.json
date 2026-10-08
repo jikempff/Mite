@@ -680,7 +680,7 @@
   "file": "GeodesicPathComponent.cs",
   "name": "Geodesic Path",
   "nick": "GeoPath",
-  "desc": "Shortest path on a mesh between two points: the straight lath you would lay from A to B. Graph search finds the route, curve shortening on the surface straightens it into a geodesic. Points are matched pairwise (the last is reused when lists differ).",
+  "desc": "Shortest path on a mesh between two points: the straight lath you would lay from A to B. Method 1 (default) gives the exact geodesic of the mesh by edge flips (FlipOut, Sharp & Crane 2020): straight across every face and edge, never through a cone tip, through a saddle vertex only when that is shorter. Method 0 is the older curve shortening. Points are matched pairwise (the last is reused when lists differ).",
   "tab": "Gridshells",
   "icon": "GeodesicPath",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFC",
@@ -713,7 +713,7 @@
     "name": "Sampling",
     "nick": "S",
     "type": "Number",
-    "desc": "Point spacing of the result (0 = automatic: half the mesh edge length)",
+    "desc": "Point spacing of the result. Method 1: 0 = the exact polyline through every mesh-edge crossing; a spacing > 0 resamples it into a smooth interpolated curve. Method 0: 0 = half the mesh edge length",
     "access": "item",
     "default": "0.0"
    },
@@ -721,9 +721,17 @@
     "name": "Iterations",
     "nick": "I",
     "type": "Integer",
-    "desc": "Maximum straightening passes per level (default 500)",
+    "desc": "Method 0 only: maximum straightening passes per level (default 500). Method 1 runs until the path is a geodesic",
     "access": "item",
     "default": "500"
+   },
+   {
+    "name": "Method",
+    "nick": "Me",
+    "type": "Integer",
+    "desc": "0 = curve shortening (the only method up to 1.3.1: approximate, can cut corners and pick the wrong side of a vertex); 1 = exact geodesic by edge flips (FlipOut, Sharp & Crane 2020) started from a Steiner-point path (default)",
+    "access": "item",
+    "default": "1"
    }
   ],
   "outputs": [
@@ -731,7 +739,7 @@
     "name": "Paths",
     "nick": "G",
     "type": "Curve",
-    "desc": "Geodesic paths (smooth interpolated curves)",
+    "desc": "Geodesic paths: the exact polyline (Method 1, Sampling 0) or smooth interpolated curves",
     "access": "list",
     "default": null
    },

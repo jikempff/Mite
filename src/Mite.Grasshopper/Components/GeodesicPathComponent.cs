@@ -12,8 +12,10 @@ public class GeodesicPathComponent : MiteComponent
     public GeodesicPathComponent()
         : base("Geodesic Path", "GeoPath",
             "Shortest path on a mesh between two points: the straight lath you would lay from " +
-            "A to B. Graph search finds the route, curve shortening on the surface straightens it " +
-            "into a geodesic. Points are matched pairwise (the last is reused when lists differ).",
+            "A to B. Method 1 (default) gives the exact geodesic of the mesh by edge flips (FlipOut, " +
+            "Sharp & Crane 2020): straight across every face and edge, never through a cone tip, " +
+            "through a saddle vertex only when that is shorter. Method 0 is the older curve shortening. " +
+            "Points are matched pairwise (the last is reused when lists differ).",
             "Gridshells", "GeodesicPath") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDFC");
@@ -23,13 +25,16 @@ public class GeodesicPathComponent : MiteComponent
         pManager.AddMeshParameter("Mesh", "M", "Input mesh", GH_ParamAccess.item);
         pManager.AddPointParameter("From", "A", "Start points", GH_ParamAccess.list);
         pManager.AddPointParameter("To", "B", "End points", GH_ParamAccess.list);
-        pManager.AddNumberParameter("Sampling", "S", "Point spacing of the result (0 = automatic: half the mesh edge length)", GH_ParamAccess.item, 0.0);
-        pManager.AddIntegerParameter("Iterations", "I", "Maximum straightening passes per level (default 500)", GH_ParamAccess.item, 500);
+        pManager.AddNumberParameter("Sampling", "S", "Point spacing of the result. Method 1: 0 = the exact polyline through every mesh-edge crossing; " +
+            "a spacing > 0 resamples it into a smooth interpolated curve. Method 0: 0 = half the mesh edge length", GH_ParamAccess.item, 0.0);
+        pManager.AddIntegerParameter("Iterations", "I", "Method 0 only: maximum straightening passes per level (default 500). Method 1 runs until the path is a geodesic", GH_ParamAccess.item, 500);
+        pManager.AddIntegerParameter("Method", "Me", "0 = curve shortening (the only method up to 1.3.1: approximate, can cut corners and pick the wrong side of a vertex); " +
+            "1 = exact geodesic by edge flips (FlipOut, Sharp & Crane 2020) started from a Steiner-point path (default)", GH_ParamAccess.item, 1);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
     {
-        pManager.AddCurveParameter("Paths", "G", "Geodesic paths (smooth interpolated curves)", GH_ParamAccess.list);
+        pManager.AddCurveParameter("Paths", "G", "Geodesic paths: the exact polyline (Method 1, Sampling 0) or smooth interpolated curves", GH_ParamAccess.list);
         pManager.AddNumberParameter("Lengths", "L", "Geodesic length per path", GH_ParamAccess.list);
     }
 
@@ -45,7 +50,40 @@ public class GeodesicPathComponent : MiteComponent
         if (!DA.GetDataList(2, to)) return;
         DA.GetData(3, ref sampling);
         DA.GetData(4, ref iterations);
+        int method = 1;
+        if (Params.Input.Count > 5) DA.GetData(5, ref method);
         if (from.Count == 0 || to.Count == 0) return;
+
+        if (method != 0)
+        {
+            var fromV = from.ConvertAll(MeshConvert.ToVec3d);
+            var toV = to.ConvertAll(MeshConvert.ToVec3d);
+            var exact = FlipGeodesic.Compute(input.Data, fromV, toV, out string? reason);
+            if (exact != null)
+            {
+                var curvesE = new List<Curve?>();
+                var lengthsE = new List<double>();
+                int missing = 0;
+                foreach (var r in exact)
+                {
+                    if (r == null) { missing++; curvesE.Add(null); lengthsE.Add(double.NaN); continue; }
+                    if (r.Points.Length < 2) curvesE.Add(null);
+                    else if (sampling > 0)
+                        curvesE.Add(MeshConvert.ToCurve(ShortestPath.Resample(r.Points, sampling)));
+                    else
+                        curvesE.Add(MeshConvert.ToPolylineCurve(r.Points));
+                    lengthsE.Add(r.Length);
+                }
+                if (missing > 0)
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                        $"{missing} path(s) could not be found (points on disconnected mesh parts).");
+                DA.SetDataList(0, curvesE);
+                DA.SetDataList(1, lengthsE);
+                return;
+            }
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                $"Exact geodesics need a manifold triangle mesh ({reason}); used curve shortening (Method 0) instead. Mesh Cleanup may fix the mesh.");
+        }
 
         var proj = new MeshProjection(input.Data);
         var opts = new ShortestPath.Options { SampleLength = sampling, MaxIterations = Math.Max(1, iterations) };

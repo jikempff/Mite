@@ -123,8 +123,9 @@ var sw = Stopwatch.StartNew();
     var a = new Vec3d(1, 0, 0); var b = new Vec3d(-0.5, 0.5, 0.7071).Normalized();
     var sp = ShortestPath.Compute(proj, a, b)!.Value;
     var vp = ShortestPath.Dijkstra(sphere, proj.NearestVertexGlobal(a), proj.NearestVertexGlobal(b))!;
-    scenes["geoPath"] = new { wire = SphereWire(8), dijkstra = Line(vp.Select(v => sphere.Vertices[v]).ToArray()), path = Line(sp.Points), ends = new[] { P(a), P(b) } };
-    numbers["geoPath"] = new { length = R3(sp.Length), theory = R3(Math.Acos(Vec3d.Dot(a, b))), dijkstraLen = R3(ArcLen(vp.Select(v => sphere.Vertices[v]).ToArray())) };
+    var fo = FlipGeodesic.Compute(sphere, new[] { a }, new[] { b }, out _)![0]!;
+    scenes["geoPath"] = new { wire = SphereWire(8), dijkstra = Line(vp.Select(v => sphere.Vertices[v]).ToArray()), path = Line(sp.Points), flip = Line(fo.Points), ends = new[] { P(a), P(b) } };
+    numbers["geoPath"] = new { length = R3(sp.Length), theory = R3(Math.Acos(Vec3d.Dot(a, b))), dijkstraLen = R3(ArcLen(vp.Select(v => sphere.Vertices[v]).ToArray())), flipLength = R3(fo.Length), flipConverged = fo.Converged, flipPoints = fo.Points.Length };
     var cheb = ChebyshevNet.Compute(sphere, 1 + 12 * 48 + 5, new Vec3d(0, 1, 0), new ChebyshevNet.Options { EdgeLength = 0.2, CountU = 5, CountV = 5, Angle = Math.PI / 2 });
     int nu = cheb.Points.GetLength(0), nv = cheb.Points.GetLength(1);
     var u = new List<double[][]>(); var v = new List<double[][]>(); var edgeErr = new List<double>();
@@ -135,6 +136,56 @@ var sw = Stopwatch.StartNew();
     var shear = new List<double>();
     for (int i = 0; i + 1 < nu; i++) for (int j = 0; j + 1 < nv; j++) if (cheb.Valid[i, j] && cheb.Valid[i + 1, j] && cheb.Valid[i, j + 1]) { var e1 = (cheb.Points[i + 1, j] - cheb.Points[i, j]).Normalized(); var e2 = (cheb.Points[i, j + 1] - cheb.Points[i, j]).Normalized(); shear.Add(Math.Acos(Math.Abs(Vec3d.Dot(e1, e2))) * 180 / Math.PI); }
     numbers["cheb"] = new { nodes = u.Sum(l => l.Length), valid = u.Sum(l => l.Length), total = nu * nv, maxEdgeErr = R3(edgeErr.Max() * 100), meanEdgeErr = R3(edgeErr.Average() * 100), minAngle = R3(shear.Min()), maxAngle = R3(shear.Max()) };
+}
+
+// ---------- Geodesic Path: exact geodesics by edge flips (FlipOut) on a polyhedral cone and a saddle vertex ----------
+{
+    // the cone is intrinsically flat except at the apex: its development is exact
+    double alpha = 0.6; int n = 48;
+    var cone = TestMeshes.CreatePolyCone(alpha, 2.0, n, 16, 0.6, 7);
+    var (_, om) = TestMeshes.ConeAngles(alpha, n);
+    var rnd = new Random(11);
+    var from = new List<Vec3d>(); var to = new List<Vec3d>(); var exact = new List<double>();
+    for (int k = 0; k < 200; k++)
+    {
+        int i = rnd.Next(n), j = rnd.Next(n);
+        double p1 = rnd.NextDouble(), p2 = rnd.NextDouble(), q1 = rnd.NextDouble(), q2 = rnd.NextDouble();
+        double s1 = (0.05 + 0.85 * rnd.NextDouble()) * 2.0 / (p1 + p2), s2 = (0.05 + 0.85 * rnd.NextDouble()) * 2.0 / (q1 + q2);
+        from.Add(TestMeshes.ConePoint(alpha, n, i, p1 * s1, p2 * s1)); to.Add(TestMeshes.ConePoint(alpha, n, j, q1 * s2, q2 * s2));
+        exact.Add(TestMeshes.ConeDistance(alpha, n, TestMeshes.ConeUnfold(alpha, n, i, p1 * s1, p2 * s1), TestMeshes.ConeUnfold(alpha, n, j, q1 * s2, q2 * s2)));
+    }
+    var t = Stopwatch.StartNew();
+    var res = FlipGeodesic.Compute(cone, from, to, out _)!;
+    t.Stop();
+    var projC = new MeshProjection(cone);
+    var tOld = Stopwatch.StartNew();
+    var old = new List<double>();
+    for (int k = 0; k < 40; k++) old.Add(ShortestPath.Compute(projC, from[k], to[k])!.Value.Length);
+    tOld.Stop();
+    double maxErr = Enumerable.Range(0, 200).Max(k => Math.Abs(res[k]!.Length - exact[k]));
+    double oldErr = Enumerable.Range(0, 40).Max(k => Math.Abs(old[k] - exact[k]) / exact[k]);
+    int throughApex = res.Count(r => r!.Vertices.Any(v => v.Length < 1e-12));
+    // the demo pair: two points either side of the apex, near it
+    int i0 = 3, i1 = i0 + 22;
+    var pa = TestMeshes.ConePoint(alpha, n, i0, 0.3, 0.3); var pb = TestMeshes.ConePoint(alpha, n, i1, 0.45, 0.45);
+    var demo = FlipGeodesic.Compute(cone, new[] { pa }, new[] { pb }, out _)![0]!;
+    var demoOld = ShortestPath.Compute(projC, pa, pb)!.Value;
+    double demoExact = TestMeshes.ConeDistance(alpha, n, TestMeshes.ConeUnfold(alpha, n, i0, 0.3, 0.3), TestMeshes.ConeUnfold(alpha, n, i1, 0.45, 0.45));
+    var coneWire = new List<double[][]>();
+    for (int i = 0; i < n; i += 2) coneWire.Add(new[] { P(Vec3d.Zero), P(2.0 * TestMeshes.ConeGenerator(alpha, n, i)) });
+    for (int r = 2; r <= 16; r += 2) coneWire.Add(Enumerable.Range(0, n + 1).Select(i => P(2.0 * r / 16 * TestMeshes.ConeGenerator(alpha, n, i))).ToArray());
+    scenes["geoPathCone"] = new { wire = coneWire.ToArray(), flip = Line(demo.Points), old = Line(demoOld.Points), ends = new[] { P(pa), P(pb) }, apex = new[] { P(Vec3d.Zero) } };
+    numbers["geoPathCone"] = new { pairs = 200, maxErr = maxErr, msPerPath = R3(t.Elapsed.TotalMilliseconds / 200), oldMsPerPath = R3(tOld.Elapsed.TotalMilliseconds / 40), oldMaxRel = R3(oldErr * 100), throughApex, converged = res.Count(r => r!.Converged), deficit = R3(2 * Math.PI - om), demoLen = demo.Length, demoExact, demoOld = R3(demoOld.Length), demoThroughApex = R3(pa.Length + pb.Length) };
+
+    // a single saddle vertex (total angle > 2π): the geodesic between opposite sectors runs through it
+    var fan = TestMeshes.CreateSaddleFan(4, 0.6);
+    var itF = IntrinsicTriangulation.Build(fan.Vertices, fan.Faces, out _)!;
+    Vec3d In(int sector, double rr) => rr * (0.5 * fan.Vertices[1 + sector] + 0.5 * fan.Vertices[1 + (sector + 1) % 8]);
+    var sa = In(0, 0.7); var sb = In(4, 0.85);
+    var rs = FlipGeodesic.Compute(fan, new[] { sa }, new[] { sb }, out _)![0]!;
+    var fanEdges = fan.BuildEdges().Select(e => new[] { P(fan.Vertices[e.v0]), P(fan.Vertices[e.v1]) }).ToArray();
+    scenes["geoPathSaddle"] = new { wire = fanEdges, flip = Line(rs.Points), ends = new[] { P(sa), P(sb) }, apex = new[] { P(Vec3d.Zero) } };
+    numbers["geoPathSaddle"] = new { angle = R3(itF.AngleSum(0) * 180 / Math.PI), length = rs.Length, exact = sa.Length + sb.Length, through = rs.Vertices.Length, minJoint = R3(rs.MinJointAngle * 180 / Math.PI) };
 }
 
 // ---------- Saddle: asymptotic net ----------

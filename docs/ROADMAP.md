@@ -118,7 +118,22 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 - [ ] Ellipsoid a ≠ b ≠ c: exactly four umbilics; curvature-line net has the
       classic lemon pattern.
 - [ ] Cone (developable with an apex): projection and tracing near a
-      singular vertex.
+      singular vertex. Partly done 2026-10-08 (session 1):
+      `TestMeshes.CreatePolyCone` — n generators through the apex, rings
+      optionally jittered along them, so every quad is planar and the mesh is
+      intrinsically flat except at the apex; exact development
+      (`ConeAngles`, `ConeUnfold`, `ConeDistance`). Measured: apex deficit
+      = 2π − nθ_f to 1e-12 and 5e-15 elsewhere; principal curvature cos α / r
+      within 0.8 % from ring 7 out, 3 % on rings 4–6 (the radius-2 ring
+      reaches the apex), rulings exact. Projection: the hinted
+      `MeshProjection.ClosestPoint` misses the containing facet for 32 of
+      2000 points near the apex (up to 1.3e-2 off, slant 2) because the
+      Euclidean nearest vertex lies sectors away; new `ClosestPointGlobal`
+      is exact (ball of radius d + longest edge through the kd-tree) and is
+      used by both Geodesic Path methods. Geodesic paths: exact (D below).
+      Open: the streamline / geodesic-net tracers near the apex (they still
+      use the hinted projection at every step), and the cone as a bench
+      shape on the curvature cards.
 - [ ] Annulus / disk with holes: inner boundaries, loops around holes,
       curves ending on inner borders.
 - [ ] Trimmed staircase quad mesh (already in ContinuityTests) and a
@@ -300,7 +315,7 @@ remains the self-test review page.
       free-form surfaces — optimized grids for timber rib shells); Pottmann
       et al. 2010 (Geodesic patterns) — geodesic strip patterns with
       constant width, breakpoints/segmentation.
-- [ ] Straightest geodesics and shortest paths: Polthier & Schmies 1998
+- [x] Straightest geodesics and shortest paths: Polthier & Schmies 1998
       (Straightest geodesics on polyhedral surfaces); Crane, Weischedel &
       Wardetzky 2013 (Geodesics in heat); Sharp & Crane 2020 (You can find
       geodesic paths in triangle meshes by just flipping edges) — the
@@ -315,9 +330,49 @@ remains the self-test review page.
       transported by the minimal rotation between the smooth normals
       (discrete Levi-Civita transport, the "straightest" continuation of
       Polthier–Schmies): 45.011° / 45.002°, converging with the step.
-      Still open: a true polyhedral straightest geodesic (walk each facet
-      exactly, unfold at edges — exact on developable meshes, no step size)
-      and FlipOut for Geodesic Path.
+      Done 2026-10-08 (session 1): FlipOut for Geodesic Path
+      (`Gridshells/FlipGeodesic`, `Geometry/IntrinsicTriangulation`, Method
+      input appended, default 1). Literature: Sharp & Crane 2020 (Alg. 1
+      FlipOut on the joint of smallest wedge angle; flippable = convex quad;
+      boundary wedges ∞; Thm 4.1 shorter, Thm 4.2 terminates), Sharp,
+      Soliman & Crane 2019 (signposts φ_ij rescaled by 2π/Θ_i, flip update
+      φ_ik = φ_ij + 2π/Θ_i θ_i^jk, trace by unfolding), Mitchell, Mount &
+      Papadimitriou 1987 (Lemma 3.4: through a vertex only with ≥ π on both
+      sides), Lanthier, Maheshwari & Sack 2001 (fixed Steiner scheme).
+      Measured: polyhedral cone 1000/1000 random pairs equal to the exact
+      development (< 1e-13) and none through the apex; prism cylinder,
+      irregular flat triangulation and a saddle vertex (through it, |p|+|q|)
+      to 1e-12; angle sums kept to 6e-13 over 985 random flips, every edge
+      traced to its head within 2e-13. Findings:
+      - Sharing one intrinsic triangulation across pairs is wrong: the long
+        thin edges left by earlier flips steered a later Dijkstra start round
+        the wrong side of the apex (32 % too long); every pair now resets.
+      - FlipOut keeps the side of every vertex its start path takes. From
+        plain Dijkstra 998/1000 cone pairs were shortest (the 2 misses had
+        the other way round within 2.7 %), and on the torus / Schwarz D the
+        Dijkstra-started result was up to 1.7 % longer than the old curve
+        shortening found. A Steiner-graph start (3 points per edge, A*)
+        fixed the cone (1000/1000) and the torus (now up to 1.5 % shorter
+        than the old method, which itself took the wrong side); Schwarz D,
+        where every vertex is a saddle, stays within −0.24 … +0.14 % of the
+        old method over 20 random pairs: geodesics of nearly equal length
+        are many there and the start path decides which one FlipOut returns.
+      - long.GetHashCode XOR-folds the halves, so (a, b) / (b, a) edge keys
+        collided: a 20 k-vertex build took 12 s; a mixing comparer makes it
+        0.2 s. Cost now: 0.1–0.5 s per 20 paths on 2–4 k vertices, 2 s on
+        17–20 k (1.2–15× faster than the curve shortening).
+      - The signpost walk (`IntrinsicTriangulation.TraceFromVertex`) is the
+        exact polyhedral straightest geodesic asked for above (unfolding per
+        facet, half the total angle on either side at a vertex). Open: use it
+        in the Geodesic Net / Jacobi tracer, which still steps through the
+        smooth-normal tangent planes.
+      - API: additions only (`FlipGeodesic`, `IntrinsicTriangulation`,
+        `MeshProjection.ClosestPointGlobal`); `ShortestPath.Compute` now
+        projects its end points with the exact global search.
+      - Open: global minimality on saddle-rich meshes (several starts, e.g.
+        Steiner graphs with 3 and 6 points, or a heat-method distance, Crane
+        et al. 2013, to pick the class); paths through mesh vertices could
+        be reported as a viewport marker once the custom previews (B) land.
 - [ ] Curvature estimation: Rusinkiewicz 2004 (Estimating curvatures and
       their derivatives on triangle meshes); Meyer, Desbrun, Schröder, Barr
       2003 (Discrete differential-geometry operators); Cohen-Steiner &
@@ -568,6 +623,11 @@ Open
 
 ## Done
 
+- [x] 2026-10-08 (session 1, D/A): exact geodesic paths by edge flips
+      (FlipOut + signposts + Steiner-graph start) for Geodesic Path, exact
+      global closest point, the polyhedral cone as a test typology with its
+      exact development; bench Geodesic Path card with sphere / cone /
+      saddle-vertex shapes and four self-tests.
 - [x] 2026-09-27 (José's session, 1.3.0): Asymptotic Web and AAG webs (G);
       Gridshell Analysis joints inserted exactly (the snap had chained joints
       into a few nodes), supports fixed / pinned, joint stiffness, self-weight,

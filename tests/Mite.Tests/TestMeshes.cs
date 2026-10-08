@@ -412,6 +412,138 @@ public static class TestMeshes
         }
     }
 
+    /// <summary>
+    /// Right circular cone of half-angle alpha (between axis and generator), apex at the origin,
+    /// opening downwards, as a polyhedral cone: n straight generators g_i, each cut at rings
+    /// (optionally jittered along the generator, so the triangles are irregular), plus the apex
+    /// vertex (index 0). Every quad between two generators lies in the plane of those generators
+    /// through the apex, so the mesh is intrinsically flat everywhere except at the apex: it
+    /// unfolds exactly onto a plane sector of angle Ω = n θ_f, cos θ_f = sin²α cos(2π/n) + cos²α,
+    /// and the apex carries the whole angle deficit 2π − Ω (→ 2π(1 − sin α) for n → ∞).
+    /// Vertex index = 1 + (ring − 1) * n + i, ring 1..rings at slant S·ring/rings.
+    /// </summary>
+    public static MeshData CreatePolyCone(double alpha = 0.6, double slant = 2.0, int n = 48, int rings = 16, double jitter = 0.0, int seed = 1)
+    {
+        var rnd = new Random(seed);
+        var verts = new List<Vec3d> { new Vec3d(0, 0, 0) };
+        for (int j = 1; j <= rings; j++)
+            for (int i = 0; i < n; i++)
+            {
+                double s = slant * j / rings;
+                if (jitter > 0 && j < rings) s += slant / rings * jitter * (rnd.NextDouble() - 0.5);
+                verts.Add(s * ConeGenerator(alpha, n, i));
+            }
+        var faces = new List<int[]>();
+        int V(int ring, int i) => 1 + (ring - 1) * n + ((i % n) + n) % n;
+        for (int i = 0; i < n; i++) faces.Add(new[] { 0, V(1, i + 1), V(1, i) });
+        for (int j = 1; j < rings; j++)
+            for (int i = 0; i < n; i++)
+            {
+                int a = V(j, i), b = V(j, i + 1), c = V(j + 1, i + 1), d = V(j + 1, i);
+                if (((i + j) & 1) == 0) { faces.Add(new[] { a, b, c }); faces.Add(new[] { a, c, d }); }
+                else { faces.Add(new[] { a, b, d }); faces.Add(new[] { b, c, d }); }
+            }
+        return new MeshData(verts.ToArray(), faces.ToArray());
+    }
+
+    /// <summary>Unit generator i of the polyhedral cone (apex at the origin, opening downwards).</summary>
+    public static Vec3d ConeGenerator(double alpha, int n, int i)
+    {
+        double ph = 2 * Math.PI * i / n;
+        return new Vec3d(Math.Sin(alpha) * Math.Cos(ph), Math.Sin(alpha) * Math.Sin(ph), -Math.Cos(alpha));
+    }
+
+    /// <summary>Apex angle of one face of the polyhedral cone and the total angle Ω = n θ_f.</summary>
+    public static (double faceAngle, double total) ConeAngles(double alpha, int n)
+    {
+        double c = Math.Sin(alpha) * Math.Sin(alpha) * Math.Cos(2 * Math.PI / n) + Math.Cos(alpha) * Math.Cos(alpha);
+        double th = Math.Acos(Math.Max(-1, Math.Min(1, c)));
+        return (th, n * th);
+    }
+
+    /// <summary>A point on face i of the polyhedral cone: a·g_i + b·g_{i+1}.</summary>
+    public static Vec3d ConePoint(double alpha, int n, int i, double a, double b) =>
+        a * ConeGenerator(alpha, n, i) + b * ConeGenerator(alpha, n, i + 1);
+
+    /// <summary>Polar coordinates (ρ, ψ) of a point a·g_i + b·g_{i+1} in the exact development.</summary>
+    public static (double rho, double psi) ConeUnfold(double alpha, int n, int i, double a, double b)
+    {
+        var (th, _) = ConeAngles(alpha, n);
+        double x = a * Math.Cos(i * th) + b * Math.Cos((i + 1) * th);
+        double y = a * Math.Sin(i * th) + b * Math.Sin((i + 1) * th);
+        return (Math.Sqrt(x * x + y * y), Math.Atan2(y, x) < i * th - 1e-9 ? Math.Atan2(y, x) + 2 * Math.PI : Math.Atan2(y, x));
+    }
+
+    /// <summary>
+    /// Exact shortest distance on the polyhedral cone between two developed points: the shorter
+    /// way around, Δ' = min(Δ, Ω − Δ) &lt; Ω/2 &lt; π, so the chord never passes the apex.
+    /// </summary>
+    public static double ConeDistance(double alpha, int n, (double rho, double psi) p, (double rho, double psi) q)
+    {
+        var (_, om) = ConeAngles(alpha, n);
+        double d = Math.Abs(p.psi - q.psi) % om;
+        d = Math.Min(d, om - d);
+        return Math.Sqrt(Math.Max(0, p.rho * p.rho + q.rho * q.rho - 2 * p.rho * q.rho * Math.Cos(d)));
+    }
+
+    /// <summary>
+    /// Flat square [0, size]² triangulated irregularly: a jittered (nx+1)² grid whose quads are split
+    /// along alternating diagonals. Geodesics are straight segments.
+    /// </summary>
+    public static MeshData CreateIrregularPlane(int nx = 16, double size = 2.0, double jitter = 0.35, int seed = 3)
+    {
+        var rnd = new Random(seed);
+        var verts = new Vec3d[(nx + 1) * (nx + 1)];
+        double h = size / nx;
+        for (int j = 0; j <= nx; j++)
+            for (int i = 0; i <= nx; i++)
+            {
+                double x = i * h, y = j * h;
+                if (i > 0 && i < nx && j > 0 && j < nx)
+                {
+                    x += h * jitter * (rnd.NextDouble() - 0.5);
+                    y += h * jitter * (rnd.NextDouble() - 0.5);
+                }
+                verts[j * (nx + 1) + i] = new Vec3d(x, y, 0);
+            }
+        var faces = new List<int[]>();
+        for (int j = 0; j < nx; j++)
+            for (int i = 0; i < nx; i++)
+            {
+                int a = j * (nx + 1) + i, b = a + 1, c = b + nx + 1, d = a + nx + 1;
+                if (((i * 7 + j * 3) % 5) < 2) { faces.Add(new[] { a, b, c }); faces.Add(new[] { a, c, d }); }
+                else { faces.Add(new[] { a, b, d }); faces.Add(new[] { b, c, d }); }
+            }
+        return new MeshData(verts, faces.ToArray());
+    }
+
+    /// <summary>
+    /// A single saddle vertex: centre (index 0) and a ring of 2m vertices at radius 1 whose heights
+    /// alternate ±h, plus an outer ring at radius 2 (same pattern) — total angle at the centre
+    /// &gt; 2π. Two points close to the centre in opposite sectors are joined by a geodesic through
+    /// the centre (both side angles ≥ π), of length |p| + |q| (Mitchell, Mount &amp; Papadimitriou 1987).
+    /// </summary>
+    public static MeshData CreateSaddleFan(int m = 4, double h = 0.6)
+    {
+        int k = 2 * m;
+        var verts = new List<Vec3d> { new Vec3d(0, 0, 0) };
+        for (int r = 1; r <= 2; r++)
+            for (int i = 0; i < k; i++)
+            {
+                double ph = 2 * Math.PI * i / k;
+                verts.Add(new Vec3d(r * Math.Cos(ph), r * Math.Sin(ph), r * h * ((i & 1) == 0 ? 1 : -1)));
+            }
+        var faces = new List<int[]>();
+        for (int i = 0; i < k; i++)
+        {
+            int a = 1 + i, b = 1 + (i + 1) % k, c = 1 + k + (i + 1) % k, d = 1 + k + i;
+            faces.Add(new[] { 0, a, b });
+            faces.Add(new[] { a, c, b });
+            faces.Add(new[] { a, d, c });
+        }
+        return new MeshData(verts.ToArray(), faces.ToArray());
+    }
+
     public static MeshData CreateQuadGrid(int nx = 5, int ny = 5, double size = 1.0)
     {
         var verts = new Vec3d[(nx + 1) * (ny + 1)];

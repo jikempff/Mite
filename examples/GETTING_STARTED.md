@@ -74,7 +74,13 @@ geodesics start at the angle that keeps the strip to their neighbour closest
 to constant width (Jacobi field), so families stay even on domes and saddles.
 `Bd` (FromBorder) grows the family from the border edge nearest the seed
 instead — with `Ba` (BorderAngle) that gives the helix layout of a vault.
-**Geodesic Path** gives the single shortest lath between two points.
+**Geodesic Path** gives the single shortest lath between two points. With
+`Me` (Method) 1, the default, it is the exact geodesic of the mesh: a polyline
+straight across every face and edge, through every edge crossing (set `S` to
+a spacing for a smooth resampled curve). It goes round a cone tip, and through
+a saddle vertex only where the geodesic really runs through it — refine the mesh
+there if you want the lath to pass beside the vertex. `Me` 0 is the older
+curve shortening, kept for comparison.
 
 **Chebyshev Net**: seed vertex + direction + `L` (lath joint spacing, try mesh
 size / 12). Outputs both lath families and a quad net mesh whose edges all have

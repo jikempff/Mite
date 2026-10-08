@@ -44,8 +44,9 @@ public static class ShortestPath
         var mesh = proj.Mesh;
         if (mesh.VertexCount == 0 || mesh.FaceCount == 0) return null;
 
-        var hFrom = proj.ClosestPoint(from, proj.NearestVertexGlobal(from));
-        var hTo = proj.ClosestPoint(to, proj.NearestVertexGlobal(to));
+        // exact projection: the hinted local search can land on the wrong face next to a cone apex
+        var hFrom = proj.ClosestPointGlobal(from);
+        var hTo = proj.ClosestPointGlobal(to);
         if (hFrom.Face < 0 || hTo.Face < 0) return null;
 
         var vertexPath = Dijkstra(mesh, hFrom.NearestVertex, hTo.NearestVertex);

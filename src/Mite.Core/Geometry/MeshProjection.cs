@@ -15,6 +15,7 @@ public class MeshProjection
     private readonly Vec3d[] _faceNormals;
     private readonly Vec3d[] _vertexNormals;
     private readonly double _averageEdgeLength;
+    private readonly double _maxEdgeLength;
     private readonly VertexKdTree _kdTree;
     private readonly HashSet<long> _boundaryEdges;
     private readonly bool[] _boundaryVertex;
@@ -42,7 +43,9 @@ public class MeshProjection
         {
             for (int i = 0; i < 3; i++)
             {
-                sum += (_mesh.Vertices[f[(i + 1) % 3]] - _mesh.Vertices[f[i]]).Length;
+                double l = (_mesh.Vertices[f[(i + 1) % 3]] - _mesh.Vertices[f[i]]).Length;
+                sum += l;
+                if (l > _maxEdgeLength) _maxEdgeLength = l;
                 count++;
             }
         }
@@ -207,6 +210,27 @@ public class MeshProjection
     public int NearestVertexGlobal(Vec3d p) => _kdTree.Nearest(p);
 
     /// <summary>
+    /// Exact closest point on the whole mesh. The hinted <see cref="ClosestPoint"/> only searches the
+    /// faces around the locally nearest vertex, which is fast for tracing but can miss the right face
+    /// where the mesh folds tightly in space — next to a cone apex, the Euclidean nearest vertex can
+    /// lie several fan sectors away from the face that contains the point (measured: 4–11 × 10⁻³ off
+    /// on a 48-sided cone, mean edge 0.06). Here every face with a vertex within d + (longest edge)
+    /// of p is tested, d being the distance to the nearest vertex: any face holding a point closer
+    /// than d has all its vertices inside that ball, so the result is the global minimum.
+    /// </summary>
+    public Hit ClosestPointGlobal(Vec3d p)
+    {
+        int v = _kdTree.Nearest(p);
+        if (v < 0) return ClosestPoint(p, -1);
+        double d = (_mesh.Vertices[v] - p).Length;
+        var near = new List<int>();
+        _kdTree.WithinRadius(p, d + _maxEdgeLength * (1 + 1e-9), near);
+        var faces = new HashSet<int>();
+        foreach (int u in near) foreach (int f in _vertexFaces[u]) faces.Add(f);
+        return BestOnFaces(p, faces, v);
+    }
+
+    /// <summary>
     /// Finds the closest point on the mesh near the given vertex hint.
     /// Walks vertex-to-vertex toward the query point, then projects onto the
     /// triangles incident to the local neighborhood.
@@ -241,6 +265,11 @@ public class MeshProjection
         foreach (int n in _vertexNeighbors[v])
             foreach (int f in _vertexFaces[n]) candidateFaces.Add(f);
 
+        return BestOnFaces(p, candidateFaces, v);
+    }
+
+    private Hit BestOnFaces(Vec3d p, IEnumerable<int> candidateFaces, int v)
+    {
         Vec3d bestPoint = _mesh.Vertices[v];
         int bestFace = -1;
         double bestProjDist = double.MaxValue;
