@@ -1,10 +1,10 @@
 import json, html
 from notes import NOTES
 
-comps = json.load(open("components.json"))
-scenes = json.load(open("scenes.json"))
-numbers = json.load(open("numbers.json"))
-icons = json.load(open("icons.json"))
+comps = json.load(open("components.json", encoding="utf-8"))
+scenes = json.load(open("scenes.json", encoding="utf-8"))
+numbers = json.load(open("numbers.json", encoding="utf-8"))
+icons = json.load(open("icons.json", encoding="utf-8"))
 
 TAB_ORDER = ["Curvature", "Form Finding", "Gridshells", "Analysis", "Fabrication", "Kinetics", "Util"]
 TAB_BLURB = {
@@ -115,7 +115,7 @@ for tab in TAB_ORDER:
 </article>''')
     cards.append("</section>")
 
-page = open("template.html").read()
+page = open("template.html", encoding="utf-8").read()
 # favicon: the K mark of kempffsele.me (tools/webgen/favicon.svg), inlined so the single-file page keeps it
 import base64, os
 if os.path.exists("favicon.svg"):
@@ -123,5 +123,6 @@ if os.path.exists("favicon.svg"):
     page = page.replace('<meta charset="utf-8">', '<meta charset="utf-8">\n<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,' + fav + '">', 1)
 page = page.replace("/*__NAV__*/", "".join(nav)).replace("/*__CARDS__*/", "".join(cards))
 page = page.replace("/*__SCENES__*/", json.dumps(scenes, separators=(",", ":"))).replace("/*__NUMBERS__*/", json.dumps(numbers)).replace("/*__ORDER__*/", json.dumps([slug(n) for n in COMP_ORDER]))
-open("site/index.html", "w").write(page)
+os.makedirs("site", exist_ok=True)  # site/ is git-ignored, so a fresh clone has none
+open("site/index.html", "w", encoding="utf-8").write(page)
 print("bytes", len(page))

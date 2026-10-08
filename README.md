@@ -1,5 +1,7 @@
 # Mite
 
+[![CI](https://github.com/jikempff/Mite/actions/workflows/ci.yml/badge.svg)](https://github.com/jikempff/Mite/actions/workflows/ci.yml)
+
 Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net design and lath fabrication. Pure .NET with zero dependencies — runs on Windows, macOS, and Linux.
 
 ## Try it in the browser
@@ -116,10 +118,14 @@ dotnet test
 ### Build Yak Package
 
 ```powershell
-.\build-yak.ps1
+.\build-yak.ps1          # Windows
 ```
 
-This builds the Grasshopper project in Release mode, stages the files into `dist/`, and runs `yak build` to produce the `.yak` package. Requires the [Yak CLI](https://developer.rhino3d.com/guides/yak/the-package-manager-command-line-tool/).
+```bash
+bash build-yak.sh       # macOS (uses the yak of "/Applications/Rhino 8.app")
+```
+
+Both build the Grasshopper project in Release mode, stages the files into `dist/`, and runs `yak build` to produce the `.yak` package (`dist/mite-<version>-rh8_0-any.yak`). Requires the [Yak CLI](https://developer.rhino3d.com/guides/yak/the-package-manager-command-line-tool/).
 
 ## Grasshopper Components
 
@@ -140,6 +146,11 @@ split to stock with **Lath Segment**, and produce cutting patterns with **Lath U
 plus IDs and a BOM from **Lath Labels**.
 
 ## Changelog
+
+### Unreleased
+- **Continuous integration** (`.github/workflows/ci.yml`): every push and pull request builds Mite.Core and Mite.Grasshopper, runs the test suite, builds the Mite Bench page and runs all its self-tests in light and dark in headless Chromium (`tools/webgen/selftest.js`: 0 FAIL, no page errors, at least 71 checks), and publishes the browser app and runs `tools/web-smoke.js` against it. The bench page is kept as a build artifact.
+- Release consistency tests (`ReleaseConsistencyTests`): one version in both csproj files, `MiteInfo`, `dist/manifest.yml`, the newest numbered changelog heading, the Food4Rhino title, `yak push` line and version notes, and the bench header; the component count stated in README, Food4Rhino, the bench header and the smoke test equals the number of component classes; every component is listed under its panel here and has its icon drawn, embedded and on disk.
+- `build-yak.sh`: the macOS twin of `build-yak.ps1`. `tools/webgen/build.py` creates `site/` on a fresh clone and reads and writes UTF-8 (Python's default on Windows is the ANSI code page). Python bytecode is no longer tracked.
 
 ### 1.3.2
 - **Geodesic Path: exact geodesics by edge flips** (`Gridshells/FlipGeodesic`, `Geometry/IntrinsicTriangulation` in the core; `Method` input appended, 1 = new default, 0 = the old curve shortening). The path is shortened on an intrinsic triangulation of the mesh with signposts (Sharp, Soliman & Crane 2019) by FlipOut (Sharp & Crane 2020) until every vertex it touches leaves ≥ 180° on both sides, then traced back across the faces as a polyline through every edge crossing: the geodesic of the polyhedral surface itself, with no step size or smoothing tolerance. It never passes a cone tip and passes a saddle vertex only where that is the geodesic (Mitchell, Mount & Papadimitriou 1987). The start path is the shortest path through 3 Steiner points per edge (Lanthier, Maheshwari & Sack 2001), so the way round each vertex is chosen on a graph within ~1 % of surface distances instead of the ~8 % of the edge graph; FlipOut is also run from the plain Dijkstra edge path and the shorter result kept. Checked against closed forms: on a polyhedral cone (exact development) 1000 of 1000 random pairs match to < 1e-13 and none touches the apex; prism cylinder, irregular flat triangulation and a single saddle vertex exact to 1e-12. 10–40× faster than the curve shortening on 2–20 k-vertex meshes; on a torus the old method went round the wrong side of the hole in some pairs (2 % too long), and its straight segments between surface points read lengths up to 0.2 % short on the cone. `Sampling` 0 now returns the exact polyline (a spacing > 0 gives the smooth interpolated curve as before); a non-manifold mesh falls back to Method 0 with a remark, inconsistent face winding is fixed first and bow-tie vertices are split.
