@@ -1,8 +1,8 @@
-# Food4Rhino listing — Mite 1.3.1
+# Food4Rhino listing — Mite 1.3.2
 
 Paste-ready copy for https://www.food4rhino.com/en/app/mite (edit form). Images
 to upload are listed at the end; the package itself goes up with
-`yak push dist/mite-1.3.1-rh8_0-any.yak`, which also sets the package icon (1.3.0 is on the server already).
+`yak push dist/mite-1.3.2-rh8_0-any.yak`, which also sets the package icon (1.3.0 is on the server; 1.3.2 includes everything in 1.3.1).
 
 ## Title
 Mite — curvature, form finding and gridshell nets for Grasshopper
@@ -35,8 +35,8 @@ lying on the surface (Schling, Wang, Hoyer & Pottmann 2022).
 combed labels, minimum crossing angle), geodesic nets (straightest geodesics
 with Jacobi-field seeding for even strips, from a seed or from a border),
 Chebyshev nets (equal edge lengths, the kinematics of elastic gridshells),
-conjugate nets (curvature lines, the layout for planar quads) and shortest
-geodesic paths. Curves run border to border; merged traces end on their
+conjugate nets (curvature lines, the layout for planar quads) and exact shortest
+geodesic paths (edge flips, Sharp & Crane 2020). Curves run border to border; merged traces end on their
 neighbour as T-junctions.
 
 **Buildability.** Lath Analysis splits each curve into geodesic curvature,
@@ -65,6 +65,9 @@ where the answer is exact. The same library runs in the browser at
 kempffsele.me/mite — try a net on your own OBJ before installing anything.
 
 Source, examples and roadmap: https://github.com/jikempff/Mite
+
+## Version notes — 1.3.2
+- Geodesic Path gives the exact geodesic of the mesh (new Method input, on by default): the path is shortened by intrinsic edge flips until it is straight across every face and edge, then returned as a polyline through every edge crossing. It goes round a cone tip, never over it; on a cone the length matches the exact unfolded value to 1e-13. Faster than before (1.2–15×); the old curve shortening stays as Method 0.
 
 ## Version notes — 1.3.1
 - Net Kinetics presses a net flat (new Flatten input): the lath ends slide onto a plane and the mechanism finds the flat assembly state — a 3-fold Enneper web lays flat into a hexagon with every joint spacing kept. Read backwards, it is the deployment of the flat grid. Also the default motion in the browser app.
