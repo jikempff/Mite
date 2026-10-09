@@ -22,6 +22,13 @@ outputs the two curvature *directions* per vertex, which you can preview with
 Meshes with seams or duplicate vertices (STL imports, meshed Breps) are welded
 automatically; per-vertex outputs always line up with the input mesh.
 
+For dirty meshes (booleans, imports, joined pieces) put **Mesh Cleanup**
+(Mite > Util) first: it welds, drops degenerate, duplicate and isolated
+elements and turns closed meshes outward, so the sign of Mean Curvature is
+right. Read its `Report`: if it says triangles are below 1°, set `Sliver` to
+`1` to collapse those needles and flip those caps (no vertex moves); edges it
+lists on `NonManifold` must be fixed in Rhino.
+
 ## 2. Trace a gridshell net (5 minutes)
 
 Use a doubly-curved mesh. For asymptotic nets it must have anticlastic

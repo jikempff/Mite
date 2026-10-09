@@ -139,8 +139,24 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 - [ ] Trimmed staircase quad mesh (already in ContinuityTests) and a
       Catmull–Clark-subdivided cube (Weaverbird-like: quads, extraordinary
       vertices of valence 3, dense border rows).
-- [ ] Dirty meshes for Mesh Cleanup: unwelded seams, duplicate faces,
-      flipped faces, slivers, millimetre scale, far from origin.
+- [x] Dirty meshes for Mesh Cleanup — 2026-10-09 (session 1), with the D
+      item "Mesh repair and welding": `DirtyMeshTests` (15) builds each defect
+      from a clean mesh so the repair is compared with the original exactly —
+      polygon soups (unwelded seams), duplicates in both windings, isolated
+      vertices, face 0 + 30 % / 70 % reversed (open saddle / closed sphere),
+      a 1 m sphere in millimetres at (2500 km, −1200 km), needles (edges split
+      1e-4 from an end), caps (a vertex 1e-5 off an edge, interior and on the
+      border), a non-manifold fin, a Möbius strip, an annulus, two spheres one
+      inside out. Findings: (1) the BFS winding took face 0 as the reference
+      and crossed non-manifold edges: one flipped first face turned a sphere
+      inside out (signed volume −4.12, mean H −1.0009) and reversed the sign
+      of H at 217 of 225 saddle vertices; now closed parts go outward by
+      signed volume and open parts keep their majority (area) winding;
+      (2) needles were invisible to the zero-area test (smallest angle 0.001°,
+      H error 0.61 at the split points) — `Sliver` collapses them back to the
+      original faces exactly; (3) vertices orphaned by removed faces stayed in
+      the mesh; (4) `long` edge keys hashed to a ^ b (as in the FlipOut
+      finding): 31.6 s → 0.45 s on a 75 k-face soup.
 - [x] Marching tetrahedra and the Enneper chart moved into the core
       (`Geometry/ImplicitSurface.cs`, `AnalyticShapes.EnneperPoint`); TestMeshes
       delegates to them — 2026-09-25.
@@ -408,9 +424,29 @@ remains the self-test review page.
       least-squares fit over the window or the tangent's rotation about the
       transported normal; and the strain model itself (τ·t/√3 twist strain,
       w/2 and t/2 fibre distances) against Schling's timber limits.
-- [ ] Mesh repair and welding: Attene 2010 (A lightweight approach to
-      repairing digitized polygon meshes); Botsch et al. 2010 (Polygon Mesh
-      Processing, ch. 8) — for Mesh Cleanup.
+- [x] Mesh repair and welding — 2026-10-09: orientation (outward / majority,
+      manifold edges only), isolated vertices, slivers (needles collapsed
+      under the Dey et al. 1999 link condition with a dummy border vertex,
+      the end with the smaller Garland–Heckbert 1997 quadric goes; caps
+      flipped by Lawson's max–min, border caps dropped — Botsch & Kobbelt
+      2001, CGAL `remove_almost_degenerate_faces`, needle ratio 4) and a
+      defect report after Attene, Campen & Kobbelt 2013 (non-manifold edges,
+      non-orientable parts, border loops, parts). Read: Botsch & Kobbelt 2001
+      (TU Dortmund PDF), the EG 2012 repair tutorial, CGAL 6.2 docs, Garland
+      & Heckbert 1997; Attene 2010 itself and Botsch et al. 2010 ch. 8 were
+      not accessible (restricted PDF / book), only the abstract and the
+      tutorial's summary of MeshFix.
+- [ ] Mesh repair, next: (a) non-manifold edges and vertices are reported,
+      not repaired — cut them by duplicating vertices (Guéziec, Taubin,
+      Lazarus & Horn 2001, Cutting and stitching) and offer it as an option;
+      (b) T-junctions and cracks (a vertex lying on the other side's edge, a
+      seam with different vertex counts) are not welded — snap vertices into
+      edges within Tolerance (Borodin, Novotni & Klein 2002, Progressive gap
+      closing); (c) holes are counted (border loops), never filled: a hole
+      filler (Liepa 2003) only on request, since gridshell surfaces have
+      intended borders; (d) self-intersections are not detected; (e) slivers
+      inside quads are left (only triangles are collapsed / flipped); (f) a
+      bench card with a picture (the card has numbers only).
 
 ## E. Kinetic and adaptive asymptotic structures (new, top priority)
 
@@ -623,6 +659,10 @@ Open
 
 ## Done
 
+- [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
+      repair — outward / majority winding, isolated vertices, needles and
+      caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench
+      self-tests (75 PASS).
 - [x] 2026-10-08 (session 1, D/A): exact geodesic paths by edge flips
       (FlipOut + signposts + Steiner-graph start) for Geodesic Path, exact
       global closest point, the polyhedral cone as a test typology with its

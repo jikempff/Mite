@@ -38,7 +38,10 @@ public class Fabrication2Tests
         Assert.Equal(1, result.RemovedDegenerateFaces);
         Assert.Equal(1, result.RemovedDuplicateFaces);
         Assert.Equal(2, result.Mesh.Faces.Length);
-        Assert.Equal(9, result.Mesh.VertexCount);            // 11 - 2 welded
+        // 11 - 2 welded - 3 left isolated by the degenerate face (dropped since the dirty-mesh pass)
+        Assert.Equal(6, result.Mesh.VertexCount);
+        Assert.Equal(3, result.Info.IsolatedVertices);
+        Assert.Equal(-1, result.VertexMap[9]);
     }
 
     [Fact]

@@ -231,6 +231,31 @@ internal static class Tests
             c => Expect(MeshOut(c, 0) != null && MeshOut(c, 0)!.Faces.Count > 0,
                 "cleaned mesh produced"));
 
+        TestComponent("Mesh Cleanup (inside-out sphere, Sliver 1)",
+            new Mite.Grasshopper.Components.MeshCleanupComponent(),
+            c =>
+            {
+                var inside = sphere.DuplicateMesh();
+                inside.Flip(true, true, true);
+                SetInputs(c, (0, inside), (1, 0.0), (2, true), (3, 1.0));
+            },
+            c =>
+            {
+                var m = MeshOut(c, 0);
+                int flipped = c.Params.Output[4].VolatileData.AllData(true)
+                    .OfType<Grasshopper.Kernel.Types.GH_Integer>().Select(i => i.Value).FirstOrDefault();
+                string report = Texts(c, 7).FirstOrDefault() ?? "";
+                int outward = 0;
+                if (m != null)
+                {
+                    m.FaceNormals.ComputeFaceNormals();
+                    for (int i = 0; i < m.Faces.Count; i++)
+                        if (m.FaceNormals[i] * (Rhino.Geometry.Vector3d)m.Faces.GetFaceCenter(i) > 0) outward++;
+                }
+                return Expect(m != null && flipped > 0 && outward == m.Faces.Count,
+                    $"turned outward: {flipped} faces reversed, {outward} of {m?.Faces.Count} face normals point out; report: {report.Replace('\n', ' ')}");
+            });
+
         TestComponent("Conjugate Net",
             new Mite.Grasshopper.Components.ConjugateNetComponent(),
             c => SetInputs(c, (0, saddle.DuplicateMesh()), (1, 0.25), (2, 0.05), (3, 300)),

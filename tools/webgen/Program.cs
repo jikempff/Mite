@@ -622,6 +622,84 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     var cl = MeshCleanup.Compute(new MeshData(verts.ToArray(), faces.ToArray()));
     t.Stop();
     numbers["cleanup"] = new { inVerts = verts.Count, outVerts = cl.Mesh.VertexCount, expectedVerts = sphere.VertexCount, welded = cl.WeldedVertices, degenerate = cl.RemovedDegenerateFaces, duplicate = cl.RemovedDuplicateFaces, ms = t.ElapsedMilliseconds };
+    // Dirty meshes with exact answers: orientation, needles, caps
+    static string Canon(int[] f) { int s = 0; for (int i = 1; i < f.Length; i++) if (f[i] < f[s]) s = i; return string.Join(",", Enumerable.Range(0, f.Length).Select(i => f[(s + i) % f.Length])); }
+    static int Agree(MeshData a, MeshData b) { var set = new HashSet<string>(a.Faces.Select(Canon)); return b.Faces.Count(f => set.Contains(Canon(f))); }
+    static double Vol(MeshData m) { double v = 0; foreach (var f in m.Faces) for (int i = 1; i < f.Length - 1; i++) v += Vec3d.Dot(m.Vertices[f[0]], Vec3d.Cross(m.Vertices[f[i]], m.Vertices[f[i + 1]])) / 6; return v; }
+    static double Area(MeshData m) => m.Faces.Sum(f => { Vec3d nn = Vec3d.Zero; for (int i = 1; i < f.Length - 1; i++) nn = nn + Vec3d.Cross(m.Vertices[f[i]] - m.Vertices[f[0]], m.Vertices[f[i + 1]] - m.Vertices[f[0]]); return 0.5 * nn.Length; });
+    // (a) open saddle with face 0 and ~30 % of the faces reversed
+    var sad = TestMeshes.CreateSaddle(16);
+    var rr = new Random(2);
+    var sadFaces = sad.Faces.Select((x, i) => i == 0 || rr.NextDouble() < 0.3 ? x.Reverse().ToArray() : x).ToArray();
+    var sadDirty = new MeshData(sad.Vertices, sadFaces);
+    var sadFix = MeshCleanup.Compute(sadDirty);
+    var hSad = MeanCurvature.Compute(sad).Values; var hSadFix = MeanCurvature.Compute(sadFix.Mesh).Values;
+    // (b) sphere with face 0 and ~70 % reversed
+    var sph = TestMeshes.CreateUnitSphere(16);
+    rr = new Random(11);
+    var sphFaces = sph.Faces.Select((x, i) => i == 0 || rr.NextDouble() < 0.7 ? x.Reverse().ToArray() : x).ToArray();
+    var sphFix = MeshCleanup.Compute(new MeshData(sph.Vertices, sphFaces));
+    // (c) needles: interior edges split 1e-4 of their length from one end
+    var ndV = sph.Vertices.ToList(); var ndF = sph.Faces.Select(f => (int[])f.Clone()).ToList(); var usedV = new HashSet<int>(); int splits = 0;
+    var sphEdges = sph.BuildEdges();
+    for (int e = 0; e < sphEdges.Length; e += 5)
+    {
+        var (ea, eb) = sphEdges[e];
+        var adj = Enumerable.Range(0, ndF.Count).Where(fi => ndF[fi].Contains(ea) && ndF[fi].Contains(eb)).ToList();
+        if (adj.Count != 2) continue;
+        var ring = adj.SelectMany(fi => ndF[fi]).Distinct().ToList();
+        if (ring.Any(usedV.Contains)) continue;
+        foreach (int x in ring) usedV.Add(x);
+        int np = ndV.Count; ndV.Add(ndV[ea] + 1e-4 * (ndV[eb] - ndV[ea]));
+        foreach (int fi in adj)
+        {
+            var f = ndF[fi]; int ia = Array.IndexOf(f, ea); int ec = f.First(x => x != ea && x != eb);
+            if (f[(ia + 1) % 3] == eb) { ndF[fi] = new[] { ea, np, ec }; ndF.Add(new[] { np, eb, ec }); }
+            else { ndF[fi] = new[] { eb, np, ec }; ndF.Add(new[] { np, ea, ec }); }
+        }
+        splits++;
+    }
+    var needled = new MeshData(ndV.ToArray(), ndF.ToArray());
+    var hClean = MeanCurvature.Compute(sph).Values; var hNeedled = MeanCurvature.Compute(needled).Values;
+    var keepNeedles = MeshCleanup.Compute(needled);
+    t.Restart();
+    var noNeedles = MeshCleanup.Compute(needled, new MeshCleanup.Options { SliverAngle = 1.0 });
+    t.Stop();
+    var hFixed = MeanCurvature.Compute(noNeedles.Mesh).Values;
+    var cleanPos = new HashSet<Vec3d>(sph.Vertices);
+    // (d) caps on a flat 8 × 8 grid: a vertex 1e-5 off a cell diagonal
+    int gn = 8; var gv = new List<Vec3d>(); var gf = new List<int[]>();
+    for (int j = 0; j <= gn; j++) for (int i = 0; i <= gn; i++) gv.Add(new Vec3d(i / (double)gn, j / (double)gn, 0));
+    var capCells = new HashSet<int> { 9, 12, 27, 30, 45, 49 };
+    for (int j = 0; j < gn; j++)
+        for (int i = 0; i < gn; i++)
+        {
+            int ca = j * (gn + 1) + i, cb = ca + 1, cc = cb + gn + 1, cd = ca + gn + 1;
+            if (!capCells.Contains(j * gn + i)) { gf.Add(new[] { ca, cb, cc }); gf.Add(new[] { ca, cc, cd }); continue; }
+            Vec3d mid = 0.5 * (gv[ca] + gv[cc]); int cm = gv.Count; gv.Add(mid + 1e-5 * (gv[cb] - mid).Normalized());
+            gf.Add(new[] { ca, cb, cm }); gf.Add(new[] { cb, cc, cm }); gf.Add(new[] { ca, cm, cc }); gf.Add(new[] { ca, cc, cd });
+        }
+    var capped = new MeshData(gv.ToArray(), gf.ToArray());
+    var capFix = MeshCleanup.Compute(capped, new MeshCleanup.Options { SliverAngle = 1.0 });
+    numbers["cleanupDirty"] = new
+    {
+        saddleFaces = sad.FaceCount, saddleAgreeIn = Agree(sad, sadDirty), saddleAgreeOut = Agree(sad, sadFix.Mesh), saddleFlipped = sadFix.Info.FlippedFaces,
+        saddleHSignFlips = hSad.Zip(hSadFix, (x, y) => x * y < 0 ? 1 : 0).Sum(),
+        sphereFaces = sph.FaceCount, sphereAgreeOut = Agree(sph, sphFix.Mesh), sphereFlipped = sphFix.Info.FlippedFaces,
+        sphereVolume = Math.Round(Vol(sphFix.Mesh), 4), sphereVolumeClean = Math.Round(Vol(sph), 4),
+        splits, needleMinBefore = Math.Round(noNeedles.Info.MinAngleBefore, 5), needleMinAfter = Math.Round(noNeedles.Info.MinAngleAfter, 3),
+        needlesReported = keepNeedles.Info.SliversLeft, needleReport = keepNeedles.Info.Report,
+        needlesCollapsed = noNeedles.Info.NeedlesCollapsed, needlesLeft = noNeedles.Info.SliversLeft,
+        needleVerts = noNeedles.Mesh.VertexCount, cleanVerts = sph.VertexCount,
+        needleFacesBack = Agree(sph, noNeedles.Mesh), needleMoved = noNeedles.Mesh.Vertices.Count(q => !cleanPos.Contains(q)),
+        hErrDirty = Math.Round(hClean.Select((h, i) => Math.Abs(h - hNeedled[i])).Max(), 4),
+        hErrFixed = hClean.Length == hFixed.Length ? hClean.Zip(hFixed, (x, y) => Math.Abs(x - y)).Max() : -1,
+        needleMs = t.ElapsedMilliseconds,
+        caps = capCells.Count, capsFlipped = capFix.Info.CapsFlipped, capsLeft = capFix.Info.SliversLeft,
+        capAreaBefore = Area(capped), capAreaAfter = Area(capFix.Mesh), capMinBefore = Math.Round(capFix.Info.MinAngleBefore, 6), capMinAfter = Math.Round(capFix.Info.MinAngleAfter, 2),
+        capVerts = capFix.Mesh.VertexCount, capVertsIn = capped.VertexCount,
+        report = sphFix.Info.Report,
+    };
     // pull a floating circle onto the sphere
     var proj = new MeshProjection(TestMeshes.CreateUnitSphere(32));
     var circ = new List<Vec3d>(); for (int i = 0; i <= 60; i++) { double a = 2 * Math.PI * i / 60; circ.Add(new Vec3d(0.9 * Math.Cos(a), 0.9 * Math.Sin(a), 0.9)); }
