@@ -120,6 +120,28 @@ var sw = Stopwatch.StartNew();
     var geoSphere = EvenlySpacedNet.TraceGeodesics(sphere, 1 + 12 * 48 + 5, new Vec3d(0, 1, 0), new EvenlySpacedNet.Options { Spacing = 0.35 });
     numbers["sphereGeoClosed"] = new { count = geoSphere.Count, closed = geoSphere.Count(l => (l[0] - l[^1]).Length < 1e-9), firstLen = R3(ArcLen(geoSphere[0])) };
     var proj = new MeshProjection(sphere);
+    // Lath Analysis on a traced closed great circle (48 divisions, tilted plane) and on a coarse
+    // 45° latitude circle: kg = 0 and kg = tan 45° = 1; a flat 100 × 10 mm lath on the great
+    // circle is at utilization kn·t/2 / 0.5 % = 1 exactly
+    {
+        var s48 = TestMeshes.CreateUnitSphere(48);
+        var p48 = new MeshProjection(s48);
+        var dir = new Vec3d(0, 0.6, 0.8);
+        var loop = GeodesicCurves.Trace(s48, new[] { p48.NearestVertexGlobal(new Vec3d(1, 0, 0)) }, new[] { dir })[0];
+        var pn = Vec3d.Cross(new Vec3d(1, 0, 0), dir).Normalized();
+        double kink = 0; int hint = p48.NearestVertexGlobal(loop[0]);
+        for (int i = 1; i < loop.Length - 1; i++)
+        {
+            var hit = p48.ClosestPoint(loop[i], hint); hint = hit.NearestVertex; var nn = hit.SmoothNormal;
+            var ea = loop[i] - loop[i - 1]; ea = ea - Vec3d.Dot(ea, nn) * nn; var eb = loop[i + 1] - loop[i]; eb = eb - Vec3d.Dot(eb, nn) * nn;
+            kink = Math.Max(kink, Math.Abs(Math.Atan2(Vec3d.Dot(nn, Vec3d.Cross(ea, eb)), Vec3d.Dot(ea, eb))) * 180 / Math.PI);
+        }
+        var laLoop = LathAnalysis.Analyze(p48, loop, new LathAnalysis.Options { Width = 0.1, Thickness = 0.01, MaxStrain = 0.005 });
+        var lat = new Vec3d[40];
+        for (int i = 0; i < 40; i++) { double th = 1.5 * Math.PI * i / 39; lat[i] = new Vec3d(Math.Cos(Math.PI / 4) * Math.Cos(th), Math.Cos(Math.PI / 4) * Math.Sin(th), Math.Sin(Math.PI / 4)); }
+        var laLat = LathAnalysis.Analyze(p48, lat);
+        numbers["lathLoop"] = new { points = loop.Length, closed = (loop[0] - loop[^1]).Length < 1e-12, offPlane = loop.Max(q => Math.Abs(Vec3d.Dot(q, pn))), edge = R3(p48.AverageEdgeLength), kinkDeg = R3(kink), kgMax = R3(laLoop.GeodesicCurvature.Max(Math.Abs)), knMean = R3(laLoop.NormalCurvature.Skip(3).Take(loop.Length - 6).Average(Math.Abs)), util = R3(laLoop.MaxUtilization), latKgErr = Enumerable.Range(2, 36).Max(i => Math.Abs(Math.Abs(laLat.GeodesicCurvature[i]) - 1.0)), latSpacing = R3((lat[1] - lat[0]).Length) };
+    }
     var a = new Vec3d(1, 0, 0); var b = new Vec3d(-0.5, 0.5, 0.7071).Normalized();
     var sp = ShortestPath.Compute(proj, a, b)!.Value;
     var vp = ShortestPath.Dijkstra(sphere, proj.NearestVertexGlobal(a), proj.NearestVertexGlobal(b))!;

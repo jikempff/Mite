@@ -249,6 +249,17 @@ internal static class FieldTracer
     /// (current end → closing point) linearly along the whole loop and
     /// reprojecting, so the seam carries no kink and the loop returns exactly
     /// to its first point.
+    ///
+    /// Each point's share of the gap is applied in its own tangent plane. The
+    /// gap is one constant vector, about 1 % of the loop (the tracer's drift),
+    /// and half-way round a sphere it points into the surface: a point pushed
+    /// 0.04 below a facet edge projects back not onto the edge but onto
+    /// whichever adjacent facet is nearer, 0.04 · tan(dihedral / 2) beside the
+    /// curve, with the side set by round-off. On a 48-division unit sphere
+    /// that put a traced great circle ±1.2e-3 either side of the edge ring
+    /// point by point — in-plane kinks of 9°, kg up to 1.1 where the truth is
+    /// 0 (and 0.45 on 24 divisions). With the normal component removed the
+    /// kinks are below 0.1° and kg within 0.01–0.04 (LathAnalysisTests).
     /// </summary>
     internal static void CloseSmoothly(MeshProjection proj, List<Vec3d> points, Vec3d closingPoint)
     {
@@ -264,10 +275,21 @@ internal static class FieldTracer
                 int hint = proj.NearestVertexGlobal(points[0]);
                 for (int i = 1; i < n; i++)
                 {
-                    var h = proj.ClosestPoint(points[i] + (arc[i] / total) * gap, hint);
+                    var here = proj.ClosestPoint(points[i], hint);
+                    Vec3d nrm = here.SmoothNormal;
+                    Vec3d shift = (arc[i] / total) * gap;
+                    shift = shift - Vec3d.Dot(shift, nrm) * nrm;
+                    var h = proj.ClosestPoint(points[i] + shift, here.NearestVertex);
                     points[i] = h.Point;
                     hint = h.NearestVertex;
                 }
+                // The spread leaves the last point a round-off (the gap's normal
+                // component) short of the closing point; a segment that short
+                // has no direction of its own and reads as a kink of up to 15°
+                // in an unfaired loop. Let the previous point close instead.
+                double meanSeg = total / (n - 1);
+                if (n > 4 && (closingPoint - points[n - 1]).Length < 0.5 * meanSeg)
+                    points.RemoveAt(n - 1);
             }
         }
         points.Add(closingPoint);
