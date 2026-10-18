@@ -69,8 +69,10 @@ public class LathAnalysisTests
 
         for (int i = 2; i < pts.Length - 2; i++)
         {
-            Assert.True(Math.Abs(Math.Abs(result.GeodesicCurvature[i]) - 1.0) < 0.2,
-                $"45-degree latitude geodesic curvature should be ~1, got {result.GeodesicCurvature[i]:F4} at {i}");
+            // was within 0.2 (the two-chord estimator read 1.11 here); the
+            // turning-sum estimator is exact for circles at any sampling
+            Assert.True(Math.Abs(Math.Abs(result.GeodesicCurvature[i]) - 1.0) < 0.01,
+                $"45-degree latitude geodesic curvature should be 1, got {result.GeodesicCurvature[i]:F4} at {i}");
             Assert.True(Math.Abs(Math.Abs(result.NormalCurvature[i]) - 1.0) < 0.2,
                 $"Sphere normal curvature should be ~1, got {result.NormalCurvature[i]:F4} at {i}");
         }

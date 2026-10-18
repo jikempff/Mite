@@ -28,6 +28,39 @@ namespace Mite.Core.Gridshells;
 /// on cylinder, torus and sphere test curves as well (see RuledSurfaceTests).
 /// On an asymptotic curve τg² = −K (Beltrami–Enneper), so the twist of a
 /// straight asymptotic lath is set by the Gaussian curvature alone.
+///
+/// Strain model, checked 2026-10-18 against the strip literature:
+/// Tang, Kilian, Bo, Wallner &amp; Pottmann 2016 (Analysis and design of
+/// curved support structures, AAG 2016, §2) — a strip tangent to the
+/// surface develops straight iff kg = 0 (geodesic), a strip orthogonal to
+/// it iff kn = 0 (asymptotic), and the Darboux rotation d = τg T − kn g + kg N
+/// names the bending axis of each term; Pottmann et al. 2010 (Geodesic
+/// patterns, §1): timber panels bend "only about their weak axis" and twist,
+/// never sideways, so a flat lath takes kn about its width (fibre t/2), kg
+/// about the surface normal (fibre w/2) and τg as twist; Schling, Kilian,
+/// Wang, Schikore &amp; Pottmann 2018 (Design and construction of curved
+/// support structures with repetitive parameters, AAG 2018): upright
+/// lamellas (100 × 1.5 mm steel, 60 × 4 mm plywood in the 2016 prototype)
+/// take kg about the weak axis and τg = ½(k2 − k1) sin 2φ as twist, which
+/// the FE model applies as strain loads. Fibre strain ε = κ · (depth/2) and
+/// the Saint-Venant twist shear γ = k(b/t) · τg · t (Timoshenko &amp; Goodier
+/// 1970, §109; <see cref="Fabrication.LathProfile.SectionProperties"/>) are
+/// the textbook strip formulas; γ is compared with the normal strain limit
+/// through the von Mises equivalent ε_eq = γ / √3. None of the sources
+/// contradicts this decomposition; Schling's own timber limits (Repetitive
+/// Structures, 2018) were not accessible and are left to the MaxStrain input.
+///
+/// The geodesic curvature is the only quantity read from the polyline's own
+/// turning. It is measured as the total turning in the tangent plane over
+/// the window divided by the arc between the mid-points of the two end
+/// chords, which is exact for a circle at any sampling (the sum of the
+/// exterior angles of an inscribed polygon between two chord mid-points is
+/// their arc over R). Reading the angle between two chords of half the
+/// window and dividing by their mean length — the previous estimator — was
+/// biased by sampling/window as soon as the window was shorter than the
+/// polyline's spacing (a 40-point 45° latitude circle on a 48-division unit
+/// sphere read kg = 1.36 instead of 1.00; a 30-point torus circle 0.58
+/// instead of 0.33), see LathAnalysisTests.
 /// </summary>
 public static class LathAnalysis
 {
@@ -174,22 +207,13 @@ public static class LathAnalysis
             if (lPrev < 1e-15 || lNext < 1e-15) continue;
             Vec3d tPrev = ePrev / lPrev, tNext = eNext / lNext;
 
-            // Geodesic curvature: in-surface part of the polyline's turning
-            // angle over the window, in the Darboux frame of the mid tangent
-            double dot = Math.Max(-1.0, Math.Min(1.0, Vec3d.Dot(tPrev, tNext)));
-            double kappa = Math.Acos(dot) / (0.5 * (lPrev + lNext));
+            // Darboux frame of the mid tangent
             Vec3d t = (tPrev + tNext);
             if (t.LengthSquared < 1e-20) t = tNext;
             t = t.Normalized();
             Vec3d nrm = normals[i];
             Vec3d g = Vec3d.Cross(nrm, t);
             if (g.LengthSquared > 1e-20) g = g.Normalized();
-            Vec3d bend = tNext - tPrev;
-            if (bend.LengthSquared > 1e-20)
-            {
-                bend = bend.Normalized();
-                kg[i] = kappa * Vec3d.Dot(bend, g);
-            }
 
             // Normal curvature and geodesic torsion from the rotation of the
             // surface normal over the window (N' = -kn T - tau_g g): both read
@@ -199,6 +223,8 @@ public static class LathAnalysis
             kn[i] = -Vec3d.Dot(dN, t);
             tg[i] = -Vec3d.Dot(dN, g);
         }
+
+        GeodesicCurvatureByTurning(polyline, normals, arc, closed, window, kg);
 
         // Strain per mode. Flat strip: kn bends about the width axis (fiber
         // distance t/2), kg about the surface normal (fiber distance w/2).
@@ -228,6 +254,74 @@ public static class LathAnalysis
         }
 
         return new Result(kg, kn, tg, util, maxUtil, maxUtil <= 1.0);
+    }
+
+    /// <summary>
+    /// Geodesic curvature per vertex as the in-surface turning over the window.
+    /// At every vertex the incoming and outgoing segments are projected into
+    /// the tangent plane of the smooth normal and their signed angle φ (about
+    /// the normal, positive towards g = N × T) is the vertex's in-plane
+    /// turning — the discrete development of the curve. For vertex i the
+    /// window is widened to whole vertices on both sides (at least one each,
+    /// never beyond the lath's interior, never round a closed loop onto
+    /// itself), and kg = Σ φ over those vertices divided by the arc between
+    /// the mid-points of the chord before the first and the chord after the
+    /// last of them. For an inscribed polygon of a circle that quotient is
+    /// exactly 1/R whatever the sampling. End points of an open lath are 0.
+    /// </summary>
+    internal static void GeodesicCurvatureByTurning(Vec3d[] polyline, Vec3d[] normals, double[] arc, bool closed, double window, double[] kg)
+    {
+        int n = polyline.Length;
+        int m = closed ? n - 1 : n; // distinct vertices
+        if (m < 3) return;
+
+        double Seg(int j) { j %= m; if (j < 0) j += m; return arc[j + 1] - arc[j]; } // segment j → j + 1
+        int Wrap(int j) { j %= m; if (j < 0) j += m; return j; }
+
+        var phi = new double[m];
+        for (int j = 0; j < m; j++)
+        {
+            if (!closed && (j == 0 || j == m - 1)) continue;
+            Vec3d nj = normals[j];
+            Vec3d a = polyline[j] - polyline[Wrap(j - 1)]; a = a - Vec3d.Dot(a, nj) * nj;
+            Vec3d b = polyline[Wrap(j + 1)] - polyline[j]; b = b - Vec3d.Dot(b, nj) * nj;
+            if (a.LengthSquared < 1e-30 || b.LengthSquared < 1e-30) continue;
+            phi[j] = Math.Atan2(Vec3d.Dot(nj, Vec3d.Cross(a, b)), Vec3d.Dot(a, b));
+        }
+
+        // Chord → arc: a chord whose end tangents turn by θ spans an arc of
+        // l · (θ/2) / sin(θ/2); θ is taken as the mean of the two end turnings.
+        // Without it a 12-point 45° latitude circle read kg 1.5 % high.
+        var segArc = new double[closed ? m : n - 1];
+        for (int j = 0; j < segArc.Length; j++)
+        {
+            double theta = 0.5 * (phi[j] + phi[Wrap(j + 1)]);
+            double f = Math.Abs(theta) > 1e-6 ? (0.5 * theta) / Math.Sin(0.5 * theta) : 1.0 + theta * theta / 24.0;
+            segArc[j] = Seg(j) * f;
+        }
+        double SegA(int j) { j %= m; if (j < 0) j += m; return segArc[j]; }
+
+        double half = 0.5 * window;
+        for (int i = 0; i < m; i++)
+        {
+            if (!closed && (i == 0 || i == m - 1)) continue;
+            int kb = 0, kf = 0;
+            double sBack = 0, sFwd = 0;
+            bool CanBack() => closed ? kb + kf < m - 2 : i - kb - 1 >= 1;
+            bool CanFwd() => closed ? kb + kf < m - 2 : i + kf + 1 <= m - 2;
+            while ((kb == 0 || sBack < half) && CanBack()) { kb++; sBack += SegA(i - kb); }
+            while ((kf == 0 || sFwd < half) && CanFwd()) { kf++; sFwd += SegA(i + kf - 1); }
+            if (kb == 0 && kf == 0) continue;
+
+            double sum = 0;
+            for (int k = -kb; k <= kf; k++) sum += phi[Wrap(i + k)];
+            // arc from the mid-point of the chord before vertex i−kb to the
+            // mid-point of the chord after vertex i+kf
+            double len = 0.5 * SegA(i - kb - 1) + 0.5 * SegA(i + kf);
+            for (int k = -kb; k < kf; k++) len += SegA(i + k);
+            if (len > 1e-15) kg[i] = sum / len;
+        }
+        if (closed) kg[n - 1] = kg[0];
     }
 
     /// <summary>Analyzes many laths against one mesh.</summary>

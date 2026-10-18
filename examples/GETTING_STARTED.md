@@ -163,6 +163,16 @@ Wire any net's curves into **Lath Analysis** together with the same mesh:
 peak strain utilization (over 1 fails). Graft the per-point `u` tree into a
 gradient on the curves to color-code where laths are overstressed.
 
+What the numbers mean (checked against the strip literature, see the header
+of `LathAnalysis.cs`): a flat lath bends with `Kn` about its width (fibre
+t/2) and with `Kg` about the surface normal (fibre w/2, its strong axis), an
+upright lath the other way round; both twist with `Tg`, and on an asymptotic
+curve `Tg` = √−K. `Kg` is the lath's own in-surface turning, exact for a
+circle however coarsely the curve is sampled; `Kn` and `Tg` come from the
+surface normal. A geodesic should read `Kg` ≈ 0 — on a traced closed loop
+(a great circle) it does so to 0.03 at unit radius; a loop that reads
+`Kg` ≈ 1 with 1.3.2 was the loop closure's zigzag, not the lath.
+
 For the whole network use **Gridshell Analysis**: the same curves, the joints
 (crossing points; T-junctions are found automatically), support points and the
 section. `St` holds the supports fixed (`0`) or pinned (`1`); `Jk` sets the joints

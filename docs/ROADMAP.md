@@ -394,6 +394,9 @@ remains the self-test review page.
       error is below the mesh's own faceting (the traced polyline lies on the
       facets, whose sagitta is edge²κ/8); tracing on a smooth limit surface
       (Loop / jet) would be the next step, only worth it on coarse meshes.
+      2026-10-18: on closed loops most of that error was the loop closure's
+      reprojection zigzag (D, lath bending item), now gone; traced great
+      circles stay within 0.03 edge of their plane with in-plane kinks ≤ 0.4°.
 - [x] Web coverage: gap filling by further seed crosses one Spacing from
       the nearest curve (≤ 0.5 % uncovered on ten surfaces; was up to 94 %
       for a single cross); same-family contact cut (0.15 Spacing, 30°) —
@@ -786,6 +789,44 @@ remains the self-test review page.
       least-squares fit over the window or the tangent's rotation about the
       transported normal; and the strain model itself (τ·t/√3 twist strain,
       w/2 and t/2 fibre distances) against Schling's timber limits.
+      Done 2026-10-18 (session 1): (1) the kg noise was not the estimator but
+      the *loop closure*: `FieldTracer.CloseSmoothly` spread the closure gap
+      (~1 % of the loop, the tracer's drift) as one constant 3D vector and
+      reprojected; half-way round a sphere that vector points into the
+      surface and the reprojection lands on whichever facet beside the edge
+      is nearer (0.04 · tan(dihedral/2) = 1.2e-3 on a 48-division unit
+      sphere), so a traced great circle zigzagged ±1.2e-3 point by point:
+      in-plane kinks of 9°, |kg| up to 0.45 (24 divisions) / 1.12 (48) on a
+      geodesic, a flat lath at utilization 11 where the truth is 1. The gap
+      is now spread in each point's tangent plane and the round-off stub
+      before the closing point dropped: kinks ≤ 0.4°, |kg| ≤ 0.03,
+      utilization 1.00, unfaired loops kink-free (every closed loop of
+      Geodesic / Asymptotic / Conjugate Net, Curvature Streamlines and the
+      web benefits). (2) The two-chord kg estimator was biased whenever the
+      window (2 edges) was shorter than the polyline's spacing: 40 points on
+      a 45° latitude circle of the 48-sphere read 1.36 for 1.00, a 30-point
+      torus crown circle 0.58 for 0.33. kg is now the tangent-plane turning
+      summed over the window (widened to whole vertices) over the arc between
+      the end-chord mid-points, with the chord→arc factor (θ/2)/sin(θ/2):
+      exact for circles at any sampling (5e-4 at 40 points, 1.1 % at 12
+      points = five edges apart, where the inscribed geodesic polygon differs
+      from the circle by the Gaussian curvature of the slivers). Traced
+      geodesics now read |kg| 0.01–0.03 at the default window, 0.004–0.012 at
+      four edges; hyperboloid rulings 0.010–0.016 as before. (3) Strain
+      model checked and kept: Tang et al. 2016 §2 (straight development iff
+      kg = 0 for tangent strips, kn = 0 for orthogonal ones; the Darboux
+      rotation names the bending axes), Pottmann et al. 2010 §1 (panels bend
+      about the weak axis only and twist), Schling et al. 2018 (kg and τg of
+      upright lamellas applied as strain loads; 100 × 1.5 mm steel, 60 × 4 mm
+      plywood, 80 × 8 mm bamboo, 8 × 80 mm GRP in the built structures),
+      Timoshenko & Goodier §109 for the twist. Schling 2018 (Repetitive
+      Structures) and Wan, D'Acunto & Schling 2024 were not accessible (TUM
+      mediatum behind a bot wall, Elsevier), so the allowable timber strains
+      stay an input (MaxStrain). `GeodesicCurvatureTests` (15 exact tests).
+      Open: the remaining in-plane wobble of traced curves (0.01–0.03 kg on a
+      unit sphere) comes from the tracer's own facet-scale lateral error, not
+      from the estimator; tracing on a smooth limit surface (C) would remove
+      it. The chord→arc correction is not applied to the kn / τg window.
 - [x] Mesh repair and welding — 2026-10-09: orientation (outward / majority,
       manifold edges only), isolated vertices, slivers (needles collapsed
       under the Dey et al. 1999 link condition with a dummy border vertex,
@@ -1178,6 +1219,13 @@ Open
       Analysis — laths in layers on rigid end offsets (`AxisOffsets`, `Layer`
       / `Align`, `ReactionMoments`, moment equilibrium), five exact tests, two
       bench self-tests (77 PASS).
+- [x] 2026-10-18 (session 1, D): Lath Analysis geodesic curvature — the loop
+      closure's lateral zigzag found and fixed (`CloseSmoothly` spreads the
+      gap in the tangent plane: a traced great circle read |kg| 1.12 / flat
+      lath utilization 11, now 0.03 / 1.00), the kg estimator made exact for
+      circles at any sampling (1.36 → 1.00 on a coarse latitude circle), the
+      strain model checked against Tang 2016, Pottmann 2010 and Schling 2018;
+      15 exact tests, two bench self-tests (77 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench
