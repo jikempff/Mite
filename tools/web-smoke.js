@@ -11,6 +11,7 @@
 //  4. The section choice reaches the kernel (1.2.5's binding dropped it):
 //     a round bar sweeps as a tube and gets its own utilization.
 //  5. Layouts: the border web ends every curve on the border (no T-junctions),
+//     the guide web crosses at every node of the section through the seed,
 //     the fill still traces, the legend explains the viewport markers.
 //  6.–8. Lath sections, structure, kinetics.
 //  9. Kinetic strain per state: one utilization per lath and state, the
@@ -80,6 +81,17 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   await page.click("#layouts [data-layout='1']"); await idle(180000);
   const web = await page.evaluate(() => ({ layout: window.__mite.layout, ends: window.__mite.netData?.endClasses || [], n: (window.__mite.netData?.countA || 0) + (window.__mite.netData?.countB || 0) }));
   check(web.layout === 1 && web.n > 20 && web.ends.every((c) => c === 0), `border web: ${web.n} curves, every end on the border (${web.ends.filter((c) => c !== 0).length} not)`);
+  // the guide web: nodes every Spacing along the horizontal section through the
+  // seed, both families through every node, every curve rim to rim
+  await page.click("#layouts [data-layout='4']"); await idle(180000);
+  const gd = await page.evaluate(() => {
+    const d = window.__mite.netData; const nodes = []; for (let i = 0; i + 2 < (d?.guideNodes || []).length; i += 3) nodes.push([d.guideNodes[i], d.guideNodes[i + 1], d.guideNodes[i + 2]]);
+    const dist = (p, c) => { let b = 1e9; for (let i = 0; i + 1 < c.length; i++) { const a = c[i], q = c[i + 1]; const ab = [q[0] - a[0], q[1] - a[1], q[2] - a[2]]; const l2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2; const t = l2 < 1e-30 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1] + (p[2] - a[2]) * ab[2]) / l2)); b = Math.min(b, Math.hypot(a[0] + t * ab[0] - p[0], a[1] + t * ab[1] - p[1], a[2] + t * ab[2] - p[2])); } return b; };
+    const through = Math.max(...nodes.map((p) => Math.max(Math.min(...d.a.map((c) => dist(p, c))), Math.min(...d.b.map((c) => dist(p, c))))));
+    return { layout: window.__mite.layout, nodes: nodes.length, a: d?.countA || 0, b: d?.countB || 0, ends: d?.endClasses || [], through, spacing: d?.resolvedSpacing, guide: d?.guide?.length || 0 };
+  });
+  check(gd.layout === 4 && gd.guide > 10 && gd.nodes >= 10 && gd.a === gd.nodes && gd.b === gd.nodes, `guide web on the catenoid: ${gd.nodes} nodes along the section through the seed, ${gd.a} + ${gd.b} curves`);
+  check(gd.through < 1e-3 * gd.spacing && gd.ends.every((c) => c === 0), `guide web: both families through every node (within ${gd.through?.toExponential(1)}), every end on the rim (${gd.ends.filter((c) => c !== 0).length} not)`);
   await page.click("#layouts [data-layout='0']"); await idle(180000);
   const fill = await page.evaluate(() => ({ layout: window.__mite.layout, n: (window.__mite.netData?.countA || 0) + (window.__mite.netData?.countB || 0), legend: document.getElementById('end-legend').textContent }));
   check(fill.layout === 0 && fill.n > 20, `evenly spaced fill traces (${fill.n} curves)`);

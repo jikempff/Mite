@@ -35,6 +35,7 @@ public class AsymptoticNetComponent : MiteComponent
         pManager.AddIntegerParameter("Layout", "Ly", "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed), 3 = farthest-point fill (each new curve starts in the middle of the widest gap left, Mebarki et al. 2005: no gap wider than 1.6 x Spacing, fewer T-junctions, gaps less uniform than 0). Webs never merge; their spacing away from the seed line is what the surface dictates", GH_ParamAccess.item, 0);
         pManager[1].Optional = true;
         pManager[6].Optional = true;
+        RegisterGuideInput(pManager, "each family");
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -69,6 +70,7 @@ public class AsymptoticNetComponent : MiteComponent
 
         var data = input.Data;
         var proj = new MeshProjection(data);
+        var guide = ReadGuide(DA, 11, proj);
         var seeds = ResolveSeeds(input, proj, seedIdx, seedPts);
         var curvature = PrincipalCurvature.Compute(data);
         var field = AsymptoticCurves.ComputeDirections(curvature, data, minAngle);
@@ -93,7 +95,7 @@ public class AsymptoticNetComponent : MiteComponent
             var opts = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
-                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous, Layout = netLayout
+                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous, Layout = netLayout, Guide = guide
             };
             int firstSeed = -1;
             foreach (int s in seeds) if (field.Exists[s]) { firstSeed = s; break; }
@@ -106,16 +108,19 @@ public class AsymptoticNetComponent : MiteComponent
             var optsB = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
-                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous, Layout = netLayout
+                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous, Layout = netLayout, Guide = guide
             };
             familyB = EvenlySpacedNet.TraceField(data, field.Family2, field.Exists, firstSeed, optsB, field.Family1);
             ReportTracing(optsB, "Family B", proj, field.Exists);
+            ReportGuide(opts, "Guide");
             netSpacing = opts.ResolvedSpacing;
             if (spacing <= 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
         }
         else
         {
+            if (guide != null)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Guide is used with AutoSpace only.");
             if (seeds.Count == 0)
             {
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Provide Seeds / SeedPoints, or enable AutoSpace.");

@@ -145,6 +145,24 @@ the same length and fewer T-junctions, and the typical gap is closer to `Sp`
 apart), but the gaps vary more: anything from 0.8 to 1.6 × `Sp` where the
 surface spreads the curves. On a torus the meridians come out as 2, 4, 8 …
 2^k evenly spread circles. Geodesic Net ignores `3` and uses `0`.
+### Guide: Schling's seed curve
+
+The last input of every net component, `Gd` (Guide), takes a curve and
+overrides the layout: the curve is pulled onto the mesh (draw it on the
+surface, or a diagonal above it, or a plan curve — it is projected to the
+closest surface points) and nodes are placed every `Sp` of arc length along
+it, one curve of each family through every node, border to border. This is
+how Schling lays out asymptotic gridshells: nodes at a repeated distance along
+a seed curve, the two families drawn alternately through each other's nodes,
+and how the Studio X catalogue places its origin points along a middle curve.
+Neighbouring curves are then `Sp × sin(angle to the guide)` apart — the node
+distance is what you set, not the lath spacing. A guide drawn along one
+family's own curve seeds only the other family (its own curve is traced once).
+On Geodesic Net the geodesics leave the guide in the first `D` direction
+carried along the guide by parallel transport, so they stay parallel on a
+cylinder and fan out round a latitude circle of a dome. Open curves get their
+nodes centred; closed curves get L / round(L / Sp) nodes exactly equal apart.
+The component reports the node count and spacing as a remark.
 
 ## 3. Check buildability (2 minutes)
 

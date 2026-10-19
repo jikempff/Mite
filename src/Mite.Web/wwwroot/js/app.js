@@ -368,6 +368,8 @@ async function traceNet() {
     await K('useDiagonals', showG);
     drawNetCurves();
     if ($('crossings').checked && d.crossings) v.showPoints('crossings', d.crossings.points, v.ink(), 3.5); else v.clearOverlay('crossings');
+    // the guide's nodes (layout 4): every node carries a crossing of both families
+    if (d.guideNodes?.length) v.showPoints('guide', d.guideNodes, v.ink(), 5); else v.clearOverlay('guide');
     showEndMarkers();
     const closed = S.stats.boundaryVertices === 0;
     let s = `A <b>${d.countA}</b>${d.countB ? ` · B <b>${d.countB}</b>` : ''} laths · length <b>${fmt(d.minLength, 2)} … ${fmt(d.maxLength, 2)}</b>` +
@@ -831,6 +833,7 @@ function updateRecipe() {
     if (S.net === 'chebyshev') p += `L = ${fmt(o.edgeLength)}, Count = ${o.count}, Angle = ${o.angleDeg}°`;
     else if (S.net === 'isocurves') p += `field ${o.field}, ${o.levels} levels`;
     else if (o.layout === 3) p = `Asymptotic Web: Spacing = ${fmt(o.spacing)}, Symmetry = ${o.symmetry} (−1 detect), Seed = ${S.seed >= 0 ? S.seed : 'auto'}` + (S.aag ? ' → AAG Web (Iterations 16, Proximity 0.3)' : $('diagonals').checked ? ' → Diagonals (G)' : '');
+    else if (o.layout === 4) p += `AutoSpace = True, Spacing = ${fmt(o.spacing)}, Guide = the horizontal section through the seed (nodes every Spacing along it; any curve pulled to the mesh works in Grasshopper), Step = 0 (auto)`;
     else p += `AutoSpace = True, Spacing = ${fmt(o.spacing)}, Layout = ${o.layout} (${["evenly spaced fill", "web from the border", "web from the seed cross"][o.layout]}), Continuous = ${o.continuous}, Step = 0 (auto)`;
     if (S.net === 'asymptotic' && o.layout !== 3) p += `, MinAngle = ${o.minAngle}`;
     if (S.seed >= 0) p += `, Seed = ${S.seed}`;

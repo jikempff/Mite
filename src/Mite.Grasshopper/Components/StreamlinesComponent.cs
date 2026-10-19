@@ -34,6 +34,7 @@ public class StreamlinesComponent : MiteComponent
         pManager.AddIntegerParameter("Layout", "Ly", "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed), 3 = farthest-point fill (each new curve starts in the middle of the widest gap left, Mebarki et al. 2005: no gap wider than 1.6 x Spacing, fewer T-junctions, gaps less uniform than 0). Webs never merge; their spacing away from the seed line is what the surface dictates", GH_ParamAccess.item, 0);
         pManager[1].Optional = true;
         pManager[5].Optional = true;
+        RegisterGuideInput(pManager, "the family");
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -67,6 +68,7 @@ public class StreamlinesComponent : MiteComponent
         var seeds = ResolveSeeds(input, proj, seedIdx, seedPts);
         var curvature = PrincipalCurvature.Compute(data);
         var dirs = maxDir ? curvature.D1 : curvature.D2;
+        var guide = ReadGuide(DA, 11, proj);
 
         List<Vec3d[]> lines;
         if (autoSpace)
@@ -75,10 +77,12 @@ public class StreamlinesComponent : MiteComponent
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps, ShouldCancel = Cancelled,
                 MaxCurves = Math.Max(1, maxCurves), Continuous = continuous,
-                Layout = ToNetLayout(layout)
+                Layout = ToNetLayout(layout),
+                Guide = guide
             };
             lines = EvenlySpacedNet.TraceField(data, dirs, null, seeds.Count > 0 ? seeds[0] : -1, opts);
             ReportTracing(opts, "Streamlines", proj);
+            ReportGuide(opts, "Guide");
             if (spacing <= 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
         }

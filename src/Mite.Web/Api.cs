@@ -60,7 +60,7 @@ public class NetOptions
     public bool FromBorder { get; set; } = false;
     public double BorderAngle { get; set; } = 0;
     public bool Jacobi { get; set; } = true;
-    /// <summary>0 = evenly spaced fill (T-junctions), 1 = web from the border, 2 = web from the seed cross, 3 = symmetric web (Schling: node spacing along the seed curves).</summary>
+    /// <summary>0 = evenly spaced fill (T-junctions), 1 = web from the border, 2 = web from the seed cross, 3 = symmetric web (Schling: node spacing along the seed curves), 4 = web from a guide curve (the horizontal section through the seed, nodes every Spacing along it).</summary>
     public int Layout { get; set; } = 0;
     /// <summary>Symmetric web: −1 detect, 0 none, n forced n-fold rotation about the seed normal.</summary>
     public int Symmetry { get; set; } = -1;
@@ -251,6 +251,9 @@ public class NetPayload
     /// <summary>Symmetric web only: the node diagonals of the geodesic candidate family and the web statistics.</summary>
     public double[][][] G { get; set; } = Array.Empty<double[][]>();
     public WebInfo? Web { get; set; }
+    /// <summary>Guide layout: the guide curve pulled onto the mesh and its nodes (flat xyz).</summary>
+    public double[][] Guide { get; set; } = Array.Empty<double[]>();
+    public double[] GuideNodes { get; set; } = Array.Empty<double>();
     public long Ms { get; set; }
 }
 
@@ -496,15 +499,39 @@ public static partial class MiteApi
         var diagonals = new List<Vec3d[]>();
         _web = null;
 
+        int seed = o.Seed >= 0 && o.Seed < _mesh.VertexCount ? o.Seed : -1;
+        var dir = new Vec3d(o.Direction[0], o.Direction[1], o.Direction[2]);
+        if (dir.LengthSquared < 1e-20) dir = new Vec3d(1, 0, 0);
+        // Layout 4: a guide curve — the app has no curve drawing, so the guide
+        // is the horizontal section of the mesh through the seed (the longest
+        // level-set component of z there), the "projected curve" of the Studio X
+        // origin-point strategies; nodes every Spacing along it, both families
+        // through every node (Schling's layout)
+        Vec3d[]? guide = null;
+        if (o.Layout == 4 && kind != "chebyshev" && kind != "isocurves")
+        {
+            int gs = seed >= 0 ? seed : _proj.NearestVertexGlobal(Centroid(_mesh));
+            var zs = new double[_mesh.VertexCount];
+            for (int i = 0; i < zs.Length; i++) zs[i] = _mesh.Vertices[i].Z;
+            double level = _mesh.Vertices[gs].Z;
+            double zmin = zs.Min(), zmax = zs.Max();
+            level = Math.Min(zmax - 1e-3 * (zmax - zmin), Math.Max(zmin + 1e-3 * (zmax - zmin), level));
+            var comps = MeshIsocurves.Compute(_mesh, zs, new[] { level })[0];
+            if (comps.Count > 0)
+            {
+                guide = comps.OrderByDescending(ArcLength).First();
+                if (guide.Length < 2 || ArcLength(guide) < 2 * o.Spacing) guide = null;
+            }
+            if (guide == null) warnings.Add("No horizontal section through the seed is long enough for a guide; move the seed or lower the spacing.");
+        }
         EvenlySpacedNet.Options Opts() => new EvenlySpacedNet.Options
         {
             Spacing = o.Spacing, StepSize = o.Step, Continuous = o.Continuous, MaxCurves = Math.Max(1, o.MaxCurves),
             JacobiSeeding = o.Jacobi, FromBorder = o.FromBorder, BorderAngle = o.BorderAngle,
-            Layout = o.Layout == 1 ? NetLayout.WebBorder : o.Layout == 2 ? NetLayout.WebCross : NetLayout.Fill
+            Layout = o.Layout == 1 ? NetLayout.WebBorder : o.Layout == 2 ? NetLayout.WebCross : NetLayout.Fill,
+            Guide = guide
         };
-        int seed = o.Seed >= 0 && o.Seed < _mesh.VertexCount ? o.Seed : -1;
-        var dir = new Vec3d(o.Direction[0], o.Direction[1], o.Direction[2]);
-        if (dir.LengthSquared < 1e-20) dir = new Vec3d(1, 0, 0);
+        List<Vec3d> guideNodes = new List<Vec3d>();
 
         switch (kind)
         {
@@ -638,9 +665,16 @@ public static partial class MiteApi
         _famA = a; _famB = b; _famG = new();
         var all = a.Concat(b).ToList();
         bool[]? regionMask = kind == "asymptotic" ? AsymptoticCurves.ComputeDirections(Pc(2), _mesh, o.MinAngle).Exists : null;
+        if (guide != null)
+        {
+            var nodes = EvenlySpacedNet.GuideSeeds(_proj, guide, resolvedSpacing > 0 ? resolvedSpacing : o.Spacing, default, -1, Vec3d.Zero);
+            guideNodes = nodes.Select(n => n.pos).ToList();
+        }
         var payload = new NetPayload
         {
             Kind = kind, A = ToJagged(a), B = ToJagged(b), CountA = a.Count, CountB = b.Count,
+            Guide = guide == null ? Array.Empty<double[]>() : guide.Select(q => new[] { q.X, q.Y, q.Z }).ToArray(),
+            GuideNodes = guideNodes.SelectMany(q => new[] { q.X, q.Y, q.Z }).ToArray(),
             MinLength = all.Count > 0 ? all.Min(ArcLength) : 0, MaxLength = all.Count > 0 ? all.Max(ArcLength) : 0,
             ResolvedSpacing = resolvedSpacing, ResolvedStep = resolvedStep,
             Warnings = warnings.ToArray(), G = ToJagged(diagonals), Web = webInfo

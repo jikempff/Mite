@@ -140,6 +140,19 @@ internal static class Tests
             c => SetInputs(c, (0, saddle.DuplicateMesh()), (2, 0.05), (3, 200), (4, true), (5, 0.3)),
             c => Expect(CurveCount(c, 0) >= 2, $"auto-spaced family A has {CurveCount(c, 0)} curves"));
 
+        TestComponent("Asymptotic Net (guide curve)",
+            new Mite.Grasshopper.Components.AsymptoticNetComponent(),
+            c =>
+            {
+                // the diagonal x = y of the saddle z = x² − y² is one asymptotic line: a
+                // guide along it seeds the other family every Spacing along the diagonal
+                var bb = saddle.GetBoundingBox(true);
+                var guide = new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(bb.Min.X, bb.Min.Y, 0), new Rhino.Geometry.Point3d(bb.Max.X, bb.Max.Y, 0));
+                SetInputs(c, (0, saddle.DuplicateMesh()), (2, 0.05), (3, 200), (4, true), (5, 0.3), (11, guide));
+            },
+            c => Expect(CurveCount(c, 0) + CurveCount(c, 1) >= 4,
+                $"guide web: A={CurveCount(c, 0)}, B={CurveCount(c, 1)} (one family along the guide, the other through its nodes)"));
+
         TestComponent("Asymptotic Web",
             new Mite.Grasshopper.Components.AsymptoticWebComponent(),
             c => SetInputs(c, (0, saddle.DuplicateMesh()), (2, 0.2)),

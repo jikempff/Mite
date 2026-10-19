@@ -195,6 +195,50 @@ public abstract partial class MiteComponent : GH_Component
     }
 
     /// <summary>
+    /// Registers the optional Guide input of the net components (appended
+    /// last so saved definitions keep their wiring).
+    /// </summary>
+    protected static void RegisterGuideInput(GH_InputParamManager pManager, string family)
+    {
+        int i = pManager.AddCurveParameter("Guide", "Gd",
+            $"Guide (seed) curve: when given, {family} is a web seeded from it instead of the border or the seed cross, whatever Layout says. " +
+            "The curve is pulled onto the mesh and nodes are placed every Spacing of arc length along it (centred on an open curve; " +
+            "L / round(L / Spacing) apart on a closed one); one curve runs through every node, border to border, so both families of a net " +
+            "cross at every node — Schling's layout (the node distance along the seed curve is the repeated parameter). Neighbouring curves " +
+            "are then Spacing × sin(angle to the guide) apart. A guide along one family's own curve seeds only the other family. " +
+            "Geodesics leave the guide with the first Direction carried along it by parallel transport (Pottmann et al. 2010). " +
+            "Gaps elsewhere are filled as for the other webs.", GH_ParamAccess.item);
+        pManager[i].Optional = true;
+    }
+
+    /// <summary>Reads the Guide input as a polyline for the core (null when unset).</summary>
+    protected Vec3d[]? ReadGuide(IGH_DataAccess DA, int index, MeshProjection proj)
+    {
+        Curve? guide = null;
+        if (!DA.GetData(index, ref guide) || guide == null) return null;
+        var line = CurveSample.ToPolyline(guide, ResolveSampling(0, proj));
+        if (line == null || line.Length < 2)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Guide curve could not be sampled; using Layout instead.");
+            return null;
+        }
+        double len = 0;
+        for (int i = 1; i < line.Length; i++) len += (line[i] - line[i - 1]).Length;
+        if (len < 1e-9 * proj.AverageEdgeLength) return null;
+        return line;
+    }
+
+    /// <summary>Remark on where the guide nodes landed (count and spacing).</summary>
+    protected void ReportGuide(EvenlySpacedNet.Options opts, string family)
+    {
+        if (opts.Guide == null) return;
+        if (opts.GuideNodes.Count == 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{family}: the guide is shorter than Spacing or lies outside the usable region; no node could be placed.");
+        else
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"{family}: {opts.GuideNodes.Count} node(s) along the guide, {opts.ResolvedSpacing:G4} apart.");
+    }
+
+    /// <summary>
     /// Nearest welded vertex of a seed point; adds a note (with the distance)
     /// when the point lies well off the mesh.
     /// </summary>
