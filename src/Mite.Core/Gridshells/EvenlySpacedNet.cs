@@ -11,6 +11,16 @@ namespace Mite.Core.Gridshells;
 /// spacing to each side, keep candidates that are far enough from every
 /// accepted curve, and stop traces when they close in on an existing curve.
 /// Produces a complete, uniformly dense family from a single starting seed.
+/// Webs (border, seed cross, guide curve) follow the layout of built
+/// asymptotic gridshells: Schling, Hitrec &amp; Barthel 2017, "Designing Grid
+/// Structures Using Asymptotic Curve Networks" (DMS 2017: the net drawn
+/// alternately from the nodes of the other family, the node-to-node distance
+/// along the curves the one repeated parameter); Schling 2018, "Repetitive
+/// Structures" (TUM), §4.3. Geodesic families from a curve: Pottmann, Huang,
+/// Deng, Schiftner, Kilian, Guibas &amp; Wallner 2010, "Geodesic patterns"
+/// (ACM TOG 29(4)), §2 (initial tangents geodesically parallel along the
+/// source curve), §3 (Jacobi-field evolution); border-seeded geodesic timber
+/// shells: Pirazzi &amp; Weinand 2006 (IBOIS, EPFL).
 /// </summary>
 /// <summary>How a family of curves is laid out over the surface (see <see cref="EvenlySpacedNet.Options.Layout"/>).</summary>
 public enum NetLayout
@@ -110,6 +120,41 @@ public static class EvenlySpacedNet
         /// </summary>
         public bool WebFillGaps { get; set; } = true;
 
+        /// <summary>
+        /// Guide (seed) curve as a polyline, in model space: when given (two
+        /// points or more), the family is a web seeded from it instead of from
+        /// the border or the seed cross, whatever Layout says. The polyline is
+        /// pulled onto the mesh (every point to its closest surface point — a
+        /// curve drawn off the surface, a diagonal, a projected curve all work)
+        /// and nodes are placed every Spacing of arc length along the pulled
+        /// curve: an open guide gets its nodes centred (equal margins at both
+        /// ends), a closed one n = round(L / Spacing) nodes exactly L / n
+        /// apart. One curve of the family is traced through every node, in
+        /// full, so with the same guide on both families of a net every node
+        /// carries a crossing — Schling's layout (Schling, Hitrec &amp; Barthel
+        /// 2017: the net is drawn by alternately tracing each curve from the
+        /// nodes of the other, the node-to-node distance along the curves being
+        /// the one repeated parameter; Schling 2018, "Repetitive Structures",
+        /// §4.3) and the origin-point strategies of the Studio X catalogue
+        /// (points along a middle curve, a diagonal pulled to the surface, a
+        /// projected curve). The distance between neighbouring curves is
+        /// therefore Spacing · sin(angle between the family and the guide), not
+        /// Spacing. A node whose curve already passes there (within
+        /// MergeFactor · Spacing: a guide running along the family's own curve)
+        /// adds nothing; nodes outside the usable region are skipped. Geodesic
+        /// families leave the guide with the first direction carried along it by
+        /// parallel transport, which is the condition for a family of geodesics
+        /// emanating from a curve (Pottmann et al. 2010, "Geodesic patterns",
+        /// §2: the initial tangents are geodesically parallel along the source
+        /// curve); the angle to the guide is constant only when the guide is
+        /// itself a geodesic. Gap filling (<see cref="WebFillGaps"/>) applies as
+        /// for the other webs.
+        /// </summary>
+        public Vec3d[]? Guide { get; set; }
+
+        /// <summary>Set after a run with a Guide: the nodes placed along the pulled guide (every Spacing of arc length).</summary>
+        public List<Vec3d> GuideNodes { get; internal set; } = new List<Vec3d>();
+
         /// <summary>On-surface Laplacian fairing passes applied to each traced curve (0 disables).</summary>
         public int SmoothingPasses { get; set; } = 10;
 
@@ -164,6 +209,8 @@ public static class EvenlySpacedNet
         Vec3d[]? secondaryDirs = null)
     {
         options ??= new Options();
+        if (HasGuide(options))
+            return TraceFieldWeb(mesh, dirs, mask, firstSeed, options, secondaryDirs, WebSeeding.Guide);
         if (options.Layout != NetLayout.Fill)
             return TraceFieldWeb(mesh, dirs, mask, firstSeed, options, secondaryDirs,
                 options.Layout == NetLayout.WebCross ? WebSeeding.Cross : WebSeeding.Border);
@@ -232,6 +279,8 @@ public static class EvenlySpacedNet
         Border,
         /// <summary>Every Spacing along the other family's curve through the seed point (a seed cross).</summary>
         Cross,
+        /// <summary>Every Spacing of arc length along <see cref="Options.Guide"/> pulled onto the mesh (a node at each, shared by both families).</summary>
+        Guide,
     }
 
     /// <summary>
@@ -277,7 +326,11 @@ public static class EvenlySpacedNet
             }
         }
         int seedCross = -1;
-        if (seeding == WebSeeding.Cross || seedLines.Count == 0)
+        if (seeding == WebSeeding.Guide)
+        {
+            if (!HasGuide(options)) seeding = WebSeeding.Cross;
+        }
+        if (seeding != WebSeeding.Guide && (seeding == WebSeeding.Cross || seedLines.Count == 0))
         {
             // the other family's curve through the seed (closed meshes have no
             // border, so they always seed from a cross)
@@ -289,13 +342,15 @@ public static class EvenlySpacedNet
         bool full = false;
 
         // one full curve through a seed point, unless a curve already passes
-        // there (e.g. the same curve traced from the other end of the border)
-        bool TryAdd(MeshProjection.Hit hit)
+        // there (e.g. the same curve traced from the other end of the border);
+        // guide nodes only reject a curve through the node itself, since their
+        // curves are Spacing · sin(angle to the guide) apart by design
+        bool TryAdd(MeshProjection.Hit hit, double clear = 0.7)
         {
             int v = hit.NearestVertex;
             if (mask != null && !mask[v]) return false;
             if (dirs[v].LengthSquared < 1e-20) return false;
-            if (registry.HasPointWithin(hit.Point, 0.7 * spacing)) return false;
+            if (registry.HasPointWithin(hit.Point, clear * spacing)) return false;
             var curve = FieldTracer.TraceBoth(proj, hit.Point, v, dirs, secondaryDirs, mask,
                 step, maxSteps, null, options.MinFieldMagnitude);
             curve = CutAtContact(proj, registry, curve, hit.Point, options.MergeFactor * spacing, spacing);
@@ -367,6 +422,19 @@ public static class EvenlySpacedNet
             SeedAlong(line, 0.5 * spacing);
         }
         if (seeding == WebSeeding.Cross && seedCross >= 0 && !full) SeedCross(seedCross);
+        if (seeding == WebSeeding.Guide)
+        {
+            // nodes every Spacing of arc length along the pulled guide, one
+            // curve of this family through each (both families share the nodes)
+            var nodes = GuideSeeds(proj, options.Guide!, spacing, default, -1, Vec3d.Zero);
+            options.GuideNodes = nodes.Select(n => n.pos).ToList();
+            foreach (var (pos, hint, _) in nodes)
+            {
+                if (results.Count >= options.MaxCurves) { options.ReachedMaxCurves = true; full = true; break; }
+                if (options.ShouldCancel?.Invoke() == true) { options.Cancelled = true; full = true; break; }
+                TryAdd(proj.ClosestPoint(pos, hint), Math.Max(0.0, options.MergeFactor));
+            }
+        }
 
         // Gap filling: wherever the region is still farther than 0.75 Spacing
         // from every curve (behind a K = 0 line the border cannot see across,
@@ -430,10 +498,21 @@ public static class EvenlySpacedNet
         Func<Vec3d[], int, Vec3d, Vec3d, Vec3d, double>? seedAngle = K == null ? null :
             (parent, index, point, tangent, side) => JacobiStartAngle(proj, K, parent, index, spacing, maxAngle);
 
-        bool web = options.Layout != NetLayout.Fill;
-        var border = options.FromBorder || options.Layout == NetLayout.WebBorder
+        bool guided = HasGuide(options);
+        bool web = options.Layout != NetLayout.Fill || guided;
+        var border = !guided && (options.FromBorder || options.Layout == NetLayout.WebBorder)
             ? BorderSeeds(proj, spacing, options.BorderAngle * Math.PI / 180.0, proj.Mesh.Vertices[firstSeed]) : null;
-        if (web && options.Layout == NetLayout.WebCross)
+        if (guided)
+        {
+            // nodes every Spacing along the pulled guide; the first direction is
+            // carried along the guide by parallel transport from the node nearest
+            // the seed (Pottmann et al. 2010 §2: geodesics emanating from a curve
+            // have geodesically parallel initial tangents)
+            var nodes = GuideSeeds(proj, options.Guide!, spacing, proj.Mesh.Vertices[firstSeed], firstSeed, firstDir.Normalized());
+            options.GuideNodes = nodes.Select(n => n.pos).ToList();
+            border = nodes;
+        }
+        else if (web && options.Layout == NetLayout.WebCross)
         {
             // seeds every Spacing along the geodesic through the seed perpendicular to the first direction
             Vec3d across = Vec3d.Cross(proj.ClosestPoint(proj.Mesh.Vertices[firstSeed], firstSeed).SmoothNormal, firstDir);
@@ -470,8 +549,8 @@ public static class EvenlySpacedNet
             {
                 if (results.Count >= options.MaxCurves) { options.ReachedMaxCurves = true; break; }
                 if (options.ShouldCancel?.Invoke() == true) { options.Cancelled = true; break; }
-                if (registry.HasPointWithin(pos, 0.7 * spacing)) continue;
-                var line = options.Layout == NetLayout.WebCross
+                if (registry.HasPointWithin(pos, (guided ? Math.Max(0.0, options.MergeFactor) : 0.7) * spacing)) continue;
+                var line = options.Layout == NetLayout.WebCross || guided
                     ? GeodesicCurves.TraceBothFrom(proj, pos, hint, dir, step, maxSteps, null, out _, out _)
                     : GeodesicCurves.TraceOneFrom(proj, pos, hint, dir, step, maxSteps, null, out _, out _).ToArray();
                 line = CutAtContact(proj, registry, line, pos, options.MergeFactor * spacing, spacing);
@@ -697,6 +776,139 @@ public static class EvenlySpacedNet
             }
             accum += l;
         }
+    }
+
+    private static bool HasGuide(Options options) => options.Guide != null && options.Guide.Length >= 2;
+
+    /// <summary>
+    /// Nodes along a guide curve (<see cref="Options.Guide"/>): the polyline is
+    /// resampled to half a mesh edge, every sample pulled to its closest point
+    /// on the mesh, and nodes are placed every <paramref name="spacing"/> of
+    /// arc length along the pulled curve — centred with equal margins on an
+    /// open guide, n = round(L / spacing) exactly L / n apart on a closed one
+    /// (first and last input point coincident). When <paramref name="dir"/> is
+    /// given it is carried along the pulled guide by parallel transport
+    /// (minimal rotation between the smooth normals) from the node nearest
+    /// <paramref name="near"/>, and each node returns the transported vector;
+    /// otherwise the returned direction is zero. The hint is the nearest mesh
+    /// vertex of the node.
+    /// </summary>
+    public static List<(Vec3d pos, int hint, Vec3d dir)> GuideSeeds(MeshProjection proj, Vec3d[] guide, double spacing,
+        Vec3d near, int nearHint, Vec3d dir)
+    {
+        var seeds = new List<(Vec3d, int, Vec3d)>();
+        if (guide == null || guide.Length < 2 || spacing <= 0) return seeds;
+        double gl = 0;
+        for (int i = 1; i < guide.Length; i++) gl += (guide[i] - guide[i - 1]).Length;
+        if (gl < 1e-15) return seeds;
+        bool closed = (guide[guide.Length - 1] - guide[0]).Length < 1e-9 * gl;
+
+        // dense samples pulled onto the mesh. From a point well off the
+        // surface the closest point on the facets is the foot of the facet
+        // normal, which lies d · tan(dihedral/2) off the ridge the smooth
+        // surface would give, on whichever side round-off picks: a circle
+        // 0.5 outside a catenoid's waist pulled to z = ±0.0104 in a zigzag
+        // that made the pulled curve 43 % longer. So after the first hit the
+        // point is slid along the surface by the component of (p − q) in the
+        // smooth tangent plane until p − q is parallel to the smooth normal:
+        // the foot on the smooth surface (±1e-6 there, converging by about a
+        // half per step)
+        double ds = Math.Max(0.5 * proj.AverageEdgeLength, 1e-9 * gl);
+        double edge = proj.AverageEdgeLength;
+        var P = new List<Vec3d>(); var N = new List<Vec3d>(); var H = new List<int>();
+        int hint = -1;
+        void Pull(Vec3d p)
+        {
+            var hit = hint < 0 ? proj.ClosestPointGlobal(p) : proj.ClosestPoint(p, hint);
+            for (int k = 0; k < 24; k++)
+            {
+                Vec3d off = p - hit.Point, n = hit.SmoothNormal;
+                if (n.LengthSquared < 1e-20) break;
+                Vec3d slide = off - Vec3d.Dot(off, n) * n;
+                if (slide.Length < 1e-9 * edge) break;
+                var next = proj.ClosestPoint(hit.Point + slide, hit.NearestVertex);
+                if ((next.Point - hit.Point).Length < 1e-12 * edge) break;
+                hit = next;
+            }
+            hint = hit.NearestVertex;
+            if (P.Count > 0 && (hit.Point - P[P.Count - 1]).LengthSquared < 1e-24) return;
+            P.Add(hit.Point); N.Add(hit.SmoothNormal); H.Add(hint);
+        }
+        Pull(guide[0]);
+        for (int i = 1; i < guide.Length; i++)
+        {
+            Vec3d a = guide[i - 1], b = guide[i];
+            double l = (b - a).Length;
+            int k = Math.Max(1, (int)Math.Ceiling(l / ds));
+            for (int j = 1; j <= k; j++) Pull(a + (j / (double)k) * (b - a));
+        }
+        if (P.Count < 2) return seeds;
+        int m = P.Count;
+        var arc = new double[m];
+        for (int i = 1; i < m; i++) arc[i] = arc[i - 1] + (P[i] - P[i - 1]).Length;
+        double L = arc[m - 1];
+        if (L < 1e-15) return seeds;
+
+        // node arc positions
+        var at = new List<double>();
+        if (closed)
+        {
+            int n = Math.Max(1, (int)Math.Round(L / spacing));
+            double s = L / n;
+            for (int k = 0; k < n; k++) at.Add(k * s);
+        }
+        else
+        {
+            int n = (int)Math.Floor(L / spacing + 1e-9) + 1;
+            double margin = 0.5 * (L - (n - 1) * spacing);
+            for (int k = 0; k < n; k++) at.Add(margin + k * spacing);
+        }
+
+        // the direction carried along the pulled guide from the sample nearest
+        // 'near', both ways; round a closed guide each way goes half the loop,
+        // so the holonomy of a non-geodesic loop (2π cos α round a latitude
+        // circle of colatitude α) shows up opposite the seed, not beside it
+        Vec3d[]? D = null;
+        if (dir.LengthSquared > 1e-20)
+        {
+            D = new Vec3d[m];
+            int i0 = 0; double bd = double.MaxValue;
+            for (int i = 0; i < m; i++) { double d2 = (P[i] - near).LengthSquared; if (d2 < bd) { bd = d2; i0 = i; } }
+            Vec3d n0 = nearHint >= 0 ? proj.ClosestPoint(near, nearHint).SmoothNormal : N[i0];
+            D[i0] = GeodesicCurves.Transport(dir, n0, N[i0]);
+            if (closed && (P[m - 1] - P[0]).LengthSquared < 1e-24)
+            {
+                int cyc = m - 1; // distinct samples; P[m − 1] repeats P[0]
+                int half = cyc / 2;
+                for (int k = 1; k <= half; k++) { int i = (i0 + k) % cyc, j = (i0 + k - 1) % cyc; D[i] = GeodesicCurves.Transport(D[j], N[j], N[i]); }
+                for (int k = 1; k < cyc - half; k++) { int i = (i0 - k + cyc) % cyc, j = (i0 - k + 1 + cyc) % cyc; D[i] = GeodesicCurves.Transport(D[j], N[j], N[i]); }
+                D[m - 1] = D[0];
+            }
+            else
+            {
+                for (int i = i0 + 1; i < m; i++) D[i] = GeodesicCurves.Transport(D[i - 1], N[i - 1], N[i]);
+                for (int i = i0 - 1; i >= 0; i--) D[i] = GeodesicCurves.Transport(D[i + 1], N[i + 1], N[i]);
+            }
+        }
+
+        int seg = 0;
+        foreach (double s in at)
+        {
+            while (seg + 2 < m && arc[seg + 1] < s) seg++;
+            double l = arc[seg + 1] - arc[seg];
+            double t = l > 1e-300 ? Math.Max(0.0, Math.Min(1.0, (s - arc[seg]) / l)) : 0.0;
+            Vec3d p = P[seg] + t * (P[seg + 1] - P[seg]);
+            var hit = proj.ClosestPoint(p, H[seg]);
+            Vec3d d = Vec3d.Zero;
+            if (D != null)
+            {
+                Vec3d dseg = t < 0.5 ? D[seg] : D[seg + 1];
+                d = GeodesicCurves.Transport(dseg, t < 0.5 ? N[seg] : N[seg + 1], hit.SmoothNormal);
+                if (d.LengthSquared > 1e-20) d = d.Normalized();
+            }
+            seeds.Add((hit.Point, hit.NearestVertex, d));
+        }
+        return seeds;
     }
 
     private static double LoopLength(MeshData mesh, List<int> loop)

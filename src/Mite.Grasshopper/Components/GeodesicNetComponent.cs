@@ -37,6 +37,7 @@ public class GeodesicNetComponent : MiteComponent
         pManager.AddIntegerParameter("Layout", "Ly", "Layout of the family: 0 = evenly spaced fill (new geodesics beside existing ones, stopped where they converge; T-junctions), 1 = web from the border edge nearest the seed (every geodesic runs until it leaves the mesh, seeds every Spacing along the edge at BorderAngle), 2 = web from the seed cross (seeds every Spacing along the geodesic through the seed perpendicular to Direction, each parallel-transported). Webs never merge; geodesics converge where K > 0 and diverge where K < 0 (Jacobi), so their spacing away from the seed line is what the surface dictates", GH_ParamAccess.item, 0);
         pManager[1].Optional = true;
         pManager[7].Optional = true;
+        RegisterGuideInput(pManager, "the family");
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -70,6 +71,7 @@ public class GeodesicNetComponent : MiteComponent
 
         var data = input.Data;
         var proj = new MeshProjection(data);
+        var guide = ReadGuide(DA, 13, proj);
         if (directions.Count == 0) directions.Add(Vector3d.XAxis);
 
         // Seeds and directions are paired by position (the last direction is
@@ -108,10 +110,12 @@ public class GeodesicNetComponent : MiteComponent
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
                 MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous,
                 FromBorder = fromBorder, BorderAngle = borderAngle,
-                Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
+                Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill,
+                Guide = guide
             };
             lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], opts);
             ReportTracing(opts, "Geodesics");
+            ReportGuide(opts, "Guide");
             if (spacing <= 0)
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
         }

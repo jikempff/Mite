@@ -30,6 +30,7 @@ public class ConjugateNetComponent : MiteComponent
         pManager.AddBooleanParameter("Continuous", "Ct", "Continuous curves: run to the border even where they come closer than Spacing to a neighbour; only near-coincident traces stop, ending on the neighbour. False stops traces at 0.4 x Spacing for a more even but interrupted layout", GH_ParamAccess.item, true);
         pManager.AddIntegerParameter("Layout", "Ly", "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates", GH_ParamAccess.item, 0);
         pManager[5].Optional = true;
+        RegisterGuideInput(pManager, "each family");
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -58,16 +59,19 @@ public class ConjugateNetComponent : MiteComponent
         var data = input.Data;
         var proj = new MeshProjection(data);
         int firstSeed = seedPoint.IsValid ? proj.NearestVertexGlobal(MeshConvert.ToVec3d(seedPoint)) : input.ToTopo(seed);
+        var guide = ReadGuide(DA, 9, proj);
 
         var opts = new EvenlySpacedNet.Options
         {
             Spacing = spacing, StepSize = step, MaxSteps = maxSteps,
             MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous,
-            Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
+            Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill,
+            Guide = guide
         };
 
         var net = ConjugateNet.Trace(data, firstSeed, opts);
         ReportTracing(opts, "Conjugate net");
+        ReportGuide(opts, "Guide");
         if (spacing <= 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Automatic spacing: {opts.ResolvedSpacing:G4}");
 

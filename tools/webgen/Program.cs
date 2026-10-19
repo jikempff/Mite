@@ -334,6 +334,32 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     scenes["cylGeo"] = new { wire = RevolveWire(z => 1.0, -1, 1, 8, 16), curves = helixLines.ToArray() };
     numbers["cylGeo"] = helixRows;
 
+    // Guide curve: 45° helices seeded every Spacing along the circle z = 0 (a
+    // geodesic, so the transported direction keeps 45°); n = round(2π / S)
+    // nodes, perpendicular spacing 2π/n · sin 45°
+    {
+        var guide = Enumerable.Range(0, 181).Select(i => { double a = 2 * Math.PI * i / 180; return new Vec3d(Math.Cos(a), Math.Sin(a), 0); }).ToArray();
+        guide[180] = guide[0];
+        double al = Math.PI / 4, S = 0.3;
+        var og = new EvenlySpacedNet.Options { Spacing = S, Guide = guide, StepSize = 0.02 };
+        var tg = Stopwatch.StartNew();
+        var gh = EvenlySpacedNet.TraceGeodesics(cyl, seedC, new Vec3d(0, Math.Sin(al), Math.Cos(al)), og);
+        tg.Stop();
+        int n = (int)Math.Round(2 * Math.PI / S);
+        double rise = 0, through = 0;
+        foreach (var c in gh)
+        {
+            double th = Math.Atan2(c[0].Y, c[0].X), acc = 0;
+            for (int i = 1; i < c.Length; i++) { double tt = Math.Atan2(c[i].Y, c[i].X), d = tt - th; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; acc += d; th = tt; rise = Math.Max(rise, Math.Abs(Math.Abs(c[i].Z - c[0].Z) - Math.Abs(acc) / Math.Tan(al))); }
+        }
+        foreach (var p in og.GuideNodes) through = Math.Max(through, gh.Min(c => { double b = double.MaxValue; for (int i = 0; i + 1 < c.Length; i++) { var a = c[i]; var ab = c[i + 1] - a; double l2 = ab.LengthSquared; double tt = l2 < 1e-30 ? 0 : Math.Max(0, Math.Min(1, Vec3d.Dot(p - a, ab) / l2)); b = Math.Min(b, (a + tt * ab - p).Length); } return b; }));
+        var phases = gh.Select(c => { var m = c.OrderBy(q => Math.Abs(q.Z)).First(); double th = Math.Atan2(m.Y, m.X) - m.Z * Math.Tan(al); return (th % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI); }).OrderBy(x => x).ToList();
+        var gaps = phases.Select((k, i) => ((i + 1 < phases.Count ? phases[i + 1] : phases[0] + 2 * Math.PI) - k) * Math.Sin(al)).ToList();
+        var eg = Ends(gh, projC);
+        scenes["cylGuide"] = new { wire = RevolveWire(z => 1.0, -1, 1, 8, 16), curves = gh.Select(l => Line(l, 2)).ToArray(), guide = Line(guide, 1), nodes = og.GuideNodes.Select(q => new[] { q.X, q.Y, q.Z }).ToArray() };
+        numbers["cylGuide"] = new { nodes = og.GuideNodes.Count, expectedNodes = n, curves = gh.Count, riseErr = R3(rise), through = R3(through * 1e6) / 1e6, gapMin = R3(gaps.Min()), gapMax = R3(gaps.Max()), gapTheory = R3(2 * Math.PI / n * Math.Sin(al)), spacing = S, boundaryEnds = eg.boundary, ends = eg.ends, ms = tg.ElapsedMilliseconds };
+    }
+
     // Hyperboloid x² + y² − z² = 1, z in [−1, 1]: K = −1/(1 + 2z²)², asymptotic curves are the straight rulings
     var hyp = TestMeshes.CreateHyperboloid(1.0, 1.0, 1.0, seg, rows);
     var pcH = PrincipalCurvature.Compute(hyp);
@@ -444,6 +470,57 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         }
         scenes["asymCat_catenoidWeb"] = new { label = "catenoid, web from the rims", wire = Edges(mesh, 6), a = A.Select(l => Line(l, 3)).ToArray(), b = B.Select(l => Line(l, 3)).ToArray() };
         numbers["asymWeb"] = new { a = A.Count, b = B.Count, ends = e.ends, boundaryEnds = e.boundary, tEnds = e.onCurve, floatingEnds = e.floating, worstOffset = R3(worstOff * 1000) / 1000, edge = R3(proj.AverageEdgeLength), worstDirDeg = R3(worstDir), meanDirDeg = R3(sumDir / Math.Max(1, nDir)), ms = tt.ElapsedMilliseconds };
+    }
+
+    // Guide curve on the catenoid: nodes every Spacing along the waist circle
+    // (Schling's seed curve), both families through every node, every curve rim
+    // to rim on the closed-form lines u ∓ v = const; the same from a circle
+    // drawn 0.5 outside the surface, pulled onto it
+    {
+        var mesh = TestMeshes.CreateCatenoid(1, 2, 96, 48);
+        var proj = new MeshProjection(mesh);
+        var pc = PrincipalCurvature.Compute(mesh);
+        var field = AsymptoticCurves.ComputeDirections(pc, mesh, 15.0);
+        double S = 0.3;
+        Vec3d[] Circle(double r) { var g = Enumerable.Range(0, 181).Select(i => { double a = 2 * Math.PI * i / 180; return new Vec3d(r * Math.Cos(a), r * Math.Sin(a), 0); }).ToArray(); g[180] = g[0]; return g; }
+        var guide = Circle(1.0);
+        var oa = new EvenlySpacedNet.Options { Spacing = S, Guide = guide, StepSize = 0.02 };
+        var ob = new EvenlySpacedNet.Options { Spacing = S, Guide = guide, StepSize = 0.02 };
+        var tt = Stopwatch.StartNew();
+        var A = EvenlySpacedNet.TraceField(mesh, field.Family1, field.Exists, -1, oa, field.Family2);
+        var B = EvenlySpacedNet.TraceField(mesh, field.Family2, field.Exists, -1, ob, field.Family1);
+        tt.Stop();
+        int n = (int)Math.Round(2 * Math.PI / S);
+        var e = Ends(A.Concat(B).ToList(), proj);
+        double worstOff = 0, through = 0, gapErr = 0;
+        double Dist(Vec3d p, Vec3d[] c) { double b = double.MaxValue; for (int i = 0; i + 1 < c.Length; i++) { var a = c[i]; var ab = c[i + 1] - a; double l2 = ab.LengthSquared; double q = l2 < 1e-30 ? 0 : Math.Max(0, Math.Min(1, Vec3d.Dot(p - a, ab) / l2)); b = Math.Min(b, (a + q * ab - p).Length); } return b; }
+        foreach (var c in A.Concat(B))
+        {
+            double u0 = Math.Atan2(c[0].Y, c[0].X), v0 = c[0].Z;
+            Vec3d t0 = (c[Math.Min(3, c.Length - 1)] - c[0]).Normalized();
+            double ch0 = Math.Cosh(v0), sh0 = Math.Sinh(v0);
+            var ru0 = new Vec3d(-ch0 * Math.Sin(u0), ch0 * Math.Cos(u0), 0); var rv0 = new Vec3d(sh0 * Math.Cos(u0), sh0 * Math.Sin(u0), 1);
+            bool famA = Math.Abs(Vec3d.Dot(t0, (ru0 + rv0).Normalized())) >= Math.Abs(Vec3d.Dot(t0, (ru0 - rv0).Normalized()));
+            double k = famA ? u0 - v0 : u0 + v0;
+            foreach (var q in c)
+            {
+                double u = Math.Atan2(q.Y, q.X), v = q.Z;
+                double d = (famA ? u - v : u + v) - k;
+                while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+                worstOff = Math.Max(worstOff, Math.Abs(d) * Math.Cosh(v) / Math.Sqrt(2.0));
+            }
+        }
+        for (int i = 0; i < oa.GuideNodes.Count; i++)
+        {
+            var p = oa.GuideNodes[i]; var q = oa.GuideNodes[(i + 1) % oa.GuideNodes.Count];
+            double th = Math.Atan2(q.Y, q.X) - Math.Atan2(p.Y, p.X); while (th < 0) th += 2 * Math.PI;
+            gapErr = Math.Max(gapErr, Math.Abs(th - 2 * Math.PI / n));
+            through = Math.Max(through, Math.Max(A.Min(c => Dist(p, c)), B.Min(c => Dist(p, c))));
+        }
+        var pulled = EvenlySpacedNet.GuideSeeds(proj, Circle(1.5), S, default, -1, Vec3d.Zero);
+        double pulledDiff = pulled.Count == oa.GuideNodes.Count ? pulled.Zip(oa.GuideNodes, (x, y) => (x.pos - y).Length).Max() : double.NaN;
+        scenes["asymCat_catenoidGuide"] = new { label = "catenoid, web from a guide (the waist)", wire = Edges(mesh, 6), a = A.Select(l => Line(l, 3)).ToArray(), b = B.Select(l => Line(l, 3)).ToArray(), guide = Line(guide, 1), nodes = oa.GuideNodes.Select(q => new[] { q.X, q.Y, q.Z }).ToArray() };
+        numbers["asymGuide"] = new { nodes = oa.GuideNodes.Count, expectedNodes = n, a = A.Count, b = B.Count, ends = e.ends, boundaryEnds = e.boundary, tEnds = e.onCurve, floatingEnds = e.floating, worstOffset = R3(worstOff * 1000) / 1000, edge = R3(proj.AverageEdgeLength), through = R3(through * 1e6) / 1e6, gapErr = R3(gapErr * 1e6) / 1e6, pulledNodes = pulled.Count, pulledDiff = R3(pulledDiff * 1e6) / 1e6, spacing = S, ms = tt.ElapsedMilliseconds };
     }
 
     // Web coverage with gap filling: the part of the usable region farther than

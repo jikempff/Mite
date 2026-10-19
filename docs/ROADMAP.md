@@ -110,11 +110,37 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       cross along a spanning tree with a branch cut, so A/B are consistent
       except across one seam; Umbilics should flag flat points (k1 = k2 = 0)
       as well as umbilics.
-- [ ] Origin-point strategies of the submission (p. 48): seeds along a
+- [x] Origin-point strategies of the submission (p. 48): seeds along a
       middle curve, along a diagonal pulled to the surface, along a
-      projected curve — expose as "seed curve" input on the nets and test
-      that the resulting families are the same as farthest-point seeding
-      (D) up to spacing.
+      projected curve — done 2026-10-19 (session 1, B/C/A) as the `Guide`
+      input of the four net components (`EvenlySpacedNet.Options.Guide`,
+      `GuideSeeds`, `WebSeeding.Guide`): the curve is pulled onto the mesh,
+      nodes every Spacing of arc length along it, one curve of each family
+      through every node (Schling, Hitrec & Barthel 2017: the net drawn
+      alternately from the nodes of the other family, the node-to-node
+      distance the one repeated parameter). Findings: (1) the facet closest
+      point of a point well off the surface is the foot of the *facet*
+      normal, d · tan(dihedral/2) off the ridge on a round-off-chosen side —
+      a circle 0.5 outside the catenoid waist zigzagged to z = ±0.0104 and
+      came out 43 % too long; the pull now slides along the smooth tangent
+      plane until p − q ∥ smooth normal (9e-6 from the on-surface guide);
+      (2) the perpendicular spacing of a guide web is Spacing · sin(angle to
+      the guide), by construction — Schling's parameter is the node
+      distance, not the lath spacing; (3) geodesics from a guide take the
+      first direction by parallel transport (Pottmann et al. 2010 §2), which
+      round a latitude circle of colatitude α turns by θ cos α (holonomy,
+      measured to 0.011°) so neighbouring geodesics fan out 13° apart at
+      S = 0.4 on the unit sphere and are cut where they meet — a user who
+      wants a constant angle to the guide needs a geodesic guide or a
+      future `GuideAngle` option. Measured: catenoid waist 21 nodes 2π/21
+      apart (2e-5 rad, the 96-gon chords), both lines u ∓ v = const through
+      every node (1e-5), 84/84 ends on the rims, 0.0009 off the closed form;
+      meridian guide nodes at the exact arc positions (8e-6); cylinder 21
+      helices 2π/21 · sin 45° apart (±1e-4); saddle diagonal guide → B lines
+      x + y = const through 11 nodes exactly 0.25 apart, A untouched. Not
+      done: the comparison with farthest-point seeding (that code is in the
+      unmerged 1.4.0 bundle), several guides at once (feed one; the gap
+      filling covers the rest), a constant-angle option for geodesics.
 - [ ] Ellipsoid a ≠ b ≠ c: exactly four umbilics; curvature-line net has the
       classic lemon pattern.
 - [ ] Cone (developable with an apex): projection and tracing near a
@@ -257,8 +283,12 @@ remains the self-test review page.
       the nearest curve (≤ 0.5 % uncovered on ten surfaces; was up to 94 %
       for a single cross); same-family contact cut (0.15 Spacing, 30°) —
       2026-09-25.
-- [ ] Web from a user guide curve (Schling's layout: seeds along a drawn
-      curve instead of the border or the other family).
+- [x] Web from a user guide curve (Schling's layout: seeds along a drawn
+      curve instead of the border or the other family) — 2026-10-19: the
+      core and Grasshopper `Guide` input (A above); the app has no curve
+      drawing, so its `web · guide` layout (4) takes the horizontal section
+      through the seed as the guide and draws the nodes. Open: a drawn guide
+      in the app (click a polyline on the surface), several guides.
 - [x] Profile applied to every curve *and every check*: Lath Analysis and
       Gridshell Analysis take Shape / Section; `LathProfile.SectionProperties`
       (rectangle, round, custom polygon) feeds strain fibres, twist length,
@@ -659,6 +689,12 @@ Open
 
 ## Done
 
+- [x] 2026-10-19 (session 1, B/C with A): nets seeded from a guide curve —
+      `Guide` input on Asymptotic / Conjugate / Geodesic Net and Curvature
+      Streamlines, Schling's node-spaced seed curve and the Studio X origin
+      points; smooth-surface pull of off-surface guides; parallel-transported
+      geodesic directions; 8 exact tests, 3 bench self-tests (78 PASS), the
+      app's `web · guide` layout (web smoke 28/28).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

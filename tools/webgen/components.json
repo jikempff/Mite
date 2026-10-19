@@ -81,6 +81,15 @@
     "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
+   },
+   {
+    "name": "Guide",
+    "nick": "Gd",
+    "type": "Curve",
+    "desc": "Guide (seed) curve: when given, each family is a web seeded from it instead of the border or the seed cross, whatever Layout says. The curve is pulled onto the mesh and nodes are placed every Spacing of arc length along it (centred on an open curve; L / round(L / Spacing) apart on a closed one); one curve runs through every node, border to border, so both families of a net cross at every node — Schling's layout (the node distance along the seed curve is the repeated parameter). Neighbouring curves are then Spacing × sin(angle to the guide) apart. A guide along one family's own curve seeds only the other family. Geodesics leave the guide with the first Direction carried along it by parallel transport (Pottmann et al. 2010). Gaps elsewhere are filled as for the other webs.",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -301,6 +310,15 @@
     "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
+   },
+   {
+    "name": "Guide",
+    "nick": "Gd",
+    "type": "Curve",
+    "desc": "Guide (seed) curve: when given, each family is a web seeded from it instead of the border or the seed cross, whatever Layout says. The curve is pulled onto the mesh and nodes are placed every Spacing of arc length along it (centred on an open curve; L / round(L / Spacing) apart on a closed one); one curve runs through every node, border to border, so both families of a net cross at every node — Schling's layout (the node distance along the seed curve is the repeated parameter). Neighbouring curves are then Spacing × sin(angle to the guide) apart. A guide along one family's own curve seeds only the other family. Geodesics leave the guide with the first Direction carried along it by parallel transport (Pottmann et al. 2010). Gaps elsewhere are filled as for the other webs.",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -663,6 +681,15 @@
     "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
+   },
+   {
+    "name": "Guide",
+    "nick": "Gd",
+    "type": "Curve",
+    "desc": "Guide (seed) curve: when given, the family is a web seeded from it instead of the border or the seed cross, whatever Layout says. The curve is pulled onto the mesh and nodes are placed every Spacing of arc length along it (centred on an open curve; L / round(L / Spacing) apart on a closed one); one curve runs through every node, border to border, so both families of a net cross at every node — Schling's layout (the node distance along the seed curve is the repeated parameter). Neighbouring curves are then Spacing × sin(angle to the guide) apart. A guide along one family's own curve seeds only the other family. Geodesics leave the guide with the first Direction carried along it by parallel transport (Pottmann et al. 2010). Gaps elsewhere are filled as for the other webs.",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -2515,6 +2542,15 @@
     "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
+   },
+   {
+    "name": "Guide",
+    "nick": "Gd",
+    "type": "Curve",
+    "desc": "Guide (seed) curve: when given, the family is a web seeded from it instead of the border or the seed cross, whatever Layout says. The curve is pulled onto the mesh and nodes are placed every Spacing of arc length along it (centred on an open curve; L / round(L / Spacing) apart on a closed one); one curve runs through every node, border to border, so both families of a net cross at every node — Schling's layout (the node distance along the seed curve is the repeated parameter). Neighbouring curves are then Spacing × sin(angle to the guide) apart. A guide along one family's own curve seeds only the other family. Geodesics leave the guide with the first Direction carried along it by parallel transport (Pottmann et al. 2010). Gaps elsewhere are filled as for the other webs.",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
