@@ -167,7 +167,24 @@ internal static class Tests
             {
                 var mesh = MeshOut(c, 3);
                 return Expect(CurveCount(c, 1) >= 3 && CurveCount(c, 2) >= 3, "lath families produced")
-                    && Expect(mesh != null && mesh.Faces.Count > 10, $"net mesh has {mesh?.Faces.Count ?? 0} faces");
+                    && Expect(mesh != null && mesh.Faces.Count > 10, $"net mesh has {mesh?.Faces.Count ?? 0} faces")
+                    && Expect(Texts(c, 5).FirstOrDefault()?.Contains("edge-length error") == true, "report text");
+            });
+
+        // MinAngle (input 8, appended 2026-10-19): a 12 × 12 patch on the unit
+        // sphere shears below 30° at its corners; with MinAngle 30° every
+        // reported angle stays within [30°, 150°] and the report counts the
+        // refused nodes
+        TestComponent("Chebyshev Net (MinAngle)",
+            new Mite.Grasshopper.Components.ChebyshevNetComponent(),
+            c => SetInputs(c, (0, sphere.DuplicateMesh()), (1, 0), (3, 0.2), (4, 12), (5, 12), (8, Math.PI / 6)),
+            c =>
+            {
+                var angles = Numbers(c, 4).Where(a => !double.IsNaN(a)).ToList();
+                string report = Texts(c, 5).FirstOrDefault() ?? "";
+                return Expect(angles.Count > 50 && angles.All(a => a >= 30 - 1e-6 && a <= 150 + 1e-6),
+                        $"all {angles.Count} angles within [30°, 150°], min {(angles.Count > 0 ? angles.Min() : 0):F1}")
+                    && Expect(!report.Contains("locked by MinAngle 0;"), $"locked nodes reported: {report}");
             });
 
         TestComponent("Lath Analysis",

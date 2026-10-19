@@ -400,12 +400,59 @@ remains the self-test review page.
       surfaces); Zadravec, Schiftner, Wallner 2010 (Designing quad-dominant
       meshes with planar faces); Pottmann, Asperl, Hofer, Kilian —
       Architectural Geometry (2007) for the whole vocabulary.
-- [ ] Chebyshev nets and elastic gridshells: Masson 2017 (Existence and
+- [x] Chebyshev nets and elastic gridshells: Masson 2017 (Existence and
       construction of Chebyshev nets and application to gridshells);
       Garg et al. 2014 (Wire mesh design); Baek, Reis 2019 (Rigidity of
       hemispherical elastic gridshells under point load indentation);
       Douthe, Baverel, Caron 2006 (Form-finding of a grid shell in
       composite materials) — compass method limits, shear-angle bounds.
+      Done 2026-10-19 (session 2): the compass step is exact and the net
+      stops where it locks. Read: Chebyshev 1878 via Papadopoulos 2016
+      (arXiv 1608.02724: ds² = du² + 2 cos ω du dv + dv², Gauss equation
+      ω_uv + K sin ω = 0), Marvan 2024 (arXiv 2403.12626, eq. 6.5, the same
+      sign), Hazzidakis 1880 (∫∫_Q K dA = 2π − Σα, re-derived from the Gauss
+      equation: corner angles ω, π − ω, ω, π − ω), Samelson & Dayawansa 1995
+      (|∫K| < π/2 on every measurable set), Burago, Ivanov & Malev 2007
+      (positive and negative total curvature each < 2π), Masson & Monasse
+      2017 (∫|K| < 2π; title and abstract only), Otto, Hennicke & Matsushita
+      1974 and Bouhaya, Baverel & Caron 2015 §3 (fourth node = surface ∩ two
+      spheres of radius L), Garg et al. 2014 (η_len = max |‖e‖/L − 1|, angle
+      bound ζ = 30°). Not accessible: Masson's thesis itself (HAL is behind a
+      bot wall) and Garg's full text (36 MB post-print). Changes: Newton in
+      the tangent plane with reprojection for the compass point (Jacobian
+      determinant 4 L² sin ω, singular exactly at locking), axes sampled by
+      chord, `MinAngle` refusing every node that would create a crossing
+      outside [min, π − min] at itself or its parents, `ShearAngles`,
+      `EdgeError`, `Locked`, `Failed` in the result, `MinAngle` / `Report` on
+      the component. Measured (`ChebyshevNetTests`, 10 tests): edge error
+      1e-14 everywhere (0.2–0.3 % before); flat lattice exact to 1e-15 at 90°
+      and 60°; prism cylinder 1.6e-3 / 4.3e-4 at 64 / 128 sides (sagitta
+      1.2e-3 / 3.0e-4); unit sphere against the closed-form compass net
+      (x·a = x·b = 1 − L²/2) 5.1e-3 / 1.1e-3 / 3.0e-4 at 24 / 48 / 96
+      divisions — the facets lie e²/4 inside the sphere and the compass
+      carries that offset on; before the fix 1.4e-3 at 48 and 1.6e-3 at 96
+      (no convergence). Findings: (1) the compass never fails on a dome —
+      the circles still meet when the cell has folded through ω = 0, so
+      the old net ran on into a crumpled sheet past the lock (12 × 12 patch
+      at L = 0.2: ω down to 0.5°, then the mesh and closed-form nets choose
+      different roots); a shear bound is the only honest stop; (2) checking
+      the angle at the new node alone leaves crossings at its parents 4–5°
+      below the bound, so every angle the new node creates (at itself and
+      at both parents, against their edges on both sides) is checked;
+      (3) Hazzidakis on the discrete net: the angle deficit of a vertex
+      star in a consistent triangulation of the cells integrates K = 1 to
+      0.5 % over the nodes whose cells stay above 30° (0.97 with every open
+      node — thin triangles near the fold spoil the local estimate), and
+      the skew-quad corner-angle defect does not (0.45): the discrete
+      Hazzidakis identity needs the triangulated deficit, not the quad's.
+      Open: free (non-geodesic) axis curves — Masson's Cauchy problem from
+      two drawn curves (the `Guide` input of the nets would carry them);
+      nets with singularities (Masson 2017, Sageman-Furnas et al. 2019) for
+      domes whose total curvature exceeds the bound; the one-soliton
+      sine-Gordon net on the sphere as a smooth closed form (the discrete
+      net converges to it only as L → 0); a shear-angle colour map on the
+      net mesh once the custom previews (B) land; the AGH hybrid needs the
+      geodesic family wrapped through the compass cells (D above).
 - [ ] Form finding: Schek 1974 (Force density method); Barnes 1999
       (Form finding and analysis of tension structures by dynamic
       relaxation); Adriaenssens, Block, Veenendaal, Williams (eds.) 2014
@@ -659,6 +706,12 @@ Open
 
 ## Done
 
+- [x] 2026-10-19 (session 2, D): Chebyshev Net — exact compass step (Newton
+      with reprojection, chord-sampled axes, every edge L to 1e-14), checked
+      against the closed-form compass net on the sphere, the rolled lattice
+      on a prism and the flat lattice; Hazzidakis locking understood and
+      stopped by `MinAngle`; `Report` output; bench card with the closed-form
+      and locking self-tests (77 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

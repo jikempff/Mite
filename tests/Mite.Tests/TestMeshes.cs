@@ -544,6 +544,58 @@ public static class TestMeshes
         return new MeshData(verts.ToArray(), faces.ToArray());
     }
 
+    /// <summary>
+    /// The exact discrete compass net (Chebyshev net with every chord L) on the
+    /// unit sphere, indexed like <c>ChebyshevNet.Result</c> with the seed at
+    /// (cu, cv). Axes: great circles through p0 along d1 and d2 with nodes a
+    /// chord L apart (angular step 2 asin(L/2)). Interior node from parents a
+    /// and b and diagonal d: the spheres of radius L about a and b meet the
+    /// unit sphere where x·a = x·b = 1 − L²/2 and |x| = 1, i.e.
+    /// x = α (a + b) ± β (a × b) with α = (1 − L²/2)/(1 + a·b); the compass
+    /// takes the root on the far side of d (Otto, Hennicke &amp; Matsushita 1974;
+    /// Bouhaya, Baverel &amp; Caron 2015 §3). Cells whose spheres miss are left
+    /// invalid.
+    /// </summary>
+    public static (Vec3d[,] points, bool[,] valid) ChebyshevSphereNet(Vec3d p0, Vec3d d1, Vec3d d2, double L, int cu, int cv)
+    {
+        int nu = 2 * cu + 1, nv = 2 * cv + 1, ou = cu, ov = cv;
+        var pts = new Vec3d[nu, nv];
+        var valid = new bool[nu, nv];
+        double delta = 2 * Math.Asin(L / 2);
+        pts[ou, ov] = p0; valid[ou, ov] = true;
+        for (int k = 1; k <= cu; k++)
+        {
+            pts[ou + k, ov] = Math.Cos(k * delta) * p0 + Math.Sin(k * delta) * d1; valid[ou + k, ov] = true;
+            pts[ou - k, ov] = Math.Cos(k * delta) * p0 - Math.Sin(k * delta) * d1; valid[ou - k, ov] = true;
+        }
+        for (int k = 1; k <= cv; k++)
+        {
+            pts[ou, ov + k] = Math.Cos(k * delta) * p0 + Math.Sin(k * delta) * d2; valid[ou, ov + k] = true;
+            pts[ou, ov - k] = Math.Cos(k * delta) * p0 - Math.Sin(k * delta) * d2; valid[ou, ov - k] = true;
+        }
+        double c = 1 - L * L / 2;
+        foreach (int su in new[] { 1, -1 })
+            foreach (int sv in new[] { 1, -1 })
+                for (int a = 1; a <= cu; a++)
+                    for (int b = 1; b <= cv; b++)
+                    {
+                        int i = ou + su * a, j = ov + sv * b, ip = i - su, jp = j - sv;
+                        if (!valid[ip, j] || !valid[i, jp] || !valid[ip, jp]) continue;
+                        Vec3d pa = pts[ip, j], pb = pts[i, jp], pd = pts[ip, jp];
+                        double g = Vec3d.Dot(pa, pb);
+                        if (g <= -1 + 1e-12) continue;
+                        double alpha = c / (1 + g);
+                        double rad = (1 - alpha * alpha * (2 + 2 * g)) / (1 - g * g);
+                        if (rad < 0) continue;
+                        double beta = Math.Sqrt(rad);
+                        Vec3d n = Vec3d.Cross(pa, pb);
+                        Vec3d x1 = alpha * (pa + pb) + beta * n, x2 = alpha * (pa + pb) - beta * n;
+                        pts[i, j] = (x1 - pd).LengthSquared > (x2 - pd).LengthSquared ? x1 : x2;
+                        valid[i, j] = true;
+                    }
+        return (pts, valid);
+    }
+
     public static MeshData CreateQuadGrid(int nx = 5, int ny = 5, double size = 1.0)
     {
         var verts = new Vec3d[(nx + 1) * (ny + 1)];

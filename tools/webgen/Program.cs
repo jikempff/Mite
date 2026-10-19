@@ -135,7 +135,30 @@ var sw = Stopwatch.StartNew();
     scenes["cheb"] = new { wire = SphereWire(8), u = u.ToArray(), v = v.ToArray() };
     var shear = new List<double>();
     for (int i = 0; i + 1 < nu; i++) for (int j = 0; j + 1 < nv; j++) if (cheb.Valid[i, j] && cheb.Valid[i + 1, j] && cheb.Valid[i, j + 1]) { var e1 = (cheb.Points[i + 1, j] - cheb.Points[i, j]).Normalized(); var e2 = (cheb.Points[i, j + 1] - cheb.Points[i, j]).Normalized(); shear.Add(Math.Acos(Math.Abs(Vec3d.Dot(e1, e2))) * 180 / Math.PI); }
-    numbers["cheb"] = new { nodes = u.Sum(l => l.Length), valid = u.Sum(l => l.Length), total = nu * nv, maxEdgeErr = R3(edgeErr.Max() * 100), meanEdgeErr = R3(edgeErr.Average() * 100), minAngle = R3(shear.Min()), maxAngle = R3(shear.Max()) };
+    // the closed-form compass net on the exact sphere (TestMeshes.ChebyshevSphereNet): the seed
+    // vertex 1 + 12·48 + 5 lies on the equator at longitude 5·2π/48, d1 is the equator's tangent
+    // there, d2 = n × d1 points north; the mesh net differs by the depth of the facets below the
+    // sphere (right triangles with legs e: e²/4) carried from parents to children
+    Vec3d cp0 = sphere.Vertices[1 + 12 * 48 + 5];
+    Vec3d cd1 = (new Vec3d(0, 1, 0) - Vec3d.Dot(new Vec3d(0, 1, 0), cp0) * cp0).Normalized();
+    Vec3d cd2 = Vec3d.Cross(cp0, cd1).Normalized();
+    var (chebExact, chebExactValid) = TestMeshes.ChebyshevSphereNet(cp0, cd1, cd2, 0.2, 5, 5);
+    double chebNodeErr = 0; int chebCompared = 0;
+    for (int i = 0; i < nu; i++) for (int j = 0; j < nv; j++) if (cheb.Valid[i, j] && chebExactValid[i, j]) { chebNodeErr = Math.Max(chebNodeErr, (cheb.Points[i, j] - chebExact[i, j]).Length); chebCompared++; }
+    double chebFacet = Math.Pow(2 * Math.PI / 48, 2) / 4;
+    // a 12 × 12 patch locks: Hazzidakis makes the shear angle fall with the enclosed curvature;
+    // MinAngle 30° stops the net before any crossing falls below 30°
+    var chebFree = ChebyshevNet.Compute(sphere, 1 + 12 * 48 + 5, new Vec3d(0, 1, 0), new ChebyshevNet.Options { EdgeLength = 0.2, CountU = 12, CountV = 12 });
+    var chebLock = ChebyshevNet.Compute(sphere, 1 + 12 * 48 + 5, new Vec3d(0, 1, 0), new ChebyshevNet.Options { EdgeLength = 0.2, CountU = 12, CountV = 12, MinAngle = Math.PI / 6 });
+    double MinShear(ChebyshevNet.Result r) { double m = 180; foreach (double w in r.ShearAngles) if (!double.IsNaN(w)) m = Math.Min(m, Math.Min(w, Math.PI - w) * 180 / Math.PI); return m; }
+    var lu = new List<double[][]>(); var lv = new List<double[][]>();
+    int lnu = chebLock.Points.GetLength(0), lnv = chebLock.Points.GetLength(1);
+    for (int i = 0; i < lnu; i++) { var l = new List<double[]>(); for (int j = 0; j < lnv; j++) { if (chebLock.Valid[i, j]) l.Add(P(chebLock.Points[i, j])); else { if (l.Count > 1) lu.Add(l.ToArray()); l.Clear(); } } if (l.Count > 1) lu.Add(l.ToArray()); }
+    for (int j = 0; j < lnv; j++) { var l = new List<double[]>(); for (int i = 0; i < lnu; i++) { if (chebLock.Valid[i, j]) l.Add(P(chebLock.Points[i, j])); else { if (l.Count > 1) lv.Add(l.ToArray()); l.Clear(); } } if (l.Count > 1) lv.Add(l.ToArray()); }
+    scenes["chebLock"] = new { wire = SphereWire(8), u = lu.ToArray(), v = lv.ToArray() };
+    numbers["cheb"] = new { nodes = u.Sum(l => l.Length), valid = u.Sum(l => l.Length), total = nu * nv, maxEdgeErr = edgeErr.Max() * 100, meanEdgeErr = edgeErr.Average() * 100, minAngle = R3(shear.Min()), maxAngle = R3(shear.Max()),
+        nodeErr = chebNodeErr, facet = chebFacet, compared = chebCompared, netEdgeErr = cheb.EdgeError,
+        freeNodes = chebFree.ValidCount, freeMinShear = R3(MinShear(chebFree)), lockNodes = chebLock.ValidCount, lockMinShear = R3(MinShear(chebLock)), locked = chebLock.Locked, failed = chebLock.Failed };
 }
 
 // ---------- Geodesic Path: exact geodesics by edge flips (FlipOut) on a polyhedral cone and a saddle vertex ----------
