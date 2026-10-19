@@ -289,7 +289,7 @@
   "file": "ChebyshevNetComponent.cs",
   "name": "Chebyshev Net",
   "nick": "ChebNet",
-  "desc": "Constructs a Chebyshev net: equal edge lengths in both families everywhere. This is the kinematics of an elastic gridshell — a flat lattice of constant-length laths with rotating joints, bent into shape. Axis curves are geodesics from the seed; interior nodes are placed by the compass method.",
+  "desc": "Constructs a Chebyshev net: equal edge lengths in both families everywhere. This is the kinematics of an elastic gridshell — a flat lattice of constant-length laths with rotating joints, bent into shape. Axis curves are geodesics from the seed; interior nodes are placed by the compass method (the surface point one edge length from both parents, solved to round-off). Hazzidakis: the shear angle falls with the curvature enclosed, so on domes the net locks away from the seed; MinAngle stops it before the laths touch.",
   "tab": "Gridshells",
   "icon": "ChebyshevNet",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDEB",
@@ -358,6 +358,14 @@
     "access": "item",
     "default": null,
     "optional": true
+   },
+   {
+    "name": "MinAngle",
+    "nick": "Am",
+    "type": "Angle",
+    "desc": "Smallest crossing angle allowed between the two families (0 = unlimited). A node whose cell would shear below it, or above 180° minus it, is not placed, so the net stops where the laths would lock. Garg et al. 2014 use 30° for wire meshes; try 20–30° for timber laths.",
+    "access": "item",
+    "default": "0.0"
    }
   ],
   "outputs": [

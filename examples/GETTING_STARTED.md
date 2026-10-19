@@ -105,7 +105,12 @@ curve shortening, kept for comparison.
 
 **Chebyshev Net**: seed vertex + direction + `L` (lath joint spacing, try mesh
 size / 12). Outputs both lath families and a quad net mesh whose edges all have
-length `L` — the flat-lattice kinematics of an elastic gridshell.
+length `L` — the flat-lattice kinematics of an elastic gridshell. Every edge is
+`L` to round-off (the compass step is solved exactly). On a dome the cells
+shear more with every ring away from the seed (Hazzidakis: the curvature a
+cell encloses is 2π minus its four angles) until the laths lock; set `Am`
+(MinAngle, 20–30°) to stop the net before any crossing falls below that, and
+read `R` (Report) for the node count, the shear range and the nodes refused.
 
 ### Layout: web or fill
 

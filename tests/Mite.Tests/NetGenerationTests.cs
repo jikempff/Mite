@@ -28,7 +28,7 @@ public class NetGenerationTests
                 Assert.True(Math.Abs(net.Points[i, j].Z) < 1e-6, "Net on a plane should stay at z = 0");
             }
 
-        AssertEdgeLengths(net, 0.4, 0.02);
+        AssertEdgeLengths(net, 0.4, 1e-9);
     }
 
     [Fact]
@@ -48,14 +48,15 @@ public class NetGenerationTests
                 if (!net.Valid[i, j]) continue;
                 validCount++;
                 double r = net.Points[i, j].Length;
-                Assert.True(r > 0.95 && r < 1.03,
+                // the 24-division sphere's facets lie up to e²/4 = 4.3e-3 inside
+                Assert.True(r > 1 - 5e-3 && r < 1 + 1e-9,
                     $"Net node should lie on the unit sphere, radius {r:F4}");
             }
 
         Assert.True(validCount > 0.9 * nu * nv,
             $"Most of the net should be valid on a sphere, got {validCount}/{nu * nv}");
 
-        AssertEdgeLengths(net, 0.15, 0.1);
+        AssertEdgeLengths(net, 0.15, 1e-9);
     }
 
     [Fact]

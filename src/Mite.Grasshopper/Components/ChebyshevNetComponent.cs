@@ -17,7 +17,9 @@ public class ChebyshevNetComponent : MiteComponent
             "Constructs a Chebyshev net: equal edge lengths in both families everywhere. " +
             "This is the kinematics of an elastic gridshell — a flat lattice of constant-length " +
             "laths with rotating joints, bent into shape. Axis curves are geodesics from the seed; " +
-            "interior nodes are placed by the compass method.",
+            "interior nodes are placed by the compass method (the surface point one edge length from both " +
+            "parents, solved to round-off). Hazzidakis: the shear angle falls with the curvature enclosed, " +
+            "so on domes the net locks away from the seed; MinAngle stops it before the laths touch.",
             "Gridshells", "ChebyshevNet") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDEB");
@@ -33,6 +35,11 @@ public class ChebyshevNetComponent : MiteComponent
         pManager.AddAngleParameter("Angle", "A", "Angle between families at the seed (default 90 degrees)", GH_ParamAccess.item, Math.PI / 2);
         pManager.AddPointParameter("SeedPoint", "P", "Net origin as a point (overrides Seed; nearest vertex is used)", GH_ParamAccess.item);
         pManager[7].Optional = true;
+        pManager.AddAngleParameter("MinAngle", "Am",
+            "Smallest crossing angle allowed between the two families (0 = unlimited). A node whose cell would " +
+            "shear below it, or above 180° minus it, is not placed, so the net stops where the laths would lock. " +
+            "Garg et al. 2014 use 30° for wire meshes; try 20–30° for timber laths.",
+            GH_ParamAccess.item, 0.0);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -43,6 +50,9 @@ public class ChebyshevNetComponent : MiteComponent
         pManager.AddMeshParameter("NetMesh", "N", "Quad mesh over the valid net cells", GH_ParamAccess.item);
         pManager.AddNumberParameter("Angles", "An", "Shear angle between the families at each node (degrees); locking occurs near 0 / 180", GH_ParamAccess.tree);
         RegisterNetOutput(pManager, "Laths as polylines through the nodes (straight segments of EdgeLength)"); // 5
+        pManager.AddTextParameter("Report", "R", // 6
+            "Nodes placed, largest edge-length error, shear-angle range, nodes refused by MinAngle (locked) and compass steps that left the mesh",
+            GH_ParamAccess.item);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -51,7 +61,7 @@ public class ChebyshevNetComponent : MiteComponent
         if (input == null) return;
         int seed = 0, countU = 10, countV = 10;
         var direction = Vector3d.XAxis;
-        double edgeLength = 1.0, angle = Math.PI / 2;
+        double edgeLength = 1.0, angle = Math.PI / 2, minAngle = 0.0;
         Point3d seedPoint = Point3d.Unset;
 
         DA.GetData(1, ref seed);
@@ -61,10 +71,18 @@ public class ChebyshevNetComponent : MiteComponent
         DA.GetData(5, ref countV);
         DA.GetData(6, ref angle);
         DA.GetData(7, ref seedPoint);
+        if (Params.Input.Count > 8) DA.GetData(8, ref minAngle);
 
         // Angle parameters deliver the raw number; honor the user's Degrees toggle
         if (Params.Input[6] is Param_Number angleParam && angleParam.UseDegrees)
             angle = Rhino.RhinoMath.ToRadians(angle);
+        if (Params.Input.Count > 8 && Params.Input[8] is Param_Number minParam && minParam.UseDegrees)
+            minAngle = Rhino.RhinoMath.ToRadians(minAngle);
+        if (minAngle < 0 || minAngle >= Math.PI / 2)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "MinAngle must lie between 0 and 90 degrees.");
+            return;
+        }
 
         if (edgeLength <= 0)
         {
@@ -90,7 +108,8 @@ public class ChebyshevNetComponent : MiteComponent
             EdgeLength = edgeLength,
             CountU = countU,
             CountV = countV,
-            Angle = angle
+            Angle = angle,
+            MinAngle = minAngle
         };
         ChebyshevNet.Result net;
         try
@@ -107,6 +126,7 @@ public class ChebyshevNetComponent : MiteComponent
         int nu = net.Points.GetLength(0), nv = net.Points.GetLength(1);
 
         int validCount = 0;
+        double minShear = double.MaxValue, maxShear = double.MinValue;
         var pointTree = new DataTree<Point3d>();
         var angleTree = new DataTree<double>();
         for (int i = 0; i < nu; i++)
@@ -116,7 +136,9 @@ public class ChebyshevNetComponent : MiteComponent
             {
                 if (!net.Valid[i, j]) continue;
                 pointTree.Add(MeshConvert.ToRhinoPoint(net.Points[i, j]), path);
-                angleTree.Add(ShearAngle(net, i, j), path);
+                double w = net.ShearAngles[i, j] * 180.0 / Math.PI;
+                angleTree.Add(w, path);
+                if (!double.IsNaN(w)) { minShear = Math.Min(minShear, w); maxShear = Math.Max(maxShear, w); }
                 validCount++;
             }
         }
@@ -125,11 +147,22 @@ public class ChebyshevNetComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
                 "Net could not grow from the seed. Check EdgeLength against the mesh size.");
 
+        string shearText = minShear <= maxShear ? $"{minShear:F1}°–{maxShear:F1}°" : "n/a";
+        if (minAngle <= 0 && minShear <= maxShear && (minShear < 20 || maxShear > 160))
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                $"The net shears to {Math.Min(minShear, 180 - maxShear):F1}° away from the seed: the laths lock there " +
+                "(Hazzidakis: the shear angle falls with the Gaussian curvature the cells enclose). " +
+                "Set MinAngle (20–30°) to stop the net before that, or move the seed / shrink the counts.");
+        string report =
+            $"Nodes {validCount} of {nu * nv}; edge-length error {net.EdgeError:E1} of L; shear {shearText}; " +
+            $"locked by MinAngle {net.Locked}; left the mesh {net.Failed}.";
+
         DA.SetDataTree(0, pointTree);
         DA.SetDataList(1, ExtractCurves(net, alongU: true));
         DA.SetDataList(2, ExtractCurves(net, alongU: false));
         DA.SetData(3, BuildNetMesh(net));
         DA.SetDataTree(4, angleTree);
+        DA.SetData(6, report);
         DA.SetData(5, new MiteNetGoo(new LathNet(data, Runs(net, alongU: true), Runs(net, alongU: false), NetKind.Chebyshev, edgeLength)));
     }
 
