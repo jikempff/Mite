@@ -695,6 +695,74 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         double pulledDiff = pulled.Count == oa.GuideNodes.Count ? pulled.Zip(oa.GuideNodes, (x, y) => (x.pos - y).Length).Max() : double.NaN;
         scenes["asymCat_catenoidGuide"] = new { label = "catenoid, web from a guide (the waist)", wire = Edges(mesh, 6), a = A.Select(l => Line(l, 3)).ToArray(), b = B.Select(l => Line(l, 3)).ToArray(), guide = Line(guide, 1), nodes = oa.GuideNodes.Select(q => new[] { q.X, q.Y, q.Z }).ToArray() };
         numbers["asymGuide"] = new { nodes = oa.GuideNodes.Count, expectedNodes = n, a = A.Count, b = B.Count, ends = e.ends, boundaryEnds = e.boundary, tEnds = e.onCurve, floatingEnds = e.floating, worstOffset = R3(worstOff * 1000) / 1000, edge = R3(proj.AverageEdgeLength), through = R3(through * 1e6) / 1e6, gapErr = R3(gapErr * 1e6) / 1e6, pulledNodes = pulled.Count, pulledDiff = R3(pulledDiff * 1e6) / 1e6, spacing = S, ms = tt.ElapsedMilliseconds };
+    // Flat Kit of the 3-fold Enneper web, nested on a 600 × 400 mm bed at 1 : 5 and 1 : 2.5:
+    // first-fit shelves against the area bound and the 1.3.1 next-fit rule; strips longer than
+    // the bed split into lapped pieces between the joints (nothing on a "longer bed" drawing)
+    {
+        var mesh = AnalyticShapes.Build("enneper3", 3, 0.9, 0, 48).ToTriangulated();
+        var pc = PrincipalCurvature.Compute(mesh, 2);
+        var w = AsymptoticWeb.Build(mesh, pc, -1, new AsymptoticWeb.Options());
+        var proj = new MeshProjection(mesh);
+        var tk = Stopwatch.StartNew();
+        var (net, motion, anchor) = FlatKit.Press(w.A, w.B, w.Seed, new Vec3d(0, 0, 1), q => proj.ClosestPoint(q, proj.NearestVertexGlobal(q)).SmoothNormal);
+        var kit = FlatKit.Build(net, motion, anchor, new Vec3d(0, 0, 1), new FlatKit.Options { Width = 0.1, Thickness = 0.01, Upright = true });
+        tk.Stop();
+        int NextFit(double mm)
+        {
+            // the shelf rule of 1.3.1: longest first, a new row whenever the strip does not fit the current one
+            int sheets = 0; double x = 0, y = 0, rowH = 0; bool open = false; const double G = 4, SW = 600, SH = 400;
+            foreach (var st in kit.Strips.Where(st => st.Length * mm + 2 * G <= SW).OrderByDescending(st => st.Length))
+            {
+                double L = st.Length * mm, W = st.Width * mm;
+                if (!open || x + L + G > SW) { if (open) { y += rowH + G; x = G; rowH = 0; } if (!open || y + W + G > SH) { sheets++; open = true; y = G; x = G; rowH = 0; } }
+                x += L + G; rowH = Math.Max(rowH, W);
+            }
+            return sheets;
+        }
+        object Row(double mm)
+        {
+            var tn = Stopwatch.StartNew();
+            var n = KitExport.Nest(kit, new KitExport.Options { ToMm = mm });
+            tn.Stop();
+            // laps clear of the joints: no joint mark within the lap (half the lap plus half the mark from the cut)
+            int lapNearJoint = 0;
+            foreach (var st in n.Strips.Where(st => st.Label.Contains("/")))
+                foreach (var g in st.Marks.Where(m => m.Kind == FlatKit.MarkKind.Splice).GroupBy(m => m.Label))
+                {
+                    double lo = g.Min(m => m.At) - 0.25 * n.Splice / mm, hi = g.Max(m => m.At) + 0.25 * n.Splice / mm;
+                    if (st.Marks.Any(m => m.Kind != FlatKit.MarkKind.Splice && m.At + 0.5 * m.Size > lo && m.At - 0.5 * m.Size < hi)) lapNearJoint++;
+                }
+            // no two strips overlap on a sheet and every corner lies inside it (axis-aligned shelves; the diagonal is checked in the tests)
+            double minSep = double.MaxValue; bool inside = true;
+            for (int i = 0; i < n.SheetCount; i++)
+            {
+                var on = n.Placements.Where(pl => pl.Sheet == i).ToList();
+                foreach (var pl in on)
+                {
+                    double L = pl.Strip.Length * mm, W = pl.Strip.Width * mm, c = Math.Cos(pl.Angle), sn = Math.Sin(pl.Angle);
+                    foreach (var (lx, ly) in new[] { (0.0, 0.0), (L, 0.0), (L, W), (0.0, W) })
+                    { double X = pl.X + lx * c - ly * sn, Y = pl.Y + lx * sn + ly * c; if (X < 4 - 1e-6 || X > 596 + 1e-6 || Y < 4 - 1e-6 || Y > 396 + 1e-6) inside = false; }
+                }
+                for (int a = 0; a < on.Count; a++) for (int b = a + 1; b < on.Count; b++)
+                {
+                    if (on[a].Angle != 0 || on[b].Angle != 0) continue;
+                    double ax1 = on[a].X + on[a].Strip.Length * mm, ay1 = on[a].Y + on[a].Strip.Width * mm, bx1 = on[b].X + on[b].Strip.Length * mm, by1 = on[b].Y + on[b].Strip.Width * mm;
+                    double sep = Math.Max(Math.Max(on[b].X - ax1, on[a].X - bx1), Math.Max(on[b].Y - ay1, on[a].Y - by1));
+                    minSep = Math.Min(minSep, sep);
+                }
+            }
+            return new
+            {
+                scale = R3(1000 / mm), sheets = n.SheetCount, areaBound = n.AreaBound, nextFit = NextFit(mm), utilisation = R3(n.Utilisation), rows = n.Rows,
+                longer = kit.Strips.Count(st => st.Length * mm + 8 > 600), diagonal = n.DiagonalStrips, split = n.SplitStrips, pieces = n.Pieces, strips = n.Strips.Count,
+                splice = R3(n.Splice), spliceMin = R3(n.SpliceMin), lapClashes = n.LapClashes, lapNearJoint, tooLong = n.TooLong, inside, minSep = minSep == double.MaxValue ? 99 : R3(minSep), ms = tn.ElapsedMilliseconds,
+                summary = KitExport.NestingSummary(n),
+            };
+        }
+        var n25 = KitExport.Nest(kit, new KitExport.Options { ToMm = 400 });
+        object[] Rects(KitExport.Nesting nn, int sheet) => nn.Placements.Where(pl => pl.Sheet == sheet).Select(pl => (object)new { x = R3(pl.X), y = R3(pl.Y), l = R3(pl.Strip.Length * 400), w = R3(pl.Strip.Width * 400), a = R3(pl.Angle), piece = pl.Strip.Label.Contains("/"), label = pl.Strip.Label }).ToArray();
+        scenes["kit"] = new { sheetW = 600, sheetH = 400, sheets = Enumerable.Range(0, n25.SheetCount).Select(i => new { title = n25.Sheets[i].Title, rects = Rects(n25, i) }).ToArray() };
+        numbers["kit"] = new { strips = kit.Strips.Count, joints = kit.Joints.Count, pressMs = tk.ElapsedMilliseconds, s5 = Row(200), s33 = Row(300), s25 = Row(400), s2 = Row(500) };
     }
 
     // Web coverage with gap filling: the part of the usable region farther than

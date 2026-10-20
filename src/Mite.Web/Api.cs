@@ -315,6 +315,8 @@ public class KitOptions
     public double SheetHeight { get; set; } = 400;
     public double Stiffness { get; set; } = 0.3;
     public int Steps { get; set; } = 8;
+    /// <summary>Lap splice in mm for strips longer than the bed (0 = automatic, negative = never split).</summary>
+    public double Splice { get; set; }
 }
 
 public class KitPayload
@@ -324,6 +326,16 @@ public class KitPayload
     public int Hubs { get; set; }
     public int Sheets { get; set; }
     public int TooLong { get; set; }
+    /// <summary>Material that becomes strips (the strips' outline area over the sheets' area), the area bound on the sheets, and the nesting of strips longer than the bed.</summary>
+    public double Utilisation { get; set; }
+    public int AreaBound { get; set; }
+    public int Diagonal { get; set; }
+    public int Split { get; set; }
+    public int Pieces { get; set; }
+    public double Splice { get; set; }
+    public double SpliceMin { get; set; }
+    public int LapClashes { get; set; }
+    public string Nesting { get; set; } = "";
     public double TotalLength { get; set; }
     public double LongestStrip { get; set; }
     public double Flatness { get; set; }
@@ -1096,16 +1108,20 @@ public static partial class MiteApi
                 Width = o.Width, Thickness = o.Thickness, Upright = o.Upright, Joint = (FlatKit.JointKind)Math.Max(0, Math.Min(2, o.Joint)),
                 HoleDiameter = o.Hole, Clearance = o.Clearance,
             });
-            var eo = new KitExport.Options { ToMm = o.ToMm > 0 ? o.ToMm : 1000, SheetWidth = o.SheetWidth > 0 ? o.SheetWidth : 600, SheetHeight = o.SheetHeight > 0 ? o.SheetHeight : 400 };
-            var sheets = KitExport.StripSheets(kit, eo);
+            var eo = new KitExport.Options { ToMm = o.ToMm > 0 ? o.ToMm : 1000, SheetWidth = o.SheetWidth > 0 ? o.SheetWidth : 600, SheetHeight = o.SheetHeight > 0 ? o.SheetHeight : 400, Splice = o.Splice };
+            var nest = KitExport.Nest(kit, eo);
+            var sheets = nest.Sheets;
             var assembly = KitExport.Assembly(kit, o.Upright ? o.Thickness : o.Width, eo);
             var deploy = KitExport.Deployment(kit);
             p.AssemblySvg = KitExport.ToSvg(assembly);
             p.DeploymentSvg = KitExport.ToSvg(deploy);
             p.FirstSheetSvg = sheets.Count > 0 ? KitExport.ToSvg(sheets[0]) : "";
-            p.Zip = Convert.ToBase64String(KitExport.Zip(kit, sheets, assembly, deploy, eo));
+            p.Zip = Convert.ToBase64String(KitExport.Zip(kit, nest, assembly, deploy, eo));
             p.Strips = kit.Strips.Count; p.Joints = kit.Joints.Count; p.Hubs = kit.Joints.Count(j => j.Hub);
-            p.Sheets = sheets.Count(d => d.Title.StartsWith("sheet")); p.TooLong = kit.Strips.Count(s => s.Length * eo.ToMm + 2 * eo.Gap > eo.SheetWidth);
+            p.Sheets = nest.SheetCount; p.TooLong = nest.TooLong;
+            p.Utilisation = nest.Utilisation; p.AreaBound = nest.AreaBound; p.Diagonal = nest.DiagonalStrips;
+            p.Split = nest.SplitStrips; p.Pieces = nest.Pieces; p.Splice = nest.Splice; p.SpliceMin = nest.SpliceMin; p.LapClashes = nest.LapClashes;
+            p.Nesting = KitExport.NestingSummary(nest);
             p.TotalLength = kit.TotalLength; p.LongestStrip = kit.Strips.Max(s => s.Length);
             p.Flatness = kit.Flatness; p.Drift = kit.Drift; p.MinAngle = kit.Joints.Select(j => j.MinAngle).DefaultIfEmpty(90).Min();
             var slots = kit.Strips.SelectMany(s => s.Marks).Where(m => m.Kind == FlatKit.MarkKind.SlotOuter || m.Kind == FlatKit.MarkKind.SlotInner).Select(m => m.Size).ToList();

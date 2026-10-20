@@ -233,6 +233,7 @@
         <div class="row slider"><label for="ksheetw">laser bed <span class="unit">mm</span></label><input id="ksheetw" type="number" min="100" max="5000" step="10" value="1000"><span class="unit">×</span><input id="ksheeth" type="number" min="100" max="5000" step="10" value="600"></div>
         <div class="row slider"><label for="kclear">clearance <span class="unit">mm</span></label><input id="kclear" type="range" min="0" max="2" step="0.05" value="0.2"><output for="kclear">0.2</output></div>
       </div>
+      <div class="row"><label class="chk" title="A strip longer than the bed lies along its diagonal when it fits there; otherwise it is split into pieces lapped between two joints, with two pin holes per lap. Off: such strips go on a drawing of their own, for a longer bed."><input id="ksplit" type="checkbox" checked> split long strips with a lap (Splice) when the diagonal is too short</label></div>
       <div class="row"><button id="kitrun" class="btn">Build the kit</button><button id="kitzip" class="ghost small hidden">download the kit (.zip)</button></div>
       <div id="kit-result" class="hidden">
         <p id="kit-stats" class="stats"></p>

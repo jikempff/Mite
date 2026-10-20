@@ -658,6 +658,24 @@ internal static class Tests
                 SetCurveList(c, 1, circle.ToNurbsCurve());
             },
             c => Expect(c.Message == "Upright · Rectangle", $"Message \"Upright · Rectangle\", got \"{c.Message}\""));
+        // Flat Kit (nesting): the same lattice at 1 : 1 in a metre model is 2000 mm of strip on a 600 × 400 mm sheet:
+        // every strip is split into lapped pieces (the Report says so), and with Splice < 0 the six strips stay whole
+        TestComponent("Flat Kit (split strips)",
+            new Mite.Grasshopper.Components.FlatKitComponent(),
+            c =>
+            {
+                SetCurveList(c, 0,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 1, 0), new Rhino.Geometry.Point3d(2, 1, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 2, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(0, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1, 0, 0), new Rhino.Geometry.Point3d(1, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(2, 0, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetInputs(c, (5, 0.05), (6, 0.006), (18, 0.0));
+            },
+            c => Expect(CurveCount(c, 6) > 6 && Texts(c, 12).Count == 1 && Texts(c, 12)[0].Contains("split into") && Texts(c, 11)[0].Contains("splice"),
+                $"more than 6 strip outlines and a Report with the split, got {CurveCount(c, 6)} outlines; {string.Join(" | ", Texts(c, 12))}"));
 
         Console.WriteLine();
         Console.WriteLine($"=== {_passed} passed, {_failed} failed ===");

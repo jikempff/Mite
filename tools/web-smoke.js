@@ -136,6 +136,19 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   const kit = await page.evaluate(() => window.__mite.kit);
   check(kit && !kit.error && kit.strips > 20 && kit.hubs === 1 && kit.sheets >= 1 && kit.zip.length > 1000 && kit.assemblySvg.startsWith('<svg'), `kit built (${kit?.error || `${kit?.strips} strips, ${kit?.joints} joints, ${kit?.hubs} hub, ${kit?.sheets} sheets`})`);
   check(kit && kit.flatness < 1e-3 && kit.slotMin > 0, `kit is flat with slots (${kit?.flatness?.toExponential(1)}, ${kit?.slotMin})`);
+  // 10. nesting: every strip on the bed, the material use reported against the area bound; a small bed splits the long strips with laps clear of the joints
+  check(kit && kit.tooLong === 0 && kit.sheets >= kit.areaBound && kit.utilisation > 0.3 && kit.utilisation < 0.95 && kit.lapClashes === 0, `kit nested (${kit?.nesting})`);
+  const statsText = await page.$eval('#kit-stats', (e) => e.textContent);
+  check(/material used \d+ %/.test(statsText), `the kit summary states the material use (${statsText.match(/material used [^·]*/)?.[0]})`);
+  await page.fill('#ksheetw', '300'); await page.fill('#ksheeth', '200');
+  await page.click('#kitrun'); await idle(300000);
+  const kit2 = await page.evaluate(() => window.__mite.kit);
+  check(kit2 && !kit2.error && kit2.tooLong === 0 && kit2.split > 0 && kit2.pieces > kit2.split && kit2.lapClashes === 0 && kit2.splice >= 20, `a 300 × 200 bed splits the long strips with laps between the joints (${kit2?.nesting})`);
+  await page.click('#ksplit');
+  await page.click('#kitrun'); await idle(300000);
+  const kit3 = await page.evaluate(() => window.__mite.kit);
+  check(kit3 && !kit3.error && kit3.split === 0 && kit3.tooLong > 0 && kit3.strips === kit2.strips, `with splitting off the long strips go on their own drawing (${kit3?.tooLong} of ${kit3?.strips})`);
+  await page.click('#ksplit'); await page.fill('#ksheetw', '1000'); await page.fill('#ksheeth', '600');
 
   // 9. strain per state (José's priority 3, 2026-10-02): every state carries each lath's utilization, the envelope is
   //    their maximum over the motion, and the laths on screen wear the colour of the state shown, of the envelope, or

@@ -785,7 +785,7 @@ async function runKit() {
   // 1 : 1 — the Laths section; a model — its own strip and sheet, in mm of the model
   const width = scale === 1 ? o.width : +$('kwidth').value / toMm, thickness = scale === 1 ? o.thickness : +$('kthick').value / toMm;
   const opts = { width, thickness, upright: o.upright, joint: +$('kjoint').value, hole: 0, clearance: +$('kclear').value / toMm,
-    toMm, sheetWidth: +$('ksheetw').value, sheetHeight: +$('ksheeth').value, stiffness: 0.3, steps: 8 };
+    toMm, sheetWidth: +$('ksheetw').value, sheetHeight: +$('ksheeth').value, stiffness: 0.3, steps: 8, splice: $('ksplit').checked ? 0 : -1 };
   const gen = S.gen;
   await withBusy('pressing the net flat and cutting the strips…', async () => {
     const r = await K('kit', opts);
@@ -795,7 +795,11 @@ async function runKit() {
     S.kit = r;
     const mm = opts.toMm;
     $('kit-stats').innerHTML = `1 : ${scale} · <b>${r.strips}</b> strips · <b>${r.joints}</b> joints${r.hubs ? ` (${r.hubs} hub)` : ''} · <b>${fmt(r.totalLength * mm / 1000, 1)} m</b> of ${fmt(width * mm, 1)} × ${fmt(thickness * mm, 1)} mm · longest <b>${fmt(r.longestStrip * mm, 0)} mm</b>\n` +
-      `<b>${r.sheets}</b> sheet${r.sheets === 1 ? '' : 's'} of ${opts.sheetWidth} × ${opts.sheetHeight} mm` + (r.tooLong ? ` + <span class="bad">${r.tooLong} strips longer than the sheet</span>` : '') +
+      `<b>${r.sheets}</b> sheet${r.sheets === 1 ? '' : 's'} of ${opts.sheetWidth} × ${opts.sheetHeight} mm · material used <b>${(r.utilisation * 100).toFixed(0)} %</b>` + (r.sheets > r.areaBound ? ` (area bound ${r.areaBound})` : '') +
+      (r.diagonal ? ` · <b>${r.diagonal}</b> long strip${r.diagonal === 1 ? '' : 's'} on the diagonal` : '') +
+      (r.split ? ` · <b>${r.split}</b> long strip${r.split === 1 ? '' : 's'} split into ${r.pieces} pieces, lap ${r.spliceMin < r.splice - 0.5 ? `${r.spliceMin.toFixed(0)}–${r.splice.toFixed(0)}` : r.splice.toFixed(0)} mm` : '') +
+      (r.lapClashes ? ` · <span class="bad">${r.lapClashes} laps reach a joint</span>` : '') +
+      (r.tooLong ? ` + <span class="bad">${r.tooLong} strips longer than the sheet (own drawing)</span>` : '') +
       (r.slotMax > 0 ? ` · slots <b>${fmt(r.slotMin * mm, 1)}–${fmt(r.slotMax * mm, 1)} mm</b> (joints down to ${fmt(r.minAngle, 0)}°)` : '') +
       `\nflat to <b>${fmt(r.flatness * mm, 2)} mm</b> · joint spacing kept to <b>${(r.drift * 100).toFixed(2)} %</b> · ${r.ms} ms`;
     $('kit-assembly').src = svgUrl(r.assemblySvg);
@@ -850,7 +854,7 @@ function updateRecipe() {
     const f = frameOptions();
     lines.push(`Gridshell Analysis: Supports = ${f.supports === 'border' ? 'lath ends on the border' : f.supports === 'lowest' ? `lath ends in the lowest ${$('band').value} %` : `${S.picked.length} picked points`}, SupportType = ${f.supportType}, JointStiffness = ${f.jointStiffness < 0 ? -1 : f.jointStiffness} N·m/rad, Density = ${f.density}, AreaLoad = ${f.areaLoad} N/m², Load = (0,0,−${f.lineLoad}) N/m`);
   }
-  if (S.kit) lines.push(`Flat Kit: A, B from the net, P = the seed, scale 1 : ${$('kscale').value} (W, T in model units), Upright = ${$('upright').checked}, Joint = ${$('kjoint').value}, SheetWidth = ${$('ksheetw').value}, SheetHeight = ${$('ksheeth').value} → Folder + Write for the SVG / DXF / CSV`);
+  if (S.kit) lines.push(`Flat Kit: A, B from the net, P = the seed, scale 1 : ${$('kscale').value} (W, T in model units), Upright = ${$('upright').checked}, Joint = ${$('kjoint').value}, SheetWidth = ${$('ksheetw').value}, SheetHeight = ${$('ksheeth').value}, Splice = ${$('ksplit').checked ? 0 : -1} → Folder + Write for the SVG / DXF / CSV`);
   if (S.kin) lines.push(`Net Kinetics: drive ${S.drive}, amplitude ${$('kamp').value}, Stiffness = ${$('kstiff').value}, Steps = ${$('ksteps').value}`);
   $('recipe').textContent = lines.join('\n');
 }

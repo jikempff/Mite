@@ -83,6 +83,7 @@ h4{margin:0 0 6px;font:600 11px/1 var(--mono);letter-spacing:.08em;text-transfor
 .demo[data-kind="hist"] .demo-legend{position:static;padding:4px 14px 10px}
 .hist-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 18px;padding:2px 14px 6px;font:11px/1.45 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
 @media (max-width:560px){.hist-stats{grid-template-columns:1fr}}
+.demo[data-kind="sheet"] canvas{aspect-ratio:3/2}
 .demo-ctl{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:6px 10px;max-width:calc(100% - 16px);font:12px var(--sans);background:color-mix(in srgb,var(--surface) 85%,transparent);padding:4px 8px;border-radius:5px;z-index:2}
 .demo-ctl label{display:flex;gap:4px;align-items:center;cursor:pointer}
 .demo-ctl input{margin:0;accent-color:var(--acc)}
@@ -370,6 +371,18 @@ function plot1d(canvas, el){ const s = SC.segment; const ctx = canvas.getContext
     ctx.fillStyle = css('--warn'); s.joints.forEach(j => { ctx.beginPath(); ctx.arc(X(j), y0 - 6, 3, 0, 6.283); ctx.fill(); ctx.globalAlpha = 0.15; ctx.fillRect(X(j - s.margin), y0 - 10, X(j + s.margin) - X(j - s.margin), yb - y0 + 10); ctx.globalAlpha = 1; }); }
   legend(el.dataset.id, [[css('--acc'), 'pieces (overlapping by the splice)'], [css('--ink'), 'cuts'], [css('--warn'), 'joints on this lath ± margin']]);
   new ResizeObserver(draw).observe(canvas); draw(); }
+function plotSheet(canvas, el){ const k = SC.kit; const ctx = canvas.getContext('2d'); let idx = 0;
+  const sel = el.querySelector('select'); if (sel) { k.sheets.forEach((sh, i) => { const o = document.createElement('option'); o.value = i; o.textContent = sh.title; sel.appendChild(o); }); sel.addEventListener('change', () => { idx = +sel.value; draw(); }); }
+  function draw(){ const dpr = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight; if (!w) return; canvas.width = w*dpr; canvas.height = h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+    const pad = 10, s = Math.min((w - 2*pad) / k.sheetW, (h - pad - 26) / k.sheetH), ox = (w - s*k.sheetW)/2, oy = pad + s*k.sheetH;
+    const P = (x, y) => [ox + x*s, oy - y*s];
+    ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.strokeRect(ox, oy - s*k.sheetH, s*k.sheetW, s*k.sheetH);
+    for (const r of k.sheets[idx].rects) { const c = Math.cos(r.a), sn = Math.sin(r.a); const q = [[0,0],[r.l,0],[r.l,r.w],[0,r.w]].map(([x,y]) => P(r.x + x*c - y*sn, r.y + x*sn + y*c));
+      ctx.beginPath(); q.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+      ctx.fillStyle = r.piece ? css('--fam-b') : css('--acc'); ctx.globalAlpha = 0.55; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = css('--ink'); ctx.lineWidth = 0.8; ctx.stroke(); }
+    ctx.fillStyle = css('--faint'); ctx.font = '10px ' + css('--mono'); ctx.fillText(k.sheets[idx].title, ox, oy + 12); }
+  legend(el.dataset.id, [[css('--acc'), 'whole strips'], [css('--fam-b'), 'pieces of split strips (lapped between the joints)']]);
+  new ResizeObserver(draw).observe(canvas); draw(); }
 function sparkline(canvas, el){ const u = SC.lathUtil.util; const ctx = canvas.getContext('2d');
   function draw(){ const dpr = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight; if (!w) return; canvas.width = w*dpr; canvas.height = h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
     const pad = 28, top = 14, bot = 18; const mx = Math.max(1.5, ...u); const X = i => pad + (w - 2*pad) * i / (u.length - 1), Y = v => h - bot - (h - top - bot) * v / mx;
@@ -447,6 +460,7 @@ const viewers = [];
 document.querySelectorAll('.demo').forEach(el => { const canvas = el.querySelector('canvas'); const kind = el.dataset.kind;
   if (kind === 'palette') return paletteDemo(canvas, el); if (kind === 'plot2d') return plot2d(canvas, el); if (kind === 'plot1d') return plot1d(canvas, el); if (kind === 'sparkline') return sparkline(canvas, el);
   if (kind === 'hist') return histPlot(canvas, el); if (kind === 'plot2d') return plot2d(canvas, el); if (kind === 'plot1d') return plot1d(canvas, el); if (kind === 'sparkline') return sparkline(canvas, el);
+  if (kind === 'plot2d') return plot2d(canvas, el); if (kind === 'plot1d') return plot1d(canvas, el); if (kind === 'sheet') return plotSheet(canvas, el); if (kind === 'sparkline') return sparkline(canvas, el);
   const b = builders[el.dataset.demo]; if (!b) return; const v = Viewer(canvas, () => b(el)); viewers.push(v); el.querySelectorAll('.demo-ctl input').forEach(r => { r.addEventListener('change', () => v.rebuild()); if (r.type === 'range') r.addEventListener('input', () => v.rebuild()); }); });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => viewers.forEach(v => v.rebuild()));
 new MutationObserver(() => viewers.forEach(v => v.rebuild())).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
