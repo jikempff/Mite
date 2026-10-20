@@ -335,6 +335,22 @@ internal static class Tests
             c => Expect(Points(c, 0).Count > sphere.Vertices.Count / 2,
                 $"sphere is mostly umbilical: {Points(c, 0).Count} points"));
 
+        // triaxial ellipsoid 1.5 × 1 × 0.7: exactly four isolated umbilics of index +½ at
+        // (±1.264, 0, ±0.377), the Umbilics / Index outputs appended in 1.4
+        var ellipsoid = sphere.DuplicateMesh();
+        ellipsoid.Transform(Rhino.Geometry.Transform.Scale(Rhino.Geometry.Plane.WorldXY, 1.5, 1.0, 0.7));
+        TestComponent("Umbilics (ellipsoid)",
+            new Mite.Grasshopper.Components.UmbilicsComponent(),
+            c => SetInputs(c, (0, ellipsoid), (1, 0.05), (2, 0.0)),
+            c =>
+            {
+                var u = Points(c, 3); var ix = Numbers(c, 4);
+                double x0 = 1.5 * Math.Sqrt((2.25 - 1.0) / (2.25 - 0.49)), z0 = 0.7 * Math.Sqrt((1.0 - 0.49) / (2.25 - 0.49));
+                double worst = u.Count == 0 ? 99 : u.Max(p => Math.Min(Math.Abs(Math.Abs(p.X) - x0), 99) + Math.Abs(p.Y) + Math.Abs(Math.Abs(p.Z) - z0));
+                return Expect(u.Count == 4 && ix.All(i => Math.Abs(i - 0.5) < 1e-9) && worst < 0.15,
+                    $"four lemons at (±{x0:F3}, 0, ±{z0:F3}): {u.Count} located, indices {string.Join(" ", ix)}, worst offset {worst:F3}");
+            });
+
         TestComponent("Gridshell Analysis",
             new Mite.Grasshopper.Components.GridshellAnalysisComponent(),
             c =>

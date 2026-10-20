@@ -182,6 +182,44 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       filling covers the rest), a constant-angle option for geodesics.
 - [ ] Ellipsoid a ≠ b ≠ c: exactly four umbilics; curvature-line net has the
       classic lemon pattern.
+      projected curve — expose as "seed curve" input on the nets and test
+      that the resulting families are the same as farthest-point seeding
+      (D) up to spacing.
+- [x] Ellipsoid a ≠ b ≠ c: exactly four umbilics; curvature-line net has the
+      classic lemon pattern — 2026-10-20 (session 2), `EllipsoidTests` (12),
+      `TestMeshes.CreateEllipsoid`, closed forms in `AnalyticShapes`
+      (`EllipsoidUmbilics` at (±a √((a² − b²)/(a² − c²)), 0, ±c √((b² −
+      c²)/(a² − c²))), `EllipsoidCurvature` K = h⁴/(a²b²c²), H = h³(a² + b² +
+      c² − |p|²)/(2a²b²c²), `EllipsoidPrincipal` exact shape operator,
+      `EllipsoidConfocal` the Dupin coordinates λ₁ ∈ (c², b²), λ₂ ∈ (b², a²)).
+      Read: Panou & Korakitis 2011 (arXiv 1104.5145, curvatures and umbilics),
+      Garcia & Sotomayor 2009 (Dynamical behavior of Darboux curves, arXiv
+      0912.3749: the four umbilics are D1 lemons of index ½, the ellipse y = 0
+      is the union of the umbilics and their separatrices; principal
+      coordinates from the confocal quadrics), Garcia & Sotomayor 2007 (Lines
+      of curvature on surfaces, historical comments: Monge's integration, all
+      other lines of curvature closed), Delmarcelle & Hesselink 1994 / Tricoche,
+      Scheuermann & Hagen 2001 (degenerate points of 2D symmetric tensor
+      fields: linear deviator, δ > 0 wedge, δ < 0 trisector, indices ±½),
+      Berry & Hannay 1977 / Porteous 2001 via the Wikipedia survey (lemon,
+      monstar, star; genus 0 → index sum 2). Measured (96 segments, edge
+      0.067): K and H within 1.4 % and the principal directions within 0.7° of
+      the closed form away from the umbilics (k1, k2 individually up to 6 %,
+      the Rusinkiewicz facet bias noted on the hyperboloid); the max-curvature
+      lines keep λ₂ and the min-curvature lines keep λ₁ (checked against the
+      exact shape operator at 500 random points); traced Curvature Streamlines
+      stay within 1 mesh edge (mean 0.1–0.2) of the confocal quadric through
+      their seed for both families, even 1 edge from an umbilic, and every one
+      is closed (Monge); λ itself is a poor yardstick (its gradient varies 10×
+      over the surface: a 21 % spread in λ₁ was 0.9 edge laterally). The
+      umbilic connection: the max line from (a, 0, 0) stays on y = 0 to 4e-4
+      edge and leaves it 0.44 edge past the umbilic, where the ellipse turns
+      into a min-curvature line.
+      Umbilics located (D item below): exactly four, all +½, sum 2, 0.44 /
+      0.31 / 0.30 edges from the closed form on 48 / 96 / 144 segments.
+      Open: the tracer cannot resolve the field inside the facet ring round an
+      umbilic (the lemon's one separatrix vs the three of a monstar is not
+      checked); lemon vs monstar needs the cubic form (Berry & Hannay).
 - [ ] Cone (developable with an apex): projection and tracing near a
       singular vertex. Partly done 2026-10-08 (session 1):
       `TestMeshes.CreatePolyCone` — n generators through the apex, rings
@@ -785,6 +823,40 @@ remains the self-test review page.
       Morvan 2003 (Restricted Delaunay triangulations and normal cycle) —
       normal-cycle tensors are more robust on irregular meshes. Data point:
       k1·k2 is 6% off at the hyperboloid rims while angle-deficit K is 0.3%.
+- [x] Umbilics as degenerate points of the direction field — 2026-10-20
+      (session 2), `Umbilics.Locate` / `Degenerate` / `IndexSum` (the vertex
+      threshold `Find` unchanged; Grasshopper `Cancel` input, `Umbilics` and
+      `Index` outputs appended; web app marks them). Literature: Delmarcelle &
+      Hesselink 1994 (The topology of symmetric, second-order tensor fields)
+      and Tricoche, Scheuermann & Hagen 2001 (Topology-based visualization of
+      2D symmetric tensor fields): the deviator (α, β) = (½(S₁₁ − S₂₂), S₁₂)
+      vanishes at the umbilic, is interpolated linearly per cell, δ = det
+      ∂(α, β)/∂(x, y) > 0 wedge (+½), < 0 trisector (−½); Ray, Vallet, Li &
+      Lévy 2008 (N-symmetry direction field design) and Crane, Desbrun &
+      Schröder 2010 (Trivial connections) for the per-face index of a
+      vertex-based N-RoSy field: Σ of the parallel-transported angle changes
+      along the edges (wrapped to ±π/N) plus the holonomy of the transport
+      round the face, over 2π; Hopf 1926 / Porteous 2001 for Σ index = χ.
+      Findings: (1) the per-face linear deviator alone is not consistent
+      across faces on a mesh (each face transports the corner tensors into its
+      own plane), so when the umbilic falls on a vertex — as it does on the
+      symmetric ellipsoid mesh — the zero sits just outside every fan face or
+      inside two mirror faces: 0 or 8 points instead of 4. The winding index
+      per face is exact (every value a multiple of ½ to round-off, the sum
+      exactly χ: 2 on the ellipsoid and the ellipsoid of revolution, 0 on the
+      torus) and selects one face per umbilic; the deviator zero is then only
+      used to place the point inside that face (clamped). (2) Delmarcelle's δ
+      agrees in sign with the winding index at every located point. (3) The
+      ellipsoid of revolution's poles (index 1, non-generic) come out as four
+      +½ wedges in the pole fans, sum 2 — the discrete field splits them, as a
+      perturbation would. Cost: 11 ms on 4514 vertices.
+      Open: lemon vs monstar from the cubic form (Berry & Hannay 1977,
+      Maekawa, Wolter & Patrikalakis 1996); the separatrices (one or three
+      lines of curvature through the umbilic, Tricoche's cubic in u = tan θ)
+      as curves, which Curvature Streamlines could use to start clean nets at
+      the umbilics; the located umbilics as seeds for Asymptotic Web's flat
+      points (a star at a flat point, K = 0 and k1 = k2 = 0, is exactly the
+      3-fold Enneper centre); a sub-facet position by a jet fit round the face.
 - [ ] Conjugate and planar-quad nets: Liu, Pottmann, Wallner, Yang, Wang
       2006 (Geometric modeling with conical meshes and developable
       surfaces); Zadravec, Schiftner, Wallner 2010 (Designing quad-dominant
@@ -1368,6 +1440,12 @@ Open
       shelves, diagonal lanes, lapped pieces between the joints, material %
       with the area bound; `KitNestingTests` (10); web app Kit summary and
       smoke checks; `Splice` input on Flat Kit.
+- [x] 2026-10-20 (session 2, A/D): the triaxial ellipsoid as a test typology
+      with closed-form umbilics, curvatures, shape operator and confocal
+      coordinates; umbilics located as the degenerate points of the principal
+      direction field with their index (`Umbilics.Locate`, Grasshopper and web
+      outputs appended); 12 exact tests, six bench self-tests on the Umbilics
+      card (81 PASS), two web smoke checks.
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

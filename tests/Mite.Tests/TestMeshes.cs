@@ -283,6 +283,19 @@ public static class TestMeshes
     public static Vec3d EnneperPoint(int n, double r, double phi) => AnalyticShapes.EnneperPoint(n, r, phi);
 
     /// <summary>
+    /// Triaxial ellipsoid x²/a² + y²/b² + z²/c² = 1 (a &gt; b &gt; c), the test
+    /// typology with exactly four umbilics: n segments around z, n/2 rows, the
+    /// poles ±c collapsed into fans (<see cref="AnalyticShapes.Build"/>). The
+    /// closed forms live in <see cref="AnalyticShapes"/>: umbilics, K, H, the
+    /// exact shape operator and the confocal coordinates (Dupin's lines of
+    /// curvature).
+    /// </summary>
+    public static MeshData CreateEllipsoid(double a = 1.5, double b = 1.0, double c = 0.7, int n = 96) =>
+        AnalyticShapes.Build("ellipsoid", a, b, c, n);
+
+    public static Vec3d[] EllipsoidUmbilics(double a = 1.5, double b = 1.0, double c = 0.7) => AnalyticShapes.EllipsoidUmbilics(a, b, c);
+
+    /// <summary>
     /// Analytic asymptotic directions of the n-fold Enneper surface at chart
     /// parameter w = u + i v. With Weierstrass data f = 1, g = w^(n−1) the Hopf
     /// differential is f g' dw² = (n−1) w^(n−2) dw², and asymptotic directions

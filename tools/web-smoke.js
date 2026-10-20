@@ -70,6 +70,19 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   await page.click('#modes [data-mode=shaded]');
   await page.waitForTimeout(300);
   check(await page.$eval('#gh-mode', (e) => e.classList.contains('hidden')), 'mode strip hides for plain shading');
+  // 4b. isolated umbilics: the triaxial ellipsoid 1.5 × 1 × 0.7 has exactly four,
+  //     all lemons (index +½) at (±1.264, 0, ±0.377); the torus has none
+  await pickShape('ellipsoid'); await idle(180000);
+  await page.check('#umb'); await idle(180000);
+  const umb = await page.evaluate(() => { const c = window.__mite.curv; return c && { n: c.umbilicIndex.length, sum: c.umbilicIndex.reduce((a, b) => a + b, 0), pts: c.umbilicPoints }; });
+  const x0 = 1.5 * Math.sqrt((2.25 - 1) / (2.25 - 0.49)), z0 = 0.7 * Math.sqrt((1 - 0.49) / (2.25 - 0.49));
+  const worst = umb && umb.n ? Math.max(...[...Array(umb.n).keys()].map((i) => Math.abs(Math.abs(umb.pts[3 * i]) - x0) + Math.abs(umb.pts[3 * i + 1]) + Math.abs(Math.abs(umb.pts[3 * i + 2]) - z0))) : 99;
+  check(umb && umb.n === 4 && Math.abs(umb.sum - 2) < 1e-9 && worst < 0.15, `ellipsoid: four isolated umbilics, index sum 2, at (±${x0.toFixed(3)}, 0, ±${z0.toFixed(3)}) (${umb?.n} found, sum ${umb?.sum}, worst offset ${worst.toFixed(3)})`);
+  await pickShape('torus'); await idle(180000);
+  const umbT = await page.evaluate(() => window.__mite.curv && window.__mite.curv.umbilicIndex.length);
+  check(umbT === 0, `torus: no isolated umbilic (${umbT})`);
+  await page.uncheck('#umb');
+
   // 5. layouts: the default symmetric web has every end on the border or at a
   //    node and no T-junction; the border web and the evenly spaced fill still trace
   await pickShape('catenoid'); await idle(180000);
