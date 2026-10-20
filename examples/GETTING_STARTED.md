@@ -22,6 +22,18 @@ outputs the two curvature *directions* per vertex, which you can preview with
 Meshes with seams or duplicate vertices (STL imports, meshed Breps) are welded
 automatically; per-vertex outputs always line up with the input mesh.
 
+**Umbilics** tells you where direction fields break down. `P` / `I` / `Mk`
+flag every vertex whose two curvatures are within `T` of each other (a
+region); `U` / `Ix` locate the isolated umbilics themselves, the points the
+principal directions turn around, with their index: +½ for the lemons and
+monstars of a convex surface, −½ for a star such as the flat point of a
+monkey saddle. On a closed mesh the indices add up to 2 (sphere type) or 0
+(torus). Try a scaled Mesh Sphere (1.5 × 1 × 0.7): exactly four `U` points in
+the plane of the longest and shortest axes, all +½, and Curvature Streamlines
+seeded near them show the lemon pattern. Set `Cn` to a few mesh edges when a
+nearly spherical mesh reports many ±½ pairs close together — they are facet
+noise and cancel.
+
 For dirty meshes (booleans, imports, joined pieces) put **Mesh Cleanup**
 (Mite > Util) first: it welds, drops degenerate, duplicate and isolated
 elements and turns closed meshes outward, so the sign of Mean Curvature is

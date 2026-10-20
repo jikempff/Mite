@@ -2532,7 +2532,7 @@
   "file": "UmbilicsComponent.cs",
   "name": "Umbilics",
   "nick": "Umb",
-  "desc": "Finds umbilical points, where the two principal curvatures are equal and the principal directions are undefined. Curve networks rotate wildly around umbilics — use this to place net seeds deliberately or to mask regions before tracing.",
+  "desc": "Finds umbilical points, where the two principal curvatures are equal and the principal directions are undefined. Curve networks rotate wildly around umbilics — use this to place net seeds deliberately or to mask regions before tracing. Points / Indices / Mask flag the region of nearly equal curvatures; Umbilics locates the isolated umbilics themselves as the points round which the principal directions turn, with their index (+½ lemon or monstar, −½ star). The indices sum to the Euler characteristic of a closed mesh: a triaxial ellipsoid has exactly four lemons.",
   "tab": "Curvature",
   "icon": "Umbilics",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF2",
@@ -2552,6 +2552,14 @@
     "desc": "Relative |k1-k2| tolerance (default 0.05)",
     "access": "item",
     "default": "0.05"
+   },
+   {
+    "name": "Cancel",
+    "nick": "Cn",
+    "type": "Number",
+    "desc": "Distance within which a +½ and a −½ umbilic cancel each other (noise in a nearly umbilical region appears as such pairs). 0 (default) keeps every located umbilic; a few mesh edges is a sensible value on noisy meshes.",
+    "access": "item",
+    "default": "0.0"
    }
   ],
   "outputs": [
@@ -2576,6 +2584,22 @@
     "nick": "Mk",
     "type": "Boolean",
     "desc": "Per input vertex: true where umbilical",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Umbilics",
+    "nick": "U",
+    "type": "Point",
+    "desc": "Isolated umbilics: the points round which the principal directions turn (one per mesh face at most)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Index",
+    "nick": "Ix",
+    "type": "Number",
+    "desc": "Index of each isolated umbilic: +0.5 (lemon / monstar, the generic umbilics of a convex surface), −0.5 (star, e.g. the flat point of a monkey saddle)",
     "access": "list",
     "default": null
    }

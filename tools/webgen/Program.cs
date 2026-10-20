@@ -30,6 +30,7 @@ double[][][] GridWire(MeshData grid, int nx, int ny, int every)
     for (int i = 0; i <= nx; i += every) { var l = new List<double[]>(); for (int j = 0; j <= ny; j++) l.Add(P(grid.Vertices[j * (nx + 1) + i])); o.Add(l.ToArray()); }
     return o.ToArray();
 }
+double MeanEdgeOf(MeshData m) { var e = m.BuildEdges(); return e.Average(x => (m.Vertices[x.v0] - m.Vertices[x.v1]).Length); }
 double ArcLen(Vec3d[] l) { double s = 0; for (int i = 1; i < l.Length; i++) s += (l[i] - l[i - 1]).Length; return s; }
 double[][][] SaddleWire(int div, double size, int every)
 {
@@ -136,6 +137,88 @@ var sw = Stopwatch.StartNew();
     var shear = new List<double>();
     for (int i = 0; i + 1 < nu; i++) for (int j = 0; j + 1 < nv; j++) if (cheb.Valid[i, j] && cheb.Valid[i + 1, j] && cheb.Valid[i, j + 1]) { var e1 = (cheb.Points[i + 1, j] - cheb.Points[i, j]).Normalized(); var e2 = (cheb.Points[i, j + 1] - cheb.Points[i, j]).Normalized(); shear.Add(Math.Acos(Math.Abs(Vec3d.Dot(e1, e2))) * 180 / Math.PI); }
     numbers["cheb"] = new { nodes = u.Sum(l => l.Length), valid = u.Sum(l => l.Length), total = nu * nv, maxEdgeErr = R3(edgeErr.Max() * 100), meanEdgeErr = R3(edgeErr.Average() * 100), minAngle = R3(shear.Min()), maxAngle = R3(shear.Max()) };
+}
+
+// ---------- Triaxial ellipsoid: four umbilics (lemons), lines of curvature on confocal quadrics ----------
+{
+    const double EA = 1.5, EB = 1.0, EC = 0.7;
+    var ell = TestMeshes.CreateEllipsoid(EA, EB, EC, 96);
+    var pc = PrincipalCurvature.Compute(ell);
+    var K = GaussianCurvature.Compute(ell); var H = MeanCurvature.Compute(ell).Values;
+    double edge = MeanEdgeOf(ell);
+    var um = TestMeshes.EllipsoidUmbilics(EA, EB, EC);
+    double errK = 0, errH = 0, dirErr = 0;
+    for (int i = 0; i < ell.VertexCount; i++)
+    {
+        var p = ell.Vertices[i]; if (Math.Abs(p.Z) > 0.95 * EC) continue;
+        var (Kt, Ht) = AnalyticShapes.EllipsoidCurvature(p, EA, EB, EC);
+        errK = Math.Max(errK, Math.Abs(K[i] - Kt) / Kt); errH = Math.Max(errH, Math.Abs(H[i] - Ht) / Ht);
+        AnalyticShapes.EllipsoidPrincipal(p, EA, EB, EC, out double k1t, out double k2t, out Vec3d d1t, out _, out _);
+        if (um.Min(u => (u - p).Length) > 0.3 && k1t - k2t > 0.3) dirErr = Math.Max(dirErr, AngleDeg(pc.D1[i], d1t));
+    }
+    var t = Stopwatch.StartNew();
+    var located = Umbilics.Locate(ell, pc);
+    t.Stop();
+    var offsets = um.Select(u => located.Length == 0 ? 99 : located.Min(d => (d.Point - u).Length) / edge).ToArray();
+    var torus = TestMeshes.CreateTorus(3.0, 1.0, 64, 32);
+    var locTorus = Umbilics.Locate(torus, PrincipalCurvature.Compute(torus));
+    var monkey = AnalyticShapes.Build("monkey", 2.0, 1.0, 0, 48);
+    var locMonkey = Umbilics.Locate(monkey, PrincipalCurvature.Compute(monkey), 2 * MeanEdgeOf(monkey));
+    var revo = AnalyticShapes.Build("ellipsoid", 1.0, 1.0, 0.6, 96);
+    var locRevo = Umbilics.Locate(revo, PrincipalCurvature.Compute(revo));
+    // lines of curvature from seeds at several distances from the umbilics, compared with the confocal quadric through the seed
+    Vec3d OnE(Vec3d q) { double s2 = Math.Sqrt(q.X * q.X / (EA * EA) + q.Y * q.Y / (EB * EB) + q.Z * q.Z / (EC * EC)); return q / s2; }
+    var lineRows = new List<object>(); var maxLines = new List<double[][]>(); var minLines = new List<double[][]>();
+    foreach (bool max in new[] { true, false })
+    {
+        double Lam(Vec3d q) { var (l1, l2) = AnalyticShapes.EllipsoidConfocal(q, EA, EB, EC); return max ? l2 : l1; }
+        double range = max ? EA * EA - EB * EB : EB * EB - EC * EC;
+        foreach (double margin in new[] { 0.15, 0.3, 0.5, 0.7, 0.9 })
+        {
+            int seed = Enumerable.Range(0, ell.VertexCount).Where(i => ell.Vertices[i].Y > 0.3 && Math.Abs(ell.Vertices[i].Z) < 0.5)
+                .OrderBy(i => Math.Abs((max ? Lam(ell.Vertices[i]) - EB * EB : EB * EB - Lam(ell.Vertices[i])) / range - margin)).First();
+            var l = Mite.Core.Streamlines.CurvatureStreamlines.Trace(ell, new[] { seed }, pc, new Mite.Core.Streamlines.CurvatureStreamlines.Options { UseMaxCurvature = max, MaxSteps = 4000 })[0];
+            double lamSeed = Lam(l[Enumerable.Range(0, l.Length).OrderBy(i => (l[i] - ell.Vertices[seed]).Length).First()]);
+            double worst = 0, sum = 0;
+            foreach (var p in l)
+            {
+                AnalyticShapes.EllipsoidPrincipal(p, EA, EB, EC, out _, out _, out Vec3d d1, out Vec3d d2, out _);
+                const double h = 1e-5;
+                double g1 = (Lam(OnE(p + h * d1)) - Lam(OnE(p - h * d1))) / (2 * h), g2 = (Lam(OnE(p + h * d2)) - Lam(OnE(p - h * d2))) / (2 * h);
+                double off = Math.Abs(Lam(p) - lamSeed) / Math.Max(Math.Sqrt(g1 * g1 + g2 * g2), 1e-9);
+                worst = Math.Max(worst, off); sum += off;
+            }
+            (max ? maxLines : minLines).Add(Line(l, 2));
+            lineRows.Add(new { family = max ? "max" : "min", margin, points = l.Length, closed = (l[0] - l[^1]).Length < 1e-9, worstOff = R3(worst / edge), meanOff = R3(sum / l.Length / edge), nearestUmbilic = R3(l.Min(p => um.Min(u => (u - p).Length)) / edge) });
+        }
+    }
+    // the umbilic connection: the max-curvature line from (a, 0, 0) runs along the ellipse y = 0 and leaves it at the umbilic
+    int seedA = Enumerable.Range(0, ell.VertexCount).OrderBy(i => (ell.Vertices[i] - new Vec3d(EA, 0, 0)).Length).First();
+    var conn = Mite.Core.Streamlines.CurvatureStreamlines.Trace(ell, new[] { seedA }, pc, new Mite.Core.Streamlines.CurvatureStreamlines.Options { UseMaxCurvature = true, MaxSteps = 4000 })[0];
+    int at = Enumerable.Range(0, conn.Length).OrderBy(i => (conn[i] - new Vec3d(EA, 0, 0)).Length).First();
+    double maxY = 0; var leaveZ = new List<double>(); var connPts = new List<Vec3d>();
+    foreach (int dir in new[] { 1, -1 })
+    {
+        double lastZ = 0;
+        for (int i = at; i >= 0 && i < conn.Length; i += dir) { if (Math.Abs(conn[i].Y) > 0.5 * edge) break; lastZ = Math.Abs(conn[i].Z); if (lastZ < um[0].Z - edge) maxY = Math.Max(maxY, Math.Abs(conn[i].Y)); if (dir > 0) connPts.Add(conn[i]); else connPts.Insert(0, conn[i]); }
+        leaveZ.Add(lastZ);
+    }
+    double[][][] EllWire() { var w = SphereWire(8); foreach (var l in w) foreach (var q in l) { q[0] = R3(q[0] * EA); q[1] = R3(q[1] * EB); q[2] = R3(q[2] * EC); } return w; }
+    scenes["umbilics"] = new { wire = EllWire(), max = maxLines.ToArray(), min = minLines.ToArray(), connection = Line(connPts.ToArray(), 2), located = located.Select(d => P(d.Point)).ToArray(), exact = um.Select(P).ToArray() };
+    numbers["umbilics"] = new
+    {
+        a = EA, b = EB, c = EC, vertices = ell.VertexCount, edge = R3(edge), ms = t.ElapsedMilliseconds,
+        errK = R3(errK), errH = R3(errH), dirErr = R3(dirErr),
+        located = located.Length, lemons = located.Count(d => d.Index > 0), stars = located.Count(d => d.Index < 0), indexSum = Umbilics.IndexSum(located),
+        deltaAgrees = located.Count(d => Math.Sign(d.Delta) == Math.Sign(d.Index)),
+        offsets = offsets.Select(R3).ToArray(), x0 = R3(um[0].X), z0 = R3(um[0].Z), kUmbilic = R3(AnalyticShapes.EllipsoidUmbilicCurvature(EA, EB, EC)),
+        torusPoints = locTorus.Length, torusSum = Umbilics.IndexSum(locTorus),
+        monkeyPoints = locMonkey.Length, monkeyIndex = locMonkey.Length == 1 ? locMonkey[0].Index : 0, monkeyOffset = R3(locMonkey.Length == 1 ? locMonkey[0].Point.Length / MeanEdgeOf(monkey) : 99),
+        revoPoints = locRevo.Length, revoSum = Umbilics.IndexSum(locRevo), revoMinZ = R3(locRevo.Length == 0 ? 0 : locRevo.Min(d => Math.Abs(d.Point.Z))),
+        regionFlagged = Umbilics.Find(pc, 0.05).Length,
+        lines = lineRows,
+        connMaxY = R3(maxY / edge), connLeaveZ = leaveZ.Select(z => R3(z)).ToArray(), connLeaveErr = R3(leaveZ.Max(z => Math.Abs(z - um[0].Z)) / edge)
+    };
 }
 
 // ---------- Geodesic Path: exact geodesics by edge flips (FlipOut) on a polyhedral cone and a saddle vertex ----------

@@ -144,6 +144,103 @@ public static class AnalyticShapes
 
     private static double P(double v, double dflt) => v > 0 ? v : dflt;
 
+    // ---------- Triaxial ellipsoid x²/a² + y²/b² + z²/c² = 1, a > b > c: closed forms ----------
+    //
+    // Monge 1796 integrated the lines of curvature of this surface; Dupin's
+    // theorem makes them the intersections with the confocal quadrics
+    // x²/(a² − λ) + y²/(b² − λ) + z²/(c² − λ) = 1, λ ∈ (c², b²) and (b², a²)
+    // (Hilbert & Cohn-Vossen 1932 §4; Struik 1961 §2-3). The surface has exactly
+    // four umbilics, all in the plane y = 0 of the longest and shortest axes,
+    // (±a √((a² − b²)/(a² − c²)), 0, ±c √((b² − c²)/(a² − c²))), with common
+    // curvature ac/b³ (Panou & Korakitis 2011, arXiv 1104.5145); they are
+    // Darbouxian D1 "lemons" of index +½ with one separatrix each, and the
+    // ellipse y = 0 is the union of the four umbilics and their separatrices
+    // (Garcia & Sotomayor 2009, Dynamical behaviour of Darboux curves, Prop. 4).
+    // K = h⁴/(a²b²c²) and H = h³ (a² + b² + c² − |p|²)/(2a²b²c²) with
+    // h = (x²/a⁴ + y²/b⁴ + z²/c⁴)^(−½) (Panou & Korakitis eqs. 15–16; the sign
+    // of H follows Mite's convention that a convex body with outward normals
+    // has positive curvature).
+
+    /// <summary>The four umbilics of the ellipsoid with semi-axes a &gt; b &gt; c (ordered x+z+, x+z−, x−z+, x−z−).</summary>
+    public static Vec3d[] EllipsoidUmbilics(double a, double b, double c)
+    {
+        double x0 = a * Math.Sqrt((a * a - b * b) / (a * a - c * c));
+        double z0 = c * Math.Sqrt((b * b - c * c) / (a * a - c * c));
+        return new[] { new Vec3d(x0, 0, z0), new Vec3d(x0, 0, -z0), new Vec3d(-x0, 0, z0), new Vec3d(-x0, 0, -z0) };
+    }
+
+    /// <summary>Common principal curvature ac/b³ at the umbilics of the ellipsoid a &gt; b &gt; c.</summary>
+    public static double EllipsoidUmbilicCurvature(double a, double b, double c) => a * c / (b * b * b);
+
+    /// <summary>Gaussian and mean curvature of the ellipsoid at a surface point p (closed form).</summary>
+    public static (double K, double H) EllipsoidCurvature(Vec3d p, double a, double b, double c)
+    {
+        double a2 = a * a, b2 = b * b, c2 = c * c;
+        double h = 1.0 / Math.Sqrt(p.X * p.X / (a2 * a2) + p.Y * p.Y / (b2 * b2) + p.Z * p.Z / (c2 * c2));
+        double K = h * h * h * h / (a2 * b2 * c2);
+        double H = h * h * h * (a2 + b2 + c2 - p.LengthSquared) / (2 * a2 * b2 * c2);
+        return (K, H);
+    }
+
+    /// <summary>
+    /// Exact shape operator of the ellipsoid at a surface point: the Hessian of
+    /// F = x²/a² + y²/b² + z²/c² restricted to the tangent plane and divided by
+    /// |∇F| (positive for the convex body with outward normal n = ∇F/|∇F|).
+    /// Returns k1 ≥ k2 and the unit principal directions (undefined at an
+    /// umbilic, where any tangent pair is returned).
+    /// </summary>
+    public static void EllipsoidPrincipal(Vec3d p, double a, double b, double c,
+        out double k1, out double k2, out Vec3d d1, out Vec3d d2, out Vec3d normal)
+    {
+        var g = new Vec3d(2 * p.X / (a * a), 2 * p.Y / (b * b), 2 * p.Z / (c * c));
+        double gl = g.Length;
+        normal = g / gl;
+        Vec3d up = Math.Abs(normal.Y) < 0.9 ? new Vec3d(0, 1, 0) : new Vec3d(1, 0, 0);
+        Vec3d e1 = Vec3d.Cross(normal, up).Normalized();
+        Vec3d e2 = Vec3d.Cross(normal, e1).Normalized();
+        Vec3d He1 = new Vec3d(2 * e1.X / (a * a), 2 * e1.Y / (b * b), 2 * e1.Z / (c * c));
+        Vec3d He2 = new Vec3d(2 * e2.X / (a * a), 2 * e2.Y / (b * b), 2 * e2.Z / (c * c));
+        double m11 = Vec3d.Dot(e1, He1) / gl, m12 = Vec3d.Dot(e1, He2) / gl, m22 = Vec3d.Dot(e2, He2) / gl;
+        double theta = 0.5 * Math.Atan2(2 * m12, m11 - m22);
+        double cs = Math.Cos(theta), sn = Math.Sin(theta);
+        double ka = m11 * cs * cs + 2 * m12 * sn * cs + m22 * sn * sn;
+        double kb = m11 * sn * sn - 2 * m12 * sn * cs + m22 * cs * cs;
+        Vec3d da = (cs * e1 + sn * e2).Normalized(), db = (-sn * e1 + cs * e2).Normalized();
+        if (ka >= kb) { k1 = ka; k2 = kb; d1 = da; d2 = db; } else { k1 = kb; k2 = ka; d1 = db; d2 = da; }
+    }
+
+    /// <summary>
+    /// Confocal (ellipsoidal) coordinates of a surface point: the two roots
+    /// λ₁ ∈ (c², b²) and λ₂ ∈ (b², a²) of x²/(a² − λ) + y²/(b² − λ) + z²/(c² − λ) = 1,
+    /// found by bisection (the function is increasing between its poles). A
+    /// line of curvature keeps one of them constant (Dupin): on the ellipsoid
+    /// the lines of maximal curvature keep λ₂ and the lines of minimal
+    /// curvature keep λ₁ (checked in <c>EllipsoidTests</c>).
+    /// </summary>
+    public static (double lambda1, double lambda2) EllipsoidConfocal(Vec3d p, double a, double b, double c)
+    {
+        double a2 = a * a, b2 = b * b, c2 = c * c;
+        double x2 = p.X * p.X, y2 = p.Y * p.Y, z2 = p.Z * p.Z;
+        double F(double l) => x2 / (a2 - l) + y2 / (b2 - l) + z2 / (c2 - l) - 1;
+        double Root(double lo, double hi)
+        {
+            // F → −∞ at lo⁺ and +∞ at hi⁻ when the corresponding coordinate is
+            // non-zero; when it is zero the pole is absent and the root may sit
+            // on the end: clamp there.
+            double flo = F(lo + 1e-15 * (hi - lo)), fhi = F(hi - 1e-15 * (hi - lo));
+            if (flo >= 0) return lo;
+            if (fhi <= 0) return hi;
+            for (int it = 0; it < 200; it++)
+            {
+                double mid = 0.5 * (lo + hi);
+                if (F(mid) < 0) lo = mid; else hi = mid;
+                if (hi - lo <= 1e-15 * Math.Max(1, Math.Abs(hi))) break;
+            }
+            return 0.5 * (lo + hi);
+        }
+        return (Root(c2, b2), Root(b2, a2));
+    }
+
     /// <summary>
     /// n-fold Enneper surface in polar chart coordinates (r, φ):
     /// x = r cos φ − r^(2n−1) cos((2n−1)φ)/(2n−1), y = −r sin φ − r^(2n−1) sin((2n−1)φ)/(2n−1),

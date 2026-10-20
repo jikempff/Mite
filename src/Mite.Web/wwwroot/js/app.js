@@ -219,7 +219,8 @@ async function ensureCurvature() {
     S.curv = c;
     const n = c.k1.length;
     $('curv-stats').innerHTML = `k1 <b>${fmt(Math.min(...c.k1), 2)} … ${fmt(Math.max(...c.k1), 2)}</b> · k2 <b>${fmt(Math.min(...c.k2), 2)} … ${fmt(Math.max(...c.k2), 2)}</b>\n` +
-      `usable anticlastic <b>${c.anticlastic}</b> / ${n} vertices · umbilics <b>${c.umbilics.length}</b> · ${c.ms} ms`;
+      `usable anticlastic <b>${c.anticlastic}</b> / ${n} vertices · umbilic vertices <b>${c.umbilics.length}</b> · isolated umbilics <b>${c.umbilicIndex.length}</b>` +
+      (c.umbilicIndex.length ? ` (index sum ${fmt(c.umbilicIndex.reduce((a, b) => a + b, 0), 1)})` : '') + ` · ${c.ms} ms`;
   }
   return S.curv;
 }
@@ -287,7 +288,12 @@ async function applyMode() {
     const flat = [];
     for (const i of c.umbilics) flat.push(S.vertices[3 * i], S.vertices[3 * i + 1], S.vertices[3 * i + 2]);
     v.showPoints('umb', flat, NEON.yellow, 8);
-  } else v.clearOverlay('umb');
+    // the isolated umbilics (degenerate points of the direction field): lemons / monstars (+½) in red, stars (−½) in blue
+    const lemons = [], stars = [];
+    for (let i = 0; i < c.umbilicIndex.length; i++) (c.umbilicIndex[i] > 0 ? lemons : stars).push(c.umbilicPoints[3 * i], c.umbilicPoints[3 * i + 1], c.umbilicPoints[3 * i + 2]);
+    if (lemons.length) v.showPoints('umbLemon', lemons, NEON.red, 14); else v.clearOverlay('umbLemon');
+    if (stars.length) v.showPoints('umbStar', stars, NEON.blue, 14); else v.clearOverlay('umbStar');
+  } else { v.clearOverlay('umb'); v.clearOverlay('umbLemon'); v.clearOverlay('umbStar'); }
   v.setWireframe($('wire').checked);
   if (!S.kin && !S.aag) v.setMeshOpacity(surfaceOpacity());
   updateRecipe();

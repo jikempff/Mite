@@ -39,6 +39,10 @@ public class CurvaturePayload
     public double[] D2 { get; set; } = Array.Empty<double>();
     public double[] Normals { get; set; } = Array.Empty<double>();
     public int[] Umbilics { get; set; } = Array.Empty<int>();
+    /// <summary>Isolated umbilics (degenerate points of the principal direction field), flat xyz.</summary>
+    public double[] UmbilicPoints { get; set; } = Array.Empty<double>();
+    /// <summary>Index of each isolated umbilic: +0.5 lemon / monstar, −0.5 star.</summary>
+    public double[] UmbilicIndex { get; set; } = Array.Empty<double>();
     public int Anticlastic { get; set; }
     public long Ms { get; set; }
 }
@@ -455,11 +459,15 @@ public static partial class MiteApi
         var H = MeanCurvature.Compute(_mesh!).Values;
         var field = AsymptoticCurves.ComputeDirections(pc, _mesh, 15.0);
         int anti = 0; foreach (bool e in field.Exists) if (e) anti++;
+        // isolated umbilics: the index of the direction field per face; opposite
+        // pairs within two mesh edges are facet noise and cancel
+        var located = Umbilics.Locate(_mesh!, pc, 2 * _proj!.AverageEdgeLength);
         var p = new CurvaturePayload
         {
             K1 = pc.K1, K2 = pc.K2, K = K, H = H,
             D1 = Flat(pc.D1), D2 = Flat(pc.D2), Normals = Flat(pc.Normals),
             Umbilics = Umbilics.Find(pc, umbilicTolerance > 0 ? umbilicTolerance : 0.05),
+            UmbilicPoints = Flat(located.Select(d => d.Point).ToArray()), UmbilicIndex = located.Select(d => d.Index).ToArray(),
             Anticlastic = anti, Ms = sw.ElapsedMilliseconds
         };
         return JsonSerializer.Serialize(p, MiteJson.Default.CurvaturePayload);
