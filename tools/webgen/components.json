@@ -2937,5 +2937,285 @@
     "default": null
    }
   ]
+ },
+ {
+  "file": "FlatKitComponent.cs",
+  "name": "Flat Kit",
+  "nick": "Kit",
+  "desc": "Cut, assemble flat, deploy: presses an asymptotic net flat as a scissor mechanism (Net Kinetics' Flatten) and turns the flat state into a kit. Every lath becomes one straight strip with its joints at their spacing — the length the scissor joints keep through the whole motion — so the strips fit the flat grid and the curved one alike. Crossings of upright laths are halving slots (A from the outer edge, B from the inner edge, as wide as the other strip at the smallest angle the joint reaches), crossings of flat strips pin holes, and a node of three or more laths (the flat point of a 3-fold Enneper web) a hub. Outputs the flat assembly (joints numbered, laths labelled), the strips laid out on sheets, the deployment states, a cut list, and — with Write — SVG (red cut, blue engrave), DXF and CSV files in millimetres. Strips are nested on the sheets first-fit decreasing (fewest sheets, the material use in the Report); a strip longer than the sheet lies along its diagonal when it fits there, else it is split into pieces lapped between two joints (Splice).",
+  "tab": "Fabrication",
+  "icon": "FlatKit",
+  "guid": "4E2B8C1D-7A3F-4C59-9E0B-6D1F2A3C4B58",
+  "inputs": [
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "First lath family (asymptotic curves, e.g. Asymptotic Web A)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Second lath family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Optional surface mesh: its normals start the joint normals",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Anchor",
+    "nick": "P",
+    "type": "Point",
+    "desc": "The joint held while the net is pressed flat (e.g. the Asymptotic Web seed); default the joint nearest the centre",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Normal",
+    "nick": "N",
+    "type": "Vector",
+    "desc": "Normal of the assembly plane (default Z)",
+    "access": "item",
+    "default": "Vector3d.ZAxis"
+   },
+   {
+    "name": "Width",
+    "nick": "W",
+    "type": "Number",
+    "desc": "Strip width (model units; along the surface normal for upright laths)",
+    "access": "item",
+    "default": "0.1"
+   },
+   {
+    "name": "Thickness",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Strip thickness = sheet thickness (model units)",
+    "access": "item",
+    "default": "0.01"
+   },
+   {
+    "name": "Upright",
+    "nick": "U",
+    "type": "Boolean",
+    "desc": "True: laths stand upright on the surface (asymptotic gridshells)",
+    "access": "item",
+    "default": "true"
+   },
+   {
+    "name": "Joint",
+    "nick": "J",
+    "type": "Integer",
+    "desc": "0 automatic (slots for upright laths, pins for flat), 1 halving slots, 2 pin holes",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Hole",
+    "nick": "H",
+    "type": "Number",
+    "desc": "Pin hole diameter (model units; 0 = a quarter of the width)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Clearance",
+    "nick": "Cl",
+    "type": "Number",
+    "desc": "Fit clearance added to slot widths and depths (model units)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "SheetWidth",
+    "nick": "Sw",
+    "type": "Number",
+    "desc": "Sheet (laser bed) width in mm",
+    "access": "item",
+    "default": "600.0"
+   },
+   {
+    "name": "SheetHeight",
+    "nick": "Sh",
+    "type": "Number",
+    "desc": "Sheet height in mm",
+    "access": "item",
+    "default": "400.0"
+   },
+   {
+    "name": "Stiffness",
+    "nick": "K",
+    "type": "Number",
+    "desc": "Lath bending stiffness while pressing flat (as Net Kinetics)",
+    "access": "item",
+    "default": "0.3"
+   },
+   {
+    "name": "Steps",
+    "nick": "St",
+    "type": "Integer",
+    "desc": "States of the motion (the deployment frames)",
+    "access": "item",
+    "default": "8"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic: 1/500 of the net size)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Folder",
+    "nick": "F",
+    "type": "Text",
+    "desc": "Folder for the files (strips-NN.svg, strips.dxf, assembly.svg/.dxf, deployment.svg, cutlist.csv, README.txt)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Write",
+    "nick": "Wr",
+    "type": "Boolean",
+    "desc": "Write the files to Folder",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Splice",
+    "nick": "Sp",
+    "type": "Number",
+    "desc": "Lap splice in mm for strips longer than the sheet, after the bed's diagonal is tried: 0 = automatic (three strip widths, or what the free stretch between joints allows, 20 mm at least); negative = never split, such strips go on a drawing of their own",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "FlatA",
+    "nick": "FA",
+    "type": "Curve",
+    "desc": "Family A laths in the flat state (in the assembly plane through the anchor)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "FlatB",
+    "nick": "FB",
+    "type": "Curve",
+    "desc": "Family B laths in the flat state",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Joints",
+    "nick": "J",
+    "type": "Point",
+    "desc": "Joints in the flat state, numbered as on the drawings",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "JointIds",
+    "nick": "Ji",
+    "type": "Integer",
+    "desc": "Joint number of each joint",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Labels",
+    "nick": "L",
+    "type": "Text",
+    "desc": "Lath labels (A1…, B1…), one per lath, at LabelPoints",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "LabelPoints",
+    "nick": "Lp",
+    "type": "Point",
+    "desc": "Outer end of each lath in the flat state",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Strips",
+    "nick": "S",
+    "type": "Curve",
+    "desc": "Cut curves of every strip (outlines with slots, holes), laid out sheet by sheet below the assembly, model units",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "StripText",
+    "nick": "Tx",
+    "type": "Text",
+    "desc": "Engraved labels of the strips (at StripTextPoints)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "StripTextPoints",
+    "nick": "Tp",
+    "type": "Point",
+    "desc": "Positions of the engraved labels",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "DeployA",
+    "nick": "DA",
+    "type": "Curve",
+    "desc": "Family A laths per deployment state (one branch per state, flat first)",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "DeployB",
+    "nick": "DB",
+    "type": "Curve",
+    "desc": "Family B laths per deployment state",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "CutList",
+    "nick": "CL",
+    "type": "Text",
+    "desc": "Cut list (CSV, mm): strip, family, length, width, joints",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Summary",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Files",
+    "nick": "Fi",
+    "type": "Text",
+    "desc": "Files written",
+    "access": "list",
+    "default": null
+   }
+  ]
  }
 ]

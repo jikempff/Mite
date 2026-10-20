@@ -20,7 +20,7 @@ COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Cu
               "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
               "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
               "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
-              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
+              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Flat Kit", "Net Topology",
               "Net Kinetics",
               "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 byname = {c["name"]: c for c in comps}
@@ -61,7 +61,7 @@ for tab in TAB_ORDER:
         demo = note.get("demo")
         demo_html = ""
         if demo:
-            kind = "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sparkline" if demo == "lathUtil" else "3d"
+            kind = "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sheet" if note.get("sheet") else "sparkline" if demo == "lathUtil" else "3d"
             controls = ""
             if note.get("before_after"):
                 controls = '<div class="demo-ctl"><label><input type="radio" name="ba-' + slug(n) + '" value="before"> input</label><label><input type="radio" name="ba-' + slug(n) + '" value="after" checked> result</label><label><input type="radio" name="ba-' + slug(n) + '" value="both"> both</label></div>'
@@ -74,6 +74,8 @@ for tab in TAB_ORDER:
                     f'<label><input type="radio" name="sh-{slug(n)}" value="{key}" {"checked" if k == 0 else ""}> {lbl}</label>'
                     for k, (key, lbl) in enumerate(note.get("shapes", []))) + '<span class="ctl-l" style="flex-basis:100%"></span>' if note.get("shapes") else "") + \
                     f'<label style="flex-basis:100%"><span class="ctl-l">{esc(note["slider"])}</span><input type="range" min="0" max="1" step="0.001" value="1" style="flex:1"></label><span class="fold-label" style="flex-basis:100%"></span></div>'
+            if note.get("sheet"):
+                controls = '<div class="demo-ctl"><span class="ctl-l">sheet</span><select></select></div>'
             if demo == "torusK":
                 mode = note.get("demoMode", "K")
                 controls = '<div class="demo-ctl"><span class="ctl-l">show</span>' + "".join(

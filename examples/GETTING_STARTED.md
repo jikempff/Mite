@@ -205,7 +205,15 @@ curves of an **Asymptotic Net**, then drive it:
   numbered, the strips laid out on sheets with their slots or holes, the
   deployment states and a cut list; set `F` to a folder and `Wr` = True for
   the SVG / DXF / CSV files. `W` / `T` are the strip width and sheet thickness
-  in model units; the files are in millimetres.
+  in model units; the files are in millimetres. The strips are nested on the
+  `Sw` × `Sh` sheets first-fit decreasing (the fewest shelves; `R` reports the
+  sheets, the material use and the area bound no nesting can beat). A strip
+  longer than the sheet lies along the sheet's diagonal when it fits there and
+  that costs no sheet; otherwise it is split into pieces (`A3/1`, `A3/2` …)
+  lapped over `Sp` mm with two pin holes each, the lap placed between two
+  joints (never under a slot, where the doubled thickness would not pass);
+  `Sp` = 0 picks three strip widths or what the joint pitch allows, `Sp` < 0
+  keeps such strips whole on a drawing of their own, for a longer bed.
 - `Fl` Flatten = True presses the net flat: the first `F` joint (or the one
   nearest the centre) is held and every lath end slides onto the plane through
   it (normal `Sn`). On an **Asymptotic Web** of the 3-fold Enneper, with `F` on

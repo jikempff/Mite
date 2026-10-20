@@ -29,7 +29,8 @@ namespace Mite.Core.Fabrication;
 /// </summary>
 public static class FlatKit
 {
-    public enum MarkKind { SlotOuter, SlotInner, Hole, Hub }
+    /// <summary>Splice: a pin hole of a lap joint where a strip longer than the bed was split (<see cref="KitExport.Split"/>).</summary>
+    public enum MarkKind { SlotOuter, SlotInner, Hole, Hub, Splice }
 
     /// <summary>How crossings of two laths are joined.</summary>
     public enum JointKind { Auto, Slot, Hole }

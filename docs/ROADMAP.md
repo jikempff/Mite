@@ -228,7 +228,50 @@ remains the self-test review page.
 - [x] App: kernel in a Web Worker (stop = restart), seed/direction handle,
       quality card, end markers, family toggles, hover, camera presets
       (1.2.2).
-- [ ] App: lath segmentation, joints and nesting sheet (material %).
+- [x] Nesting sheet with the material % — 2026-10-20 (session 1, C / José's
+      priority 6, the kit). `KitExport.Nest`: strips sorted by width then
+      length decreasing, each on the first shelf of the first sheet where it
+      fits (Berkey & Wang 1987, finite first-fit; one strip width makes every
+      shelf a 1-D bin, FFD ≤ 11/9 OPT + 6/9 after Dósa 2007) instead of the
+      1.3.1 next-fit rule (a row closed as soon as one strip did not fit;
+      asymptotic 1.691, Baker & Coffman 1981; for mixed heights FFDH 1.7 vs
+      NFDH 2, Coffman, Garey, Johnson & Tarjan 1980). Strips longer than the
+      bed: along the bed's diagonal when they fit there (`LaneLength`: the
+      sheet's chord at the lane's offset, clipped by both long edges of the
+      strip — 661.7 mm for a 30 mm strip on 600 × 400 with a 4 mm gap; the
+      lanes beside it take shorter strips end to end), kept only when the
+      diagonal costs no sheet (its corners are lost: a sheet of lanes fills
+      to ~45–60 %); else split into lapped pieces (`Split`, two pin holes per
+      lap, the cut set between two joints by `LathSegmentation.Segment`, the
+      lap three strip widths or what the joint pitch leaves, 20 mm at least,
+      shortened per strip where joints sit closer; laps that still reach a
+      joint are counted, `LapClashes`, not hidden); `Splice` < 0 keeps the
+      1.3.1 overflow drawing. Material % = outline area / sheet area, per
+      sheet in its title and for the kit, with the area bound. 3-fold Enneper
+      kit, 600 × 400 bed: 1 : 5 — 3 sheets → 2 (= the area bound), 43 → 61 %;
+      1 : 3.3 — 5 sheets both ways (48 shelves: nothing pairs but 324 + 252);
+      1 : 2.5 — was 3 sheets + 30 strips "cut on a longer bed", now 7 sheets,
+      72 %, 60 pieces lapped over 32 mm, 0 laps near a slot (a fixed 3-width
+      lap of 120 mm straddled two slots at the 46 mm joint pitch — the lap
+      must follow the pitch); 1 : 1.4 — 22 sheets, 75 %, 138 pieces, laps
+      47–62 mm. Tests (`KitNestingTests`, 10): the classic FFD-beats-NFD list
+      packed to the millimetre, mixed widths, gaps, the lane's closed form
+      (len − w·W/H on the diagonal) and maximality, diagonal vs split choice,
+      pieces that reassemble and carry every joint once, the Enneper kit
+      against the area bound and the next-fit count. Web app: material use,
+      area bound and splits in the Kit summary, a switch for splitting;
+      `web-smoke.js` checks a 300 × 200 bed. Grasshopper: `Splice` appended.
+      Not done / follow-ups: (a) shelves only — strips shorter than the sheet
+      height could stand upright in the leftover of a row (a skyline or
+      guillotine packer, Lodi, Martello & Monaci 2002) and the 1 : 3.3 case
+      would gain; (b) a laser-cut finger joint (fingers in the sheet plane,
+      no doubled thickness, glue only — the Downland / Savill joint in 2-D)
+      as an alternative to the lap; (c) the app has no lath segmentation or
+      3-D joint view yet (the Kit covers slots and holes on the strips);
+      (d) mixed strip widths per family are nested but untested on a kit
+      (`FlatKit.Options` has one width).
+- [ ] App: lath segmentation and a 3-D joint view (the Kit's slots and holes
+      are on the strips only).
 - [ ] App: planarization and Chebyshev angle map; isocurve labels.
 - [x] App: catalogue extended with n-fold Enneper, the bilinear ruled patch,
       Schwarz D and gyroid (nodal form → marching tetrahedra → relaxation);
@@ -659,6 +702,10 @@ Open
 
 ## Done
 
+- [x] 2026-10-20 (session 1, C): Flat Kit nesting — first-fit decreasing
+      shelves, diagonal lanes, lapped pieces between the joints, material %
+      with the area bound; `KitNestingTests` (10); web app Kit summary and
+      smoke checks; `Splice` input on Flat Kit.
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

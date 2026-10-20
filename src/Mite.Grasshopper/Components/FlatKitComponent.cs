@@ -26,7 +26,8 @@ public class FlatKitComponent : MiteComponent
             "so the strips fit the flat grid and the curved one alike. Crossings of upright laths are halving slots (A from the outer edge, B from the inner edge, " +
             "as wide as the other strip at the smallest angle the joint reaches), crossings of flat strips pin holes, and a node of three or more laths " +
             "(the flat point of a 3-fold Enneper web) a hub. Outputs the flat assembly (joints numbered, laths labelled), the strips laid out on sheets, " +
-            "the deployment states, a cut list, and — with Write — SVG (red cut, blue engrave), DXF and CSV files in millimetres.",
+            "the deployment states, a cut list, and — with Write — SVG (red cut, blue engrave), DXF and CSV files in millimetres. " +
+            "Strips are nested on the sheets first-fit decreasing (fewest sheets, the material use in the Report); a strip longer than the sheet lies along its diagonal when it fits there, else it is split into pieces lapped between two joints (Splice).",
             "Fabrication", "FlatKit") { }
 
     public override Guid ComponentGuid => new("4E2B8C1D-7A3F-4C59-9E0B-6D1F2A3C4B58");
@@ -54,6 +55,7 @@ public class FlatKitComponent : MiteComponent
         pManager.AddTextParameter("Folder", "F", "Folder for the files (strips-NN.svg, strips.dxf, assembly.svg/.dxf, deployment.svg, cutlist.csv, README.txt)", GH_ParamAccess.item);
         pManager[16].Optional = true;
         pManager.AddBooleanParameter("Write", "Wr", "Write the files to Folder", GH_ParamAccess.item, false);
+        pManager.AddNumberParameter("Splice", "Sp", "Lap splice in mm for strips longer than the sheet, after the bed's diagonal is tried: 0 = automatic (three strip widths, or what the free stretch between joints allows, 20 mm at least); negative = never split, such strips go on a drawing of their own", GH_ParamAccess.item, 0.0);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -83,10 +85,11 @@ public class FlatKitComponent : MiteComponent
         Point3d anchorPt = Point3d.Unset; bool hasAnchor = DA.GetData(3, ref anchorPt);
         var normal = Vector3d.ZAxis; DA.GetData(4, ref normal); if (normal.IsTiny()) normal = Vector3d.ZAxis;
         double width = 0.1, thickness = 0.01, hole = 0, clearance = 0, sheetW = 600, sheetH = 400, stiffness = 0.3, sampling = 0;
-        bool upright = true, write = false; int joint = 0, steps = 8; string? folder = null;
+        bool upright = true, write = false; int joint = 0, steps = 8; string? folder = null; double splice = 0;
         DA.GetData(5, ref width); DA.GetData(6, ref thickness); DA.GetData(7, ref upright); DA.GetData(8, ref joint);
         DA.GetData(9, ref hole); DA.GetData(10, ref clearance); DA.GetData(11, ref sheetW); DA.GetData(12, ref sheetH);
         DA.GetData(13, ref stiffness); DA.GetData(14, ref steps); DA.GetData(15, ref sampling); DA.GetData(16, ref folder); DA.GetData(17, ref write);
+        DA.GetData(18, ref splice);
         if (width <= 0 || thickness <= 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width and Thickness must be positive."); return; }
 
         if (sampling <= 0)
@@ -125,8 +128,9 @@ public class FlatKitComponent : MiteComponent
         if (kit.Motion.Cancelled) AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc: the motion is partial and the kit is not flat.");
 
         double toMm = ModelToMeters() * 1000;
-        var eo = new KitExport.Options { ToMm = toMm, SheetWidth = sheetW, SheetHeight = sheetH };
-        var sheets = KitExport.StripSheets(kit, eo);
+        var eo = new KitExport.Options { ToMm = toMm, SheetWidth = sheetW, SheetHeight = sheetH, Splice = splice };
+        var nest = KitExport.Nest(kit, eo);
+        var sheets = nest.Sheets;
         var assembly = KitExport.Assembly(kit, upright ? thickness : width, eo);
         var deployment = KitExport.Deployment(kit);
 
@@ -184,7 +188,7 @@ public class FlatKitComponent : MiteComponent
                 try
                 {
                     Directory.CreateDirectory(folder);
-                    foreach (var (name, text) in KitExport.Files(kit, sheets, assembly, deployment, eo))
+                    foreach (var (name, text) in KitExport.Files(kit, nest, assembly, deployment, eo))
                     {
                         var path = Path.Combine(folder, name);
                         File.WriteAllText(path, text, new UTF8Encoding(false));
@@ -195,8 +199,9 @@ public class FlatKitComponent : MiteComponent
             }
         }
 
-        int tooLong = kit.Strips.Count(s => s.Length * toMm + 2 * eo.Gap > sheetW);
-        if (tooLong > 0) AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{tooLong} strips are longer than the {sheetW:0} mm sheet: they are on their own drawing — cut on a longer bed or split them with Lath Segment.");
+        if (nest.TooLong > 0) AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{nest.TooLong} strips are longer than the {sheetW:0} mm sheet and Splice is negative: they are on their own drawing — cut them on a longer bed, or set Splice to 0 to split them with a lap between the joints.");
+        if (nest.LapClashes > 0) AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{nest.LapClashes} laps reach a joint: the joints there are closer than a {nest.Splice:0} mm lap. Shorten Splice, raise the scale, or check those strips on the drawings.");
+        if (nest.SplitStrips > 0) AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"{nest.SplitStrips} strips longer than the {sheetW:0} mm sheet are split into {nest.Pieces} pieces (A3/1, A3/2 …) lapped over {(nest.SpliceMin < nest.Splice - 0.5 ? $"{nest.SpliceMin:0}–{nest.Splice:0}" : $"{nest.Splice:0}")} mm with two pin holes each; glue or bolt them straight before assembly.");
         if (kit.Flatness > 0.01 * kit.Net.Scale) AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"The pressed net is not flat ({kit.Flatness:G3} out of plane): raise Steps or lower Stiffness.");
 
         var slots = kit.Strips.SelectMany(s => s.Marks).Where(m => m.Kind == FlatKit.MarkKind.SlotOuter || m.Kind == FlatKit.MarkKind.SlotInner).ToList();
@@ -204,13 +209,14 @@ public class FlatKitComponent : MiteComponent
         sb.AppendLine($"Flat Kit: {kit.Strips.Count} strips ({kit.Net.CountA} A + {kit.Strips.Count - kit.Net.CountA} B), {kit.Joints.Count} joints ({kit.Joints.Count(j => j.Hub)} hubs), {kit.TotalLength * toMm / 1000:0.##} m of {width * toMm:0.#} × {thickness * toMm:0.#} mm strip");
         sb.AppendLine($"Flat to {kit.Flatness * toMm:0.###} mm, joint spacing kept to {kit.Drift:P2}; longest strip {kit.Strips.Max(s => s.Length) * toMm:0} mm");
         if (slots.Count > 0) sb.AppendLine($"Halving slots {slots.Min(m => m.Size) * toMm:0.##}–{slots.Max(m => m.Size) * toMm:0.##} mm wide (joints turn down to {kit.Joints.Min(j => j.MinAngle):0}°)");
-        sb.Append($"{sheets.Count(s => s.Title.StartsWith("sheet"))} sheets of {sheetW:0} × {sheetH:0} mm{(tooLong > 0 ? $" + {tooLong} long strips" : "")}; {kit.Deployment.Count} deployment states");
+        sb.AppendLine(KitExport.NestingSummary(nest));
+        sb.Append($"{kit.Deployment.Count} deployment states");
 
         DA.SetDataList(0, flatA); DA.SetDataList(1, flatB);
         DA.SetDataList(2, joints); DA.SetDataList(3, kit.Joints.Select(j => j.Id));
         DA.SetDataList(4, kit.LathLabels); DA.SetDataList(5, labelPts);
         DA.SetDataList(6, stripCurves); DA.SetDataList(7, stripText); DA.SetDataList(8, stripTextPts);
         DA.SetDataTree(9, deployA); DA.SetDataTree(10, deployB);
-        DA.SetData(11, KitExport.CutList(kit, eo)); DA.SetData(12, sb.ToString()); DA.SetDataList(13, files);
+        DA.SetData(11, KitExport.CutList(nest.Strips, eo)); DA.SetData(12, sb.ToString()); DA.SetDataList(13, files);
     }
 }
