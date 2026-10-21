@@ -32,6 +32,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - **Chebyshev Net** — equal-edge-length nets by the compass method: the kinematics of elastic gridshells bent from flat lattices
 - **Conjugate Net** — both principal families evenly spaced: an approximate conjugate net, the layout for planar-quad (PQ) panelization
 - **Geodesic Path** — shortest geodesic between two points: the exact geodesic of the mesh by edge flips (FlipOut, Sharp & Crane 2020) from a Steiner-graph start path; the older curve shortening stays as Method 0
+- **Net Trim** — cookie-cuts a net to a boundary: trace on a larger mesh, draw the outline on or above it (closed loops, holes, an open cut border to border), keep what lies inside; every curve cut exactly at the boundary, the cut ends listed
 - Tracing is scale-aware: step, step count and spacing default to values derived from the mesh, so millimetre and metre models behave the same
 - Curves are continuous: with **Continuous** on (default) every traced curve runs border to border or closes on itself, and a curve that merges into a neighbour ends exactly on it as a T-junction — no laths floating in the middle of the surface. Curves meet the mesh border along their own direction (no hook, no crawl along the edge), also on the staircase borders of trimmed or subdivided quad meshes
 
@@ -64,7 +65,7 @@ All Grasshopper components weld coincident vertices on intake (STL imports, Brep
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (30 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (31 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -127,7 +128,7 @@ Components appear under the **Mite** tab:
 
 - **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines, Umbilics
 - **Form Finding** — Planarize Mesh, Minimal Surface, Force Density Method, Dynamic Relaxation
-- **Gridshells** — Asymptotic Web, Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
+- **Gridshells** — Asymptotic Web, Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path, Net Trim
 - **Analysis** — Lath Analysis, Gridshell Analysis, Mesh Isocurves
 - **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Segment, Lath Labels, Lath Preview, Flat Kit, Net Topology
 - **Kinetics** — Net Kinetics
@@ -142,6 +143,7 @@ plus IDs and a BOM from **Lath Labels**.
 ## Changelog
 
 ### Unreleased
+- **Net Trim: cookie-cutting a net to a boundary** (new component, Mite > Gridshells; core `Gridshells/NetTrim`, additions only). Schling's gridshells are designed on a reference surface "larger than the actual structure" (AAG 2018 §2.2) and the web is "cropped" to the outline (CAD 2022 §4.2–4.3); Mite's tracers stop at the mesh border, so the mesh had to be the structure. Now: trace on the larger mesh, feed the families, the mesh and closed boundary curves (on the surface, or in plan with `Direction` 0,0,−1) to Net Trim, and get the pieces inside, the input index of each piece, the cut ends and the boundary as pulled onto the mesh. The boundary is pulled sample by sample (exact closest point or ray along `Direction`) until consecutive samples sit in edge-adjacent faces; those faces are a wall, the other vertices are flooded into regions, regions are joined across the wall and the odd-depth ones from the mesh border are the cookie — one loop keeps its inside, a loop inside a loop cuts a hole, a loop crossing the mesh border trims the corners and keeps the border ends, an open cut from border to border halves the surface. `Inside` points pick the regions instead, `Invert` keeps the outside. Every curve is cut at the exact crossing of its segment with the boundary (2D intersection in the local tangent plane, bisection on the side test as fallback); closed curves split without wrapping round their seam. Checked against closed forms: the straight asymptotic lines x ∓ y = c of z = x² − y² inside a circle (one piece each, ends x = c/2 ± ½√(2 − c²) and lengths √(2 − c²)√(2 + 4c²) within 5.5e-4 at edge 0.066 — the facet sagitta), inside an annulus (two pieces per line through the hole, ends within 1.1e-4 of a circle), the rulings of the hyperboloid between z = ±h (length 2h√2 within 4e-5), a non-convex loop (pieces equal to exact root finding), a traced classic net (every inside vertex kept, none outside), 0 of 3985 random points misclassified. Also handy for cutting an opening into an existing net (`Invert`) and for ending laths on a drawn support line.
 - **Mesh Cleanup repairs dirty meshes** (`Geometry/MeshCleanup`: new `Options` / `Diagnostics`, the old `Compute` overload unchanged; Grasshopper: `Sliver` input appended, `Flipped`, `Slivers`, `NonManifold`, `Report` outputs appended). Winding is propagated across manifold edges only, then each closed part is turned outward (positive signed volume) and each open part keeps the winding most of its area had — before, the first face set the winding, so one flipped face 0 turned a whole sphere inside out and reversed the sign of the mean curvature at 217 of 225 saddle vertices. `Sliver` (degrees, 0 = off) removes slivers after Botsch & Kobbelt 2001 / CGAL: needles (longest edge ≥ 4 × shortest) by collapsing the short edge under the link condition (Dey et al. 1999), keeping the end with the smaller quadric error (Garland & Heckbert 1997), caps by flipping the long edge when that raises the smallest angle, border caps by dropping the face; no vertex is moved. On a sphere with 90 edges split 1e-4 from an end, all 180 needles go and the original 960 faces come back exactly (mean-curvature error 0.61 → 7e-16); six caps on a flat grid flip away with the area unchanged to 1e-15. Isolated vertices are dropped (Map −1). The report names what is left with the fix: slivers below 1° when `Sliver` is 0, non-manifold edges (also as lines), non-orientable parts, separate parts. 75 k-face polygon soup: 0.45 s (0.6 s with slivers); edge keys use a mixing hash.
 
 ### 1.3.2

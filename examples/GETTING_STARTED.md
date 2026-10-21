@@ -89,6 +89,15 @@ a saddle vertex only where the geodesic really runs through it — refine the me
 there if you want the lath to pass beside the vertex. `Me` 0 is the older
 curve shortening, kept for comparison.
 
+**Net Trim** is the cookie cutter: Schling's networks are designed on a
+surface larger than the building and cropped to the outline. Trace the net on
+the big mesh, draw the outline as one or more closed curves on the surface (or
+in plan above it, then set `D` to 0,0,−1), and feed curves, mesh and outline
+to **Net Trim**: `A` / `B` are the pieces inside, `C` the cut ends (border
+ends for Net Topology, Net Joints and Flat Kit), `P` the outline as pulled
+onto the mesh. A loop inside another loop cuts a hole, `Iv` keeps the outside
+instead (an opening in a net), `In` points choose the regions by hand.
+
 **Chebyshev Net**: seed vertex + direction + `L` (lath joint spacing, try mesh
 size / 12). Outputs both lath families and a quad net mesh whose edges all have
 length `L` — the flat-lattice kinematics of an elastic gridshell.
