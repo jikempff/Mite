@@ -28,6 +28,9 @@ public class MeshPhysics
     public bool[] Fixed => _fixed;
     public int VertexCount => _mesh.VertexCount;
 
+    /// <summary>Faces of the triangulated mesh the soap-film forces act on.</summary>
+    public int[][] TriangleFaces => _triMesh.Faces;
+
     public MeshPhysics(MeshData mesh, bool[]? fixedVertices = null, double[]? masses = null)
     {
         _mesh = mesh;

@@ -1127,13 +1127,48 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     var up = new Vec3d[grid.VertexCount]; Array.Fill(up, new Vec3d(0, 0, -0.2));
     var fdc = ForceDensityMethod.Compute(grid, qn, up, bnd);
     numbers["fdmCompression"] = new { rise = R3(fdc.Vertices.Max(p => p.Z)) };
-    // Dynamic relaxation hanging net
+    // Dynamic relaxation hanging net: Barnes' scheme (fictitious masses, reset to the kinetic-energy peak) against the 1.3.2 integrator
     t.Restart();
     var dr = DynamicRelaxation.Compute(grid, bnd, new DynamicRelaxation.Options { Stiffness = 10, Gravity = new Vec3d(0, 0, -1), MaxIterations = 5000 });
     t.Stop();
+    var drOld = DynamicRelaxation.Compute(grid, bnd, new DynamicRelaxation.Options { Stiffness = 10, Gravity = new Vec3d(0, 0, -1), MaxIterations = 5000, FictitiousMasses = false, ResetToPeak = false });
     var drMesh = new MeshData(dr.Vertices, grid.Faces);
     scenes["dynrelax"] = new { before = GridWire(grid, n, n, 2), after = GridWire(drMesh, n, n, 2) };
-    numbers["dynrelax"] = new { iterations = dr.Iterations, converged = dr.Converged, ms = t.ElapsedMilliseconds, sag = R3(-dr.Vertices.Min(p => p.Z)), residual = dr.Residual, maxForce = R3(dr.EdgeForces.Max()), minForce = R3(dr.EdgeForces.Min()) };
+    // the same net with rest length 0 is a force-density net: Schek's linear solution must agree
+    var drQ = DynamicRelaxation.Compute(grid, bnd, new DynamicRelaxation.Options { Stiffness = 1, RestScale = 0, Loads = loads, MaxIterations = 5000, Tolerance = 1e-8 });
+    double drVsFdm = drQ.Vertices.Zip(fd.Vertices, (a2, b2) => (a2 - b2).Length).Max();
+    numbers["dynrelax"] = new { iterations = dr.Iterations, resets = dr.Resets, iterationsOld = drOld.Iterations, resetsOld = drOld.Resets, sameAsOld = Math.Round(dr.Vertices.Zip(drOld.Vertices, (a2, b2) => (a2 - b2).Length).Max(), 6), converged = dr.Converged, ms = t.ElapsedMilliseconds, sag = R3(-dr.Vertices.Min(p => p.Z)), residual = dr.Residual, maxForce = R3(dr.EdgeForces.Max()), minForce = R3(dr.EdgeForces.Min()), vsFdm = drVsFdm, vsFdmSteps = drQ.Iterations };
+    // Elastic gridshell: 6 column laths of length 1 pushed to a chord of 0.8 (ends fixed), cross laths every 0.2;
+    // every column is the pinned Euler elastica (rise k L / K(k), 2E(k)/K(k) − 1 = 0.8), the cross laths stay straight
+    {
+        int nx = 5, ny = 32; double L = 1, ratio = 0.8, pitch = 0.2;
+        var gq = TestMeshes.CreateQuadGrid(nx, ny, 1.0);
+        var gv = new Vec3d[gq.VertexCount];
+        for (int j = 0; j <= ny; j++) for (int i = 0; i <= nx; i++) { double s = j / (double)ny; gv[j * (nx + 1) + i] = new Vec3d(i * pitch - 0.5, s * ratio * L - 0.4, 0.05 * Math.Sin(Math.PI * s)); }
+        var gm = new MeshData(gv, gq.Faces);
+        var ge = gm.BuildEdges(); var rest = new double[ge.Length];
+        for (int e = 0; e < ge.Length; e++) rest[e] = ge[e].v1 - ge[e].v0 == 1 ? pitch : L / ny;
+        var gfix = new bool[gm.VertexCount]; for (int i = 0; i <= nx; i++) { gfix[i] = true; gfix[ny * (nx + 1) + i] = true; }
+        t.Restart();
+        var gs = DynamicRelaxation.Compute(gm, gfix, new DynamicRelaxation.Options { Stiffness = 1e6 * ny, Bending = 1, RestLengths = rest, Tolerance = 1e-9, MaxIterations = 400000 });
+        t.Stop();
+        // exact elastica: k from 2E(k)/K(k) − 1 = ratio, rise = k L / K(k), x(s) by quadrature of the tangent angle
+        double Simpson(Func<double, double> f, double a, double b) { int m = 4000; double h = (b - a) / m, sum = f(a) + f(b); for (int i = 1; i < m; i++) sum += (i % 2 == 1 ? 4 : 2) * f(a + i * h); return sum * h / 3; }
+        double K(double k) => Simpson(th => 1 / Math.Sqrt(1 - k * k * Math.Sin(th) * Math.Sin(th)), 0, Math.PI / 2);
+        double E(double k) => Simpson(th => Math.Sqrt(1 - k * k * Math.Sin(th) * Math.Sin(th)), 0, Math.PI / 2);
+        double lo = 1e-9, hi = 1 - 1e-9; for (int it = 0; it < 200; it++) { double k = 0.5 * (lo + hi); if (2 * E(k) / K(k) - 1 - ratio > 0) lo = k; else hi = k; }
+        double kk = 0.5 * (lo + hi), riseExact = kk * L / K(kk);
+        // exact curve: θ(s) with sin(θ/2) = k sn(2K s/L) — sampled by integrating dθ/ds = 2 k √(P/EI) cos φ... simpler: use the DR polyline's own x and the closed-form rise for the self-test, and draw the elastica from θ(s) by Simpson on the ODE
+        double rise = 0, worstRise = 0;
+        for (int i = 0; i <= nx; i++) { double r1 = 0; for (int j = 0; j <= ny; j++) r1 = Math.Max(r1, gs.Vertices[j * (nx + 1) + i].Z); rise = Math.Max(rise, r1); worstRise = Math.Max(worstRise, Math.Abs(r1 - riseExact) / riseExact); }
+        double worstRow = 0; for (int j = 1; j < ny; j++) for (int i = 1; i <= nx; i++) worstRow = Math.Max(worstRow, (gs.Vertices[j * (nx + 1) + i] - gs.Vertices[j * (nx + 1) + i - 1] - new Vec3d(pitch, 0, 0)).Length);
+        double arc = 0; for (int j = 0; j < ny; j++) arc += (gs.Vertices[(j + 1) * (nx + 1)] - gs.Vertices[j * (nx + 1)]).Length;
+        double maxCurv = gs.Curvatures.Max(c => c.Length > 0 ? c.Max() : 0);
+        // curvature of the exact elastica at midspan: κ = 2 k √(P/EI), √(P/EI) = 2 K(k) / L
+        double curvExact = 2 * kk * 2 * K(kk) / L;
+        scenes["dynrelaxGrid"] = new { before = GridWire(gm, nx, ny, 1), after = GridWire(new MeshData(gs.Vertices, gq.Faces), nx, ny, 1) };
+        numbers["dynrelaxGrid"] = new { laths = gs.Laths.Length, iterations = gs.Iterations, resets = gs.Resets, converged = gs.Converged, ms = t.ElapsedMilliseconds, rise = R3(rise), riseExact = R3(riseExact), riseErr = worstRise, rowOff = worstRow, arc, maxCurv = R3(maxCurv), curvExact = R3(curvExact) };
+    }
     // Planarization: noisy grid
     var rng = new Random(3); var nz = (Vec3d[])grid.Vertices.Clone();
     for (int i = 0; i < nz.Length; i++) nz[i] = new Vec3d(nz[i].X, nz[i].Y, 0.3 * Math.Sin(nz[i].X * 0.7) * Math.Cos(nz[i].Y * 0.5) + 0.15 * (rng.NextDouble() - 0.5));

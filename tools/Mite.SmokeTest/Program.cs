@@ -528,6 +528,45 @@ internal static class Tests
                     && Expect(Bools(c, 5).FirstOrDefault(), "converged");
             });
 
+        TestComponent("Dynamic Relaxation (elastic laths)",
+            new Mite.Grasshopper.Components.DynamicRelaxationComponent(),
+            c =>
+            {
+                // a quad strip of 5 columns × 16 rows, length 1, pushed to a chord of 0.8: the
+                // column laths buckle into the Euler elastica (rise 0.2663 of the length)
+                var m = new Rhino.Geometry.Mesh();
+                int nx = 4, ny = 16;
+                var coreVerts = new System.Collections.Generic.List<Mite.Core.Geometry.Vec3d>();
+                var coreFaces = new System.Collections.Generic.List<int[]>();
+                for (int j = 0; j <= ny; j++)
+                    for (int i = 0; i <= nx; i++)
+                    {
+                        m.Vertices.Add(i * 0.2, j * 0.8 / ny, 0.05 * Math.Sin(Math.PI * j / ny));
+                        coreVerts.Add(new Mite.Core.Geometry.Vec3d(i * 0.2, j * 0.8 / ny, 0.05 * Math.Sin(Math.PI * j / ny)));
+                    }
+                for (int j = 0; j < ny; j++)
+                    for (int i = 0; i < nx; i++)
+                    {
+                        m.Faces.AddFace(j * (nx + 1) + i, j * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i);
+                        coreFaces.Add(new[] { j * (nx + 1) + i, j * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i });
+                    }
+                var fixedFlags = new bool[m.Vertices.Count];
+                for (int i = 0; i <= nx; i++) { fixedFlags[i] = true; fixedFlags[ny * (nx + 1) + i] = true; }
+                SetInputs(c, (0, m), (2, 1e6 * ny), (8, 200000), (9, 1e-8), (10, 1.0));
+                SetBoolList(c, 1, fixedFlags);
+                // rest lengths: 1/ny along the columns (index difference nx + 1), 0.2 along the rows
+                var edges = new Mite.Core.Geometry.MeshData(coreVerts.ToArray(), coreFaces.ToArray()).BuildEdges();
+                SetNumberList(c, 11, edges.Select(e => e.v1 - e.v0 == 1 ? 0.2 : 1.0 / ny).ToArray());
+            },
+            c =>
+            {
+                var mo = MeshOut(c, 0);
+                var bb = mo?.GetBoundingBox(false) ?? Rhino.Geometry.BoundingBox.Empty;
+                return Expect(mo != null && Math.Abs(bb.Max.Z - 0.2663) < 0.002, $"elastica rise 0.2663 (got {bb.Max.Z:F4})")
+                    && Expect(Bools(c, 5).FirstOrDefault(), "converged")
+                    && Expect(CurveCount(c, 6) == 22, $"22 laths (got {CurveCount(c, 6)})");
+            });
+
         TestComponent("Mesh Isocurves",
             new Mite.Grasshopper.Components.MeshIsocurvesComponent(),
             c =>

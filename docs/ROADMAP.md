@@ -919,6 +919,7 @@ remains the self-test review page.
       net mesh once the custom previews (B) land; the AGH hybrid needs the
       geodesic family wrapped through the compass cells (D above).
 - [ ] Form finding: Schek 1974 (Force density method); Barnes 1999
+- [x] Form finding: Schek 1974 (Force density method); Barnes 1999
       (Form finding and analysis of tension structures by dynamic
       relaxation); Adriaenssens, Block, Veenendaal, Williams (eds.) 2014
       (Shell Structures for Architecture) — kinetic damping details,
@@ -978,6 +979,50 @@ remains the self-test review page.
       Downland / Mannheim (two parallel laths per rib, D'Amico 2014 c_s) is not
       this model; buckling (10-26b) should take the offsets through the same
       H (K_g too).
+      Done 2026-10-21 (session 2): `Dynamics/DynamicRelaxation` rewritten
+      after Barnes (read: Barnes' 1977 thesis ch. 2 — central differences,
+      Δt_crit = √(2M/S), slack links; Veenendaal & Block 2011 — DR with
+      lumped stiffness, Q = T/L as the geometric stiffness; D'Amico, Kermani
+      & Zhang 2014 — bending-active DR, residual tolerance; the Oasys GSA
+      theory manual — fictitious mass from the summed nodal stiffness, peak
+      by a parabola; Kuijvenhoven & Hoogenboom 2012; Barnes 1999 itself and
+      Adriaenssens & Barnes 2001 were paywalled, their formulas re-derived
+      from the recurrence and cross-checked against the secondary sources):
+      fictitious masses M_i = Δt² S_i / 2 (S_i = Σ k + |T|/L + smoothing +
+      film cotangent weights + 8 EI/ℓ³ per lath), half-step start, reset to
+      the peak position x − 3Δt/2 v + Δt²/2 R/M (the trajectory at t − Δt/2),
+      masses refreshed at every reset. Options keep the 1.3.2 integrator
+      (`FictitiousMasses` / `ResetToPeak` off) for comparison, `PeakFit`
+      (parabolic peak, GSA / Alamatian 2022) off by default. New
+      `Dynamics/LathBending`: laths through quad meshes, κ = 1/R of the
+      three-point circle (Adriaenssens & Barnes 2001), forces = exact −∇ of
+      Σ ½EI κ² ℓ̄ (finite-difference check 2e-9), self-equilibrated per lath.
+      Measured (steps 1.3.2 → Barnes): hanging net 20 × 20 630 → 186, elastic
+      chain 1439 → 183, catenoid film 1411 → 336, elastica 34 043 → 5 860,
+      cantilever 4743 → 2385; equilibria identical to 3e-6. Closed forms:
+      elastic chain 6e-10 (shooting), RestScale 0 = FDM 2e-11, film = catenoid
+      0.05 edge², elastica rise 0.204 / 0.049 / 0.011 % at 16 / 32 / 64
+      segments (second order), cantilever tip 0.28 / 0.067 / 0.017 % against
+      P(L − h/2)³/3EI, quad-mesh gridshell of 6 elasticas 0.049 % with the
+      cross laths straight to 3e-9; FDM saddle 1e-13, chain parabola 4e-16.
+      Findings: (1) at the Gerschgorin bound (λ = 1) the stiffest mode sits
+      on the stability limit — a velocity reset alone then stalls (35 000
+      steps on the net, no convergence on the cantilever) while the reset to
+      the peak damps it and λ = 1 is the fastest choice (λ 1.25 / 2 / 4 cost
+      5–100 % more); without the peak reset the masses are doubled.
+      (2) The parabolic peak was faster on 2 of 5 cases and slower on 3, so
+      Barnes' t − Δt/2 stays the default. (3) A node-based beam clamps at
+      h/2 past the first fixed node (its lumped curvature covers [h/2, 3h/2]):
+      an O(h) effect of the discretisation, not of the solver; the rest is
+      O(h²). (4) Stiff axial springs with soft bending converge slowly
+      (kinetic damping resets on the axial vibration): EA of 1e6 × n needs
+      13 000 steps for 6 × 33 nodes — fine for a batch, not for a slider.
+      Open: slack cables (T < 0 → EA = 0 as in Barnes 1977), torsion of the
+      laths (D'Amico's 6-DOF element / du Peloux's 4-DOF element — Mite's
+      Lath Analysis reads the twist after the fact), per-lath EI, laths given
+      as curves instead of derived from the quads, a web-app form-finding
+      block, viscous damping as an option, and the actuation side of E (the
+      same bending element could drive Net Kinetics' elastic states).
 - [ ] Lath bending and fabrication: Pottmann, Eigensatz, Vaxman, Wallner
       2015 (Architectural geometry review); Tang, Kilian, Bo, Wallner,
       Pottmann 2016 (Analysis and design of curved support structures);
@@ -1490,6 +1535,10 @@ Open
       boundary drawn on or above the mesh (closest point or projected), holes
       by loop depth, Inside / Invert, exact cuts; 10 closed-form tests, six
       bench self-tests (81 PASS), smoke case, icon.
+- [x] 2026-10-21 (session 2, D): Dynamic Relaxation after Barnes — fictitious
+      masses, reset to the kinetic-energy peak, half-step start, 3–6 × fewer
+      steps at the same equilibria; elastic laths (bending stiffness, cut
+      lengths) checked against the Euler elastica; exact FDM tests.
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

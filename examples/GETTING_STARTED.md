@@ -408,4 +408,10 @@ Hover the orange or grey balloon on the component to read the message.
 - **Minimal Surface** and **Force Density Method** fix the mesh boundary when
   `F` is left empty. Force densities `Q` follow the `E` (Edges) output order.
 - **Dynamic Relaxation** hangs a net under `G` (gravity) or point loads, or
-  relaxes it as a soap film (`Te`); `R` < 1 pre-tensions the edges.
+  relaxes it as a soap film (`Te`); `R` < 1 pre-tensions the edges, `R` = 0
+  turns the springs into force densities (then it agrees with FDM). With
+  `B` > 0 (bending stiffness EI) the rows and columns of a quad mesh become
+  elastic laths: give `R0` the cut length of every edge (`E` order) and a
+  lath longer than its chord buckles into an elastica — the way to form-find
+  an elastic gridshell from its flat grid. `La` returns the laths, `K` their
+  curvature 1/R per node (moment = `B` × `K`).
