@@ -1318,6 +1318,87 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     numbers["stripHyp"] = new { share = R3(rH.DevelopableFraction), strain = rH.EdgeStrain, strainTheory = Math.Sqrt(1 + 0.0025 * tauMax * tauMax) - 1, lean = R3(rH.MaxDevelopableLean), length = R3(rH.Length) };
 }
 
+// ---------- Net Trim: cookie-cutting a net to a boundary ----------
+{
+    // exact asymptotic lines x ∓ y = c of z = x² − y² inside a circle of radius 1 in plan:
+    // one piece per line with |c| < √2, ends at x = c/2 ± ½√(2 − c²), length √(2 − c²)·√(2 + 4c²)
+    var saddle = TestMeshes.CreateSaddle(96, 3.0);
+    var proj = new MeshProjection(saddle);
+    Vec3d OnS(double x, double y) => new(x, y, x * x - y * y);
+    Vec3d[] LineA(double c) { double x0 = Math.Max(-1.5, c - 1.5), x1 = Math.Min(1.5, c + 1.5); return Enumerable.Range(0, 240).Select(i => { double x = x0 + (x1 - x0) * i / 239; return OnS(x, x - c); }).ToArray(); }
+    Vec3d[] LineB(double c) { double x0 = Math.Max(-1.5, c - 1.5), x1 = Math.Min(1.5, c + 1.5); return Enumerable.Range(0, 240).Select(i => { double x = x0 + (x1 - x0) * i / 239; return OnS(x, c - x); }).ToArray(); }
+    Vec3d[] Circle(double r, int n = 360, double z = double.NaN) => Enumerable.Range(0, n + 1).Select(i => { double th = 2 * Math.PI * i / n, x = r * Math.Cos(th), y = r * Math.Sin(th); return double.IsNaN(z) ? OnS(x, y) : new Vec3d(x, y, z); }).ToArray();
+    var cs = Enumerable.Range(-7, 15).Select(i => 0.2 * i).ToArray();
+    var linesA = cs.Select(LineA).ToList(); var linesB = cs.Select(LineB).ToList();
+    var t = Stopwatch.StartNew();
+    var cut = NetTrim.Trim(proj, new[] { linesA, linesB }, new[] { Circle(1.0) });
+    t.Stop();
+    double worstEnd = 0, worstLen = 0, worstOut = 0;
+    for (int f = 0; f < 2; f++)
+        for (int i = 0; i < cut.Families[f].Count; i++)
+        {
+            double c = cs[cut.Source[f][i]]; var piece = cut.Families[f][i];
+            double h = 0.5 * Math.Sqrt(2 - c * c), xa = c / 2 - h, xb = c / 2 + h;
+            Vec3d ea = f == 0 ? OnS(xa, xa - c) : OnS(xa, c - xa), eb = f == 0 ? OnS(xb, xb - c) : OnS(xb, c - xb);
+            worstEnd = Math.Max(worstEnd, Math.Min((piece[0] - ea).Length + (piece[^1] - eb).Length, (piece[0] - eb).Length + (piece[^1] - ea).Length));
+            worstLen = Math.Max(worstLen, Math.Abs(ArcLen(piece) - Math.Sqrt(2 - c * c) * Math.Sqrt(2 + 4 * c * c)));
+            foreach (var p in piece) worstOut = Math.Max(worstOut, Math.Sqrt(p.X * p.X + p.Y * p.Y) - 1);
+        }
+    int expectedPieces = cs.Count(c => Math.Abs(c) < Math.Sqrt(2));
+    // the same loop drawn in plan at z = 5 and projected down
+    var plan = NetTrim.Trim(proj, new[] { linesA }, new[] { Circle(1.0, 360, 5.0) }, new NetTrim.Options { Direction = new Vec3d(0, 0, -1) });
+    double planDiff = 0;
+    for (int i = 0; i < Math.Min(plan.Families[0].Count, cut.Families[0].Count); i++)
+        planDiff = Math.Max(planDiff, Math.Max((plan.Families[0][i][0] - cut.Families[0][i][0]).Length, (plan.Families[0][i][^1] - cut.Families[0][i][^1]).Length));
+    // annulus R = 1.2 / r = 0.5: the ring is one loop from the border (kept), the hole two (dropped)
+    var ring = NetTrim.Trim(proj, new[] { linesA, linesB }, new[] { Circle(1.2), Circle(0.5, 180) });
+    int ringPiecesExpected = 0; double ringWorst = 0;
+    foreach (double c in cs) ringPiecesExpected += 2 * (Math.Abs(c) < 0.5 * Math.Sqrt(2) ? 2 : Math.Abs(c) < 1.2 * Math.Sqrt(2) ? 1 : 0);
+    foreach (var fam in ring.Families) foreach (var piece in fam) foreach (var e in new[] { piece[0], piece[^1] }) { double rho = Math.Sqrt(e.X * e.X + e.Y * e.Y); ringWorst = Math.Max(ringWorst, Math.Min(Math.Abs(rho - 1.2), Math.Abs(rho - 0.5))); }
+    var hole = NetTrim.Trim(proj, new[] { linesA }, new[] { Circle(1.2), Circle(0.5, 180) }, new NetTrim.Options { Inside = new[] { Vec3d.Zero } });
+    // a traced classic net (T-junction ends) cut to the circle: nothing outside, every inside vertex kept
+    var pc = PrincipalCurvature.Compute(saddle);
+    var field = AsymptoticCurves.ComputeDirections(pc);
+    var o = new EvenlySpacedNet.Options { Spacing = 0.25, Continuous = false, MaxCurves = 80 };
+    var famA = EvenlySpacedNet.TraceField(saddle, field.Family1, field.Exists, -1, o);
+    var famB = EvenlySpacedNet.TraceField(saddle, field.Family2, field.Exists, -1, o);
+    var t2 = Stopwatch.StartNew();
+    var net = NetTrim.Trim(proj, new[] { famA, famB }, new[] { Circle(1.0) });
+    t2.Stop();
+    var kept = new HashSet<Vec3d>(); foreach (var fam in net.Families) foreach (var piece in fam) foreach (var p in piece) kept.Add(p);
+    int insideV = 0, insideKept = 0, outsideKept = 0;
+    foreach (var fam in new[] { famA, famB }) foreach (var curve in fam) foreach (var p in curve) { double rho = Math.Sqrt(p.X * p.X + p.Y * p.Y); if (rho < 1 - 2e-3) { insideV++; if (kept.Contains(p)) insideKept++; } if (rho > 1 + 2e-3 && kept.Contains(p)) outsideKept++; }
+    double cutOff = net.Cuts.Count == 0 ? 0 : net.Cuts.Max(q => Math.Abs(Math.Sqrt(q.X * q.X + q.Y * q.Y) - 1));
+    // random points: inside / outside against the plan radius
+    var region = NetTrim.Region.Build(proj, new[] { Circle(1.0) });
+    var rnd = new Random(7); int tested = 0, wrong = 0, near = 0;
+    for (int i = 0; i < 4000; i++) { double x = -1.45 + 2.9 * rnd.NextDouble(), y = -1.45 + 2.9 * rnd.NextDouble(), rho = Math.Sqrt(x * x + y * y); if (Math.Abs(rho - 1) < 2e-3) continue; tested++; if (Math.Abs(rho - 1) < 0.05) near++; if (region.IsInside(OnS(x, y)) != (rho < 1)) wrong++; }
+    // hyperboloid rulings between two parallels z = ±0.6: length 2h√2
+    var hyp = TestMeshes.CreateHyperboloid(1, 1, 1, 96, 48);
+    var projH = new MeshProjection(hyp);
+    double hh = 0.6;
+    Vec3d[] Ring(double z) => Enumerable.Range(0, 361).Select(i => { double th = 2 * Math.PI * i / 360, r = Math.Sqrt(1 + z * z); return new Vec3d(r * Math.Cos(th), r * Math.Sin(th), z); }).ToArray();
+    Vec3d[] Ruling(double th, int sign) => Enumerable.Range(0, 201).Select(i => { double u = -1 + 2.0 * i / 200; return new Vec3d(Math.Cos(th) - sign * u * Math.Sin(th), Math.Sin(th) + sign * u * Math.Cos(th), u); }).ToArray();
+    var rulA = Enumerable.Range(0, 24).Select(i => Ruling(2 * Math.PI * i / 24, +1)).ToList();
+    var rulB = Enumerable.Range(0, 24).Select(i => Ruling(2 * Math.PI * i / 24 + 0.1, -1)).ToList();
+    var band = NetTrim.Trim(projH, new[] { rulA, rulB }, new[] { Ring(hh), Ring(-hh) });
+    double bandZ = 0, bandLen = 0;
+    foreach (var fam in band.Families) foreach (var piece in fam) { bandZ = Math.Max(bandZ, Math.Max(Math.Abs(Math.Abs(piece[0].Z) - hh), Math.Abs(Math.Abs(piece[^1].Z) - hh))); bandLen = Math.Max(bandLen, Math.Abs(ArcLen(piece) - 2 * hh * Math.Sqrt(2))); }
+    numbers["trim"] = new
+    {
+        lines = 2 * cs.Length, pieces = cut.Pieces, expectedPieces = 2 * expectedPieces, removed = cut.RemovedWhole, cuts = cut.Cuts.Count, regions = cut.Regions, inside = cut.InsideRegions, samples = cut.BoundarySamples, edge = R3(proj.AverageEdgeLength),
+        worstEnd, worstLen, worstOut, ms = t.ElapsedMilliseconds, planDiff, planOff = plan.BoundaryOffMesh,
+        ringRegions = ring.Regions, ringInside = ring.InsideRegions, ringPieces = ring.Pieces, ringPiecesExpected, ringWorst, holeInside = hole.InsideRegions, holePieces = hole.Pieces, holePiecesExpected = cs.Count(c => Math.Abs(c) < 0.5 * Math.Sqrt(2)),
+        netCurves = famA.Count + famB.Count, netPieces = net.Pieces, netCut = net.CutCurves, netRemoved = net.RemovedWhole, netCuts = net.Cuts.Count, insideV, insideKept, outsideKept, cutOff, netMs = t2.ElapsedMilliseconds,
+        tested, wrong, near,
+        bandRegions = band.Regions, bandInside = band.InsideRegions, bandPieces = band.Pieces, bandZ, bandLen, bandExact = R3(2 * hh * Math.Sqrt(2)),
+        report = net.Report,
+    };
+    scenes["trim"] = new { wire = SaddleWire(96, 3.0, 12), full = famA.Concat(famB).Select(l => Line(l, 3)).ToArray(), a = net.Families[0].Select(l => Line(l, 2)).ToArray(), b = net.Families[1].Select(l => Line(l, 2)).ToArray(), loop = net.Boundary.Select(l => Line(l, 2)).ToArray(), cuts = net.Cuts.Select(P).ToArray() };
+    scenes["trimRing"] = new { wire = SaddleWire(96, 3.0, 12), full = linesA.Concat(linesB).Select(l => Line(l, 6)).ToArray(), a = ring.Families[0].Select(l => Line(l, 4)).ToArray(), b = ring.Families[1].Select(l => Line(l, 4)).ToArray(), loop = ring.Boundary.Select(l => Line(l, 2)).ToArray(), cuts = ring.Cuts.Select(P).ToArray() };
+    scenes["trimHyp"] = new { wire = RevolveWire(z => Math.Sqrt(1 + z * z), -1, 1, 8, 16), full = rulA.Concat(rulB).Select(l => Line(l, 20)).ToArray(), a = band.Families[0].Select(l => Line(l, 10)).ToArray(), b = band.Families[1].Select(l => Line(l, 10)).ToArray(), loop = band.Boundary.Select(l => Line(l, 2)).ToArray(), cuts = band.Cuts.Select(P).ToArray() };
+}
+
 // ---------- kd-tree / projection scale ----------
 {
     var grid = TestMeshes.CreateQuadGrid(300, 300, 1.0);

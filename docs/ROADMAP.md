@@ -427,6 +427,9 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       catalogue surface plus the kinetic canopy.
 - [ ] Ribbon order reviewed against the workflow order
       (mesh → curvature → net → analysis → fabrication → kinetics).
+- [x] Net Trim (cookie cutter) — 2026-10-21, see G: boundary curves, plan
+      projection, holes, Inside / Invert, cut ends for the fabrication
+      components.
 
 ## C. Web app and bench UX
 
@@ -1320,8 +1323,45 @@ Open
       fairness) and at the short edges next to the rays.
 - [ ] Refine in the web app (`Mite.Web/Api.cs`, AAG block).
 - [ ] Choose the seed spacing per ray (e.g. uniform in the asymptotic
-      parameter instead of arc length) for more homogeneous cells, and a
-      "cookie-cut" option: trace on a larger surface, trim to a boundary.
+      parameter instead of arc length) for more homogeneous cells.
+- [x] Cookie-cut: trace on a larger surface, trim to a boundary — 2026-10-21
+      (session 1, B/G), `Gridshells/NetTrim` and the Net Trim component.
+      Literature: Schling, Kilian, Wang, Schikore & Pottmann 2018 (AAG 2018)
+      §2.2 "the reference surface should be larger than the actual structure",
+      §2.3 "strip quality deteriorates when approaching the boundary", §3.1
+      the outline from the site; Schling, Wang, Hoyer & Pottmann 2022 (CAD
+      152) §3.3 "select just a part of the initial AAG-web", §4.2 "cropped by
+      a 4x4 m square boundary", §4.3 "cropped on one side to fit the original
+      facade"; Haines 1994 (Graphics Gems IV) for the point-in-polygon side /
+      crossing tests and the half-open vertex rule; Möller–Trumbore 1997 for
+      the ray–triangle projection. Method: boundary pulled sample by sample
+      until consecutive samples sit in edge-adjacent faces (closest point or
+      a ray along Direction), those faces are a wall, the other vertices are
+      flooded into regions, same-side components merged and opposite sides
+      joined per loop, BFS depth from the mesh border, odd depth = inside
+      (holes come free), Inside points / Invert override; wall-band points by
+      the side of the nearest boundary segment; cuts by 2D segment
+      intersection in the local tangent plane. Measured on z = x² − y² (edge
+      0.066): line ends and lengths within 5.5e-4 of the closed form (the
+      facet sagitta), annulus ends within 1.1e-4, hyperboloid band 2h√2 within
+      4e-5, a non-convex loop's pieces equal to exact root finding, a traced
+      classic net keeps 2695 / 2695 inside vertices and 0 outside, 0 / 3985
+      random points misclassified; 105 ms for 30 lines on 18 k faces.
+      Findings: (1) the flooded components are not the regions — the wall
+      band isolates vertices whose whole one-ring is on wall faces (17
+      components for 3 regions on the annulus), and a region graph through
+      one-rings gave them the wrong depth; merging components by the side
+      they lie on at each boundary sample fixed it; (2) a loop with no
+      evidence of an inside (an arc that separates nothing) must classify
+      its wall band as outside, or the band's left side is kept.
+      Open: the web app has no curve drawing, so no trim there yet (a
+      plan-circle "cookie" slider around the seed would do); the pulled
+      boundary lies on the facets (smooth-foot slide as the guide curve
+      does); ending the kept pieces on a lath along the cut (an edge lath
+      from the pulled boundary, Schling's "edge lamellas"); trimming the
+      Asymptotic Web's quads and node lists, not only its lath polylines;
+      a Trim input on the net components themselves once the Mite Net type
+      carries the families.
 - [ ] Speed: the AAG solve is ~2 s natively / ~12 s in the browser for 385
       nodes (envelope LDLᵀ of 6N unknowns): nested dissection or a
       supernodal factorisation. Half done 2026-10-03: `Numerics/SparseLdl`
@@ -1446,6 +1486,10 @@ Open
       direction field with their index (`Umbilics.Locate`, Grasshopper and web
       outputs appended); 12 exact tests, six bench self-tests on the Umbilics
       card (81 PASS), two web smoke checks.
+- [x] 2026-10-21 (session 1, B/G): Net Trim — cookie-cutting a net to a
+      boundary drawn on or above the mesh (closest point or projected), holes
+      by loop depth, Inside / Invert, exact cuts; 10 closed-form tests, six
+      bench self-tests (81 PASS), smoke case, icon.
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

@@ -19,7 +19,7 @@ TAB_BLURB = {
 COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation", "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Mite Net", "Asymptotic Web", "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves", "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Strip", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology", "Net Distributions", "Net Kinetics", "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics",
               "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
-              "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
+              "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Net Trim",
               "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
               "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Flat Kit", "Net Topology",
               "Net Kinetics",

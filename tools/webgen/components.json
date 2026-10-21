@@ -4237,5 +4237,148 @@
     "default": null
    }
   ]
+ },
+ {
+  "file": "NetTrimComponent.cs",
+  "name": "Net Trim",
+  "nick": "NetTrim",
+  "desc": "Cookie-cuts a net to a boundary: trace the families on a larger mesh (the curves are cleanest away from the mesh border), draw the outline of the structure as closed curves on or above the surface, and keep only what lies inside. Every curve is cut exactly where it crosses the boundary; a second loop inside the first cuts a hole. With Inside points you choose the regions to keep instead; Invert keeps the outside (a hole in the net).",
+  "tab": "Gridshells",
+  "icon": "NetTrim",
+  "guid": "D1C7B399-32AE-40A1-89B3-9F58949B5719",
+  "inputs": [
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "First family of net curves (polylines on the mesh)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Second family (optional)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "The mesh the net was traced on",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Boundary",
+    "nick": "Bd",
+    "type": "Curve",
+    "desc": "Boundary curves: closed loops on or above the mesh (several loops: a loop inside another cuts a hole). An open curve cuts like a knife and separates the surface only when both ends reach the mesh border",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Direction",
+    "nick": "D",
+    "type": "Vector",
+    "desc": "Projection direction for the boundary: zero (default) pulls each point to the closest mesh point; a vector projects along it (a plan curve drawn above the surface: 0,0,-1)",
+    "access": "item",
+    "default": "Vector3d.Zero"
+   },
+   {
+    "name": "Inside",
+    "nick": "In",
+    "type": "Point",
+    "desc": "Reference points: the regions containing them are kept. Empty (default): the regions an odd number of loops away from the mesh border",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Invert",
+    "nick": "Iv",
+    "type": "Boolean",
+    "desc": "Keep what is outside the boundary instead (cut a hole into the net)",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "MinLength",
+    "nick": "Ml",
+    "type": "Number",
+    "desc": "Drop pieces shorter than this (default 0)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic: 1/500 of the net size)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Family A pieces inside the boundary",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Family B pieces inside the boundary",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "SourceA",
+    "nick": "Ia",
+    "type": "Integer",
+    "desc": "Input curve index of each A piece",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "SourceB",
+    "nick": "Ib",
+    "type": "Integer",
+    "desc": "Input curve index of each B piece",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Cuts",
+    "nick": "C",
+    "type": "Point",
+    "desc": "The curve ends made by the cut (on the boundary)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Pulled",
+    "nick": "P",
+    "type": "Curve",
+    "desc": "The boundary as pulled onto the mesh",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Loops, regions, curves cut and removed",
+    "access": "item",
+    "default": null
+   }
+  ]
  }
 ]

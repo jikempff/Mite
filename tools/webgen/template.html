@@ -123,7 +123,7 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
 
 <div class="wrap">
   <header class="masthead">
-    <h1><small>Grasshopper plugin · version 1.3.2 · 30 components</small>Mite Bench</h1>
+    <h1><small>Grasshopper plugin · version 1.3.2 · 31 components</small>Mite Bench</h1>
     <p>Every component with its inputs, outputs and defaults, what it should do, a self-test run on the real Mite.Core library, and a live view of the result. Tick the ones that make sense, note what doesn't, and copy the summary back to the chat.</p>
     <div class="progress"><b><span id="done">0</span> / <span id="total">0</span></b>reviewed<div class="bar"><i id="barfill"></i></div></div>
     <h1><small>Grasshopper plugin · version 1.3.0 · 30 components</small>Mite Bench</h1>
@@ -301,6 +301,9 @@ const builders = {
     const g = SC.geoPath; legend(el.dataset.id, [[WIRE(), 'sphere'], [MUTED(), 'edge path (Dijkstra)'], [B(), 'curve shortening (Method 0)'], [A(), 'exact geodesic (FlipOut)']]); return { layers: [wireLayer(g.wire), { lines: [g.dijkstra], color: MUTED(), width: 1.2, dash: [4,3] }, { lines: [g.path], color: B(), width: 1.4 }, { lines: [g.flip], color: A(), width: 2.4 }], points: [{ pts: g.ends, color: INK(), r: 3.5 }] }; },
   umbilics(el){ const u = SC.umbilics; legend(el.dataset.id, [[WIRE(), 'ellipsoid 1.5 × 1 × 0.7'], [A(), 'max-curvature lines'], [B(), 'min-curvature lines'], [INK(), 'umbilic connection (y = 0) · located umbilics'], [MUTED(), 'closed-form umbilics']]);
     return { view: { yaw: -0.7, pitch: 0.45 }, layers: [wireLayer(u.wire), { lines: u.max, color: A(), width: 1.4 }, { lines: u.min, color: B(), width: 1.4 }, { lines: [u.connection], color: INK(), width: 2.2 }], points: [{ pts: u.exact, color: MUTED(), r: 5 }, { pts: u.located, color: INK(), r: 3 }] }; },
+  trim(el){ const m = mode(el) || 'trim'; const g = SC[m]; const lbl = m === 'trimHyp' ? 'hyperboloid x² + y² − z² = 1' : 'saddle z = x² − y²'; const vw = m === 'trimHyp' ? { yaw: -0.6, pitch: 0.35 } : SADDLE_VIEW;
+    legend(el.dataset.id, [[WIRE(), lbl], [MUTED(), 'the net as traced (removed parts)'], [A(), 'family A kept'], [B(), 'family B kept'], [INK(), 'boundary pulled onto the mesh · cut ends (' + g.cuts.length + ')']]);
+    return { view: vw, layers: [wireLayer(g.wire), { lines: g.full, color: MUTED(), width: 0.8, alpha: 0.45, dash: [3,3] }, { lines: g.a, color: A(), width: 1.8 }, { lines: g.b, color: B(), width: 1.8 }, { lines: g.loop, color: INK(), width: 1.6 }], points: [{ pts: g.cuts, color: INK(), r: 1.6 }] }; },
   cheb(el){ legend(el.dataset.id, [[WIRE(), 'sphere'], [A(), 'family U'], [B(), 'family V (all edges L = 0.2)']]); return { layers: [wireLayer(SC.cheb.wire), { lines: SC.cheb.u, color: A(), width: 1.6 }, { lines: SC.cheb.v, color: B(), width: 1.6 }] }; },
   asym(el){ const m = mode(el) || ''; if (m.startsWith('asymCat_')) { const sc = SC[m]; legend(el.dataset.id, [[WIRE(), sc.label], [A(), 'family A · right-handed'], [B(), 'family B · left-handed']]); return { view: { yaw: -0.6, pitch: 0.5 }, layers: [wireLayer(sc.wire), { lines: sc.a, color: A(), width: 1.6 }, { lines: sc.b, color: B(), width: 1.6 }] }; }
   asym(el){ const m = mode(el) || ''; if (m.startsWith('asymCat_')) { const sc = SC[m]; const extra = sc.guide ? [[INK(), 'guide curve and its nodes (' + sc.nodes.length + ')']] : []; legend(el.dataset.id, [[WIRE(), sc.label], [A(), 'family A'], [B(), 'family B']].concat(extra)); return { view: { yaw: -0.6, pitch: 0.5 }, layers: [wireLayer(sc.wire), { lines: sc.a, color: A(), width: 1.6 }, { lines: sc.b, color: B(), width: 1.6 }].concat(sc.guide ? [{ lines: [sc.guide], color: INK(), width: 1.2, alpha: 0.8 }] : []), points: sc.guide ? [{ pts: sc.nodes, color: INK(), r: 2.2 }] : [] }; }

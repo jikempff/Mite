@@ -67,6 +67,7 @@ internal static class Tests
         var grid = BuildBumpyGrid(10, 10);
 
         Check("Icons load for all 31 components and the Mite Net parameter", IconsLoad());
+        Check("Icons load for all 31 components", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -617,6 +618,32 @@ internal static class Tests
             },
             c => Expect(Points(c, 0).Count == 4 && CurveCount(c, 2) == 12,
                 $"4 nodes / 12 members, got {Points(c, 0).Count} / {CurveCount(c, 2)}"));
+
+        // Net Trim: three asymptotic lines x − y = c of the saddle, cookie-cut by a plan circle of
+        // radius 0.6 drawn above the surface and projected down; each line keeps one piece whose
+        // ends lie on the circle at x = c/2 ± ½√(0.72 − c²)
+        TestComponent("Net Trim (plan circle projected down)",
+            new Mite.Grasshopper.Components.NetTrimComponent(),
+            c =>
+            {
+                Rhino.Geometry.Curve LineOn(double k)
+                {
+                    double x0 = System.Math.Max(-1, k - 1), x1 = System.Math.Min(1, k + 1);   // x − y = k on z = x² − y²
+                    return new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(x0, x0 - k, 2 * k * x0 - k * k),
+                        new Rhino.Geometry.Point3d(x1, x1 - k, 2 * k * x1 - k * k));
+                }
+                var lines = new[] { -0.4, 0.0, 0.4 }.Select(LineOn).ToArray();
+                SetCurveList(c, 0, lines);
+                SetInputs(c, (2, saddle.DuplicateMesh()), (4, new Rhino.Geometry.Vector3d(0, 0, -1)));
+                SetCurveList(c, 3, new Rhino.Geometry.Circle(new Rhino.Geometry.Plane(new Rhino.Geometry.Point3d(0, 0, 3), Rhino.Geometry.Vector3d.ZAxis), 0.6).ToNurbsCurve());
+            },
+            c =>
+            {
+                var cuts = Points(c, 4);
+                bool onCircle = cuts.Count == 6 && cuts.All(q => System.Math.Abs(System.Math.Sqrt(q.X * q.X + q.Y * q.Y) - 0.6) < 0.03);
+                return Expect(CurveCount(c, 0) == 3 && onCircle,
+                    $"3 pieces with 6 cut ends on the circle, got {CurveCount(c, 0)} pieces / {cuts.Count} cuts");
+            });
 
         // Net Kinetics: a 3 × 3 planar rhombic lattice (lazy tongs) sheared by moving one corner;
         // rods stay straight and joint spacing constant (exact mechanism)

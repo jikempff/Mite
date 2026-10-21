@@ -636,9 +636,36 @@ def icon_flat_kit():
     finish(img, "FlatKit")
 
 
+def icon_net_trim():
+    """Cookie cutter: the patch carries a faint net; a closed loop on it holds the part that is kept, drawn full."""
+    img, d = canvas()
+    patch(img)
+    cu, cv, ru, rv = 0.5, 0.5, 0.36, 0.30
+    inside = lambda u, v: ((u - cu) / ru) ** 2 + ((v - cv) / rv) ** 2 < 1
+    for c in (-0.6, -0.3, 0.0, 0.3, 0.6):
+        for f in (lambda t, c=c: (t, t + c), lambda t, c=c: (t, 1 - t + c)):
+            pts = [(f(i / 31), i) for i in range(32)]
+            faint = [P(*uv(u, v)) for (u, v), i in pts if 0 <= v <= 1]
+            if len(faint) > 1:
+                stroke(d, faint, "surface", 0.4, alpha=60)
+            run = []
+            for (u, v), i in pts:
+                if 0 <= v <= 1 and inside(u, v):
+                    run.append(P(*uv(u, v)))
+                elif len(run) > 1:
+                    stroke(d, run, "surface", 1.0); run = []
+                else:
+                    run = []
+            if len(run) > 1:
+                stroke(d, run, "surface", 1.0)
+    loop = [P(*uv(cu + ru * math.cos(k * math.pi / 24), cv + rv * math.sin(k * math.pi / 24))) for k in range(49)]
+    stroke(d, loop, "surface", 1.3)
+    finish(img, "NetTrim")
+
+
 ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics,
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
-       icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
+       icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path, icon_net_trim,
        icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,
        icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics, icon_flat_kit, icon_mite_net, icon_mite_net_param, icon_lath_strip,
        icon_lath_analysis, icon_gridshell_analysis, icon_net_distributions, icon_mesh_isocurves,
