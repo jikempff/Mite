@@ -326,7 +326,7 @@
   "file": "DynamicRelaxationComponent.cs",
   "name": "Dynamic Relaxation",
   "nick": "DynRelax",
-  "desc": "Form finding by dynamic relaxation with kinetic damping: the mesh edges act as springs, optionally under gravity / point loads, soap-film tension and smoothing, and the system is integrated until it rests in equilibrium. Hanging models, pre-tensioned cable nets and quick minimal-surface-like relaxations of a gridshell mesh.",
+  "desc": "Form finding by dynamic relaxation with kinetic damping (Barnes 1999): the mesh edges act as springs, optionally under gravity / point loads, soap-film tension and smoothing, and the system is integrated until it rests in equilibrium. Hanging models, pre-tensioned cable nets, quick minimal-surface-like relaxations of a gridshell mesh, and with Bending > 0 an elastic gridshell whose laths are the rows and columns of the quad mesh.",
   "tab": "Form Finding",
   "icon": "DynamicRelaxation",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF8",
@@ -412,6 +412,23 @@
     "desc": "Convergence: residual force / applied force (default 1e-4)",
     "access": "item",
     "default": "1e-4"
+   },
+   {
+    "name": "Bending",
+    "nick": "B",
+    "type": "Number",
+    "desc": "Bending stiffness EI of the laths (default 0 = cable net). Laths are the chains of edges running straight through the quad mesh: the rows and columns of a quad grid, rings and generators of a tube; triangles carry none",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "RestLengths",
+    "nick": "R0",
+    "type": "Number",
+    "desc": "Rest length per edge in the Edges output order (default: the input edge lengths). A lath cut longer than its chord buckles, a cable cut shorter pulls; RestScale still multiplies",
+    "access": "list",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -460,6 +477,30 @@
     "nick": "C",
     "type": "Boolean",
     "desc": "True when the residual dropped below the tolerance",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Laths",
+    "nick": "La",
+    "type": "Curve",
+    "desc": "Relaxed laths as polylines (empty unless Bending > 0)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Curvature",
+    "nick": "K",
+    "type": "Number",
+    "desc": "Curvature 1/R at every lath node, one branch per lath (0 at free ends); bending moment = Bending × Curvature",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Resets",
+    "nick": "Rs",
+    "type": "Integer",
+    "desc": "Kinetic-energy peaks met (velocity resets of the kinetic damping)",
     "access": "item",
     "default": null
    }

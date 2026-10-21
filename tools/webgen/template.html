@@ -280,7 +280,10 @@ const builders = {
     return { view: { yaw: -0.6, pitch: 0.35 }, layers: L, points: pts }; },
   pull(el){ const p = SC.pull; legend(el.dataset.id, [[WIRE(), 'sphere'], [MUTED(), 'input circle (floating)'], [A(), 'pulled + faired']]); return { layers: [wireLayer(p.wire), { lines: [p.before], color: MUTED(), width: 1.4, dash: [4,3] }, { lines: [p.after], color: A(), width: 2.2 }] }; },
 };
-['minimal','fdm','dynrelax','planar'].forEach(k => builders[k] = el => { const m = mode(el) || 'after'; const s = SC[k]; const L = [];
+builders.dynrelax = el => { const m = mode(el) || 'dynrelax'; const s = SC[m]; const grid = m === 'dynrelaxGrid';
+  legend(el.dataset.id, grid ? [[MUTED(), 'laths cut to length 1, chord 0.8 (input)'], [A(), 'relaxed: columns = Euler elastica, cross laths straight']] : [[MUTED(), 'input mesh'], [A(), 'hanging net']]);
+  return { view: grid ? { yaw: -0.9, pitch: 0.35 } : undefined, layers: [{ lines: s.before, color: MUTED(), width: 0.9, dash: [4,3] }, { lines: s.after, color: A(), width: grid ? 1.8 : 1.3 }] }; };
+['minimal','fdm','planar'].forEach(k => builders[k] = el => { const m = mode(el) || 'after'; const s = SC[k]; const L = [];
   if (m !== 'after') L.push({ lines: s.before, color: MUTED(), width: 0.9, alpha: m === 'both' ? 0.5 : 1 });
   if (m !== 'before') L.push({ lines: s.after, color: A(), width: 1.3 });
   legend(el.dataset.id, [[MUTED(), 'input mesh'], [A(), 'result']]); return { layers: L }; });
