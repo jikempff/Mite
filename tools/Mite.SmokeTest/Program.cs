@@ -105,7 +105,20 @@ internal static class Tests
         TestComponent("Planarize Mesh",
             new Mite.Grasshopper.Components.PlanarizationComponent(),
             c => SetInputs(c, (0, grid.DuplicateMesh()), (1, 50)),
-            c => Expect(MeshOut(c, 0) != null && Numbers(c, 1).Count > 0, "planarized mesh + deviations"));
+            c =>
+            {
+                // Method 1 (default): the bumpy grid is planar to the tolerance in a few iterations and Moved is reported
+                var dev = Numbers(c, 1);
+                return Expect(MeshOut(c, 0) != null && dev.Count > 0, "planarized mesh + deviations")
+                    && Expect(dev.Max() < 1e-5, $"guided projection planar to 1e-5, got {dev.Max():E2}")
+                    && Expect(Numbers(c, 2)[0] <= 30, $"in at most 30 iterations, took {Numbers(c, 2)[0]}")
+                    && Expect(Numbers(c, 3).Count == 1 && Numbers(c, 3)[0] > 0, "Moved output");
+            });
+
+        TestComponent("Planarize Mesh (Method 0, projection)",
+            new Mite.Grasshopper.Components.PlanarizationComponent(),
+            c => SetInputs(c, (0, grid.DuplicateMesh()), (1, 50), (5, 0)),
+            c => Expect(MeshOut(c, 0) != null && Numbers(c, 1).Count > 0 && Numbers(c, 2)[0] == 50, "projection runs its 50 iterations"));
 
         TestComponent("Minimal Surface",
             new Mite.Grasshopper.Components.MinimalSurfaceComponent(),

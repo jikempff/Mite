@@ -666,6 +666,111 @@ public static class TestMeshes
         return (pts, valid);
     }
 
+    // ---- planar-quad test meshes (PlanarizationOptimizerTests, bench) ----
+
+    /// <summary>Quad grid over the translation surface z = x² − y²: every quad is exactly planar (Glymph et al. 2004).</summary>
+    public static MeshData TranslationalGrid(int n = 12, double size = 2.0)
+    {
+        var v = new Vec3d[(n + 1) * (n + 1)];
+        for (int j = 0; j <= n; j++)
+            for (int i = 0; i <= n; i++)
+            {
+                double x = size * (2.0 * i / n - 1), y = size * (2.0 * j / n - 1);
+                v[j * (n + 1) + i] = new Vec3d(x, y, x * x - y * y);
+            }
+        return new MeshData(v, GridFaces(n, n));
+    }
+
+    public static int[][] GridFaces(int nx, int ny)
+    {
+        var faces = new List<int[]>();
+        for (int j = 0; j < ny; j++)
+            for (int i = 0; i < nx; i++)
+            {
+                int a = j * (nx + 1) + i;
+                faces.Add(new[] { a, a + 1, a + nx + 2, a + nx + 1 });
+            }
+        return faces.ToArray();
+    }
+
+    /// <summary>
+    /// Ruling net of the hyperboloid x² + y² − z² = 1: the two families of
+    /// straight rulings (its asymptotic curves), n per family, crossing at
+    /// z = tan((β − α)/2). The quads are skew; the net has no planar
+    /// realisation on the surface (asymptotic directions are self-conjugate,
+    /// Pottmann et al. 2007 §3.4).
+    /// </summary>
+    public static MeshData HyperboloidRulingNet(int n, double zMax, out int rows)
+    {
+        // family + from angle α_i, family − from angle β_j = α_j + π/n·(odd offset); node (i, j) exists where |tan((β_j − α_i)/2)| ≤ zMax
+        var verts = new List<Vec3d>();
+        var index = new Dictionary<(int, int), int>();
+        int kMax = (int)Math.Floor(Math.Atan(zMax) * 2 * n / (2 * Math.PI) - 0.5); // (β − α)/2 = π(2k + 1)/(2n)
+        rows = 2 * kMax + 2;
+        for (int i = 0; i < n; i++)
+            for (int k = -kMax - 1; k <= kMax; k++)
+            {
+                double alpha = 2 * Math.PI * i / n;
+                double half = Math.PI * (2 * k + 1) / (2 * n);
+                double t = Math.Tan(half);
+                double theta = alpha + half;
+                double r = Math.Sqrt(1 + t * t);
+                index[(i, k)] = verts.Count;
+                verts.Add(new Vec3d(r * Math.Cos(theta), r * Math.Sin(theta), t));
+            }
+        var faces = new List<int[]>();
+        // − ruling through (i, k): β = α_i + π(2k + 1)/n. Nodes on it: (i − m, k + m) for all m.
+        // + ruling through (i, k): nodes (i, k') for all k'.
+        // Quad: (i, k) → along + to (i, k + 1) → along − to (i + 1, k) … check: − ruling through (i, k+1) is β = α_i + π(2k+3)/n
+        // = α_{i+1} + π(2k+1)/n → contains (i + 1, k). Then along + ruling i+1 back to (i + 1, k − 1)? No: along − from (i+1,k)
+        // we need the − ruling through (i, k), β = α_i + π(2k+1)/n = α_{i+1} + π(2k−1)/n → node (i + 1, k − 1). So the quad is
+        // (i, k), (i, k + 1), (i + 1, k), (i + 1, k − 1): it needs k − 1 ≥ −kMax − 1.
+        for (int i = 0; i < n; i++)
+            for (int k = -kMax; k <= kMax - 1; k++)
+            {
+                int i1 = (i + 1) % n;
+                faces.Add(new[] { index[(i, k)], index[(i, k + 1)], index[(i1, k)], index[(i1, k - 1)] });
+            }
+        return new MeshData(verts.ToArray(), faces.ToArray());
+    }
+
+    /// <summary>Hyperboloid of revolution by meridians × parallels: planar isosceles trapezoids (a conjugate, in fact principal, net).</summary>
+    public static MeshData HyperboloidQuadRevolve(int segments = 24, int rows = 8, double zMax = 1.0)
+    {
+        var v = new Vec3d[segments * (rows + 1)];
+        for (int j = 0; j <= rows; j++)
+        {
+            double z = zMax * (2.0 * j / rows - 1);
+            double r = Math.Sqrt(1 + z * z);
+            for (int i = 0; i < segments; i++)
+            {
+                double th = 2 * Math.PI * i / segments;
+                v[j * segments + i] = new Vec3d(r * Math.Cos(th), r * Math.Sin(th), z);
+            }
+        }
+        var faces = new List<int[]>();
+        for (int j = 0; j < rows; j++)
+            for (int i = 0; i < segments; i++)
+            {
+                int i1 = (i + 1) % segments;
+                faces.Add(new[] { j * segments + i, j * segments + i1, (j + 1) * segments + i1, (j + 1) * segments + i });
+            }
+        return new MeshData(v, faces.ToArray());
+    }
+
+    public static MeshData Jitter(MeshData m, double amplitude, int seed, bool interiorOnly = true)
+    {
+        var rng = new Random(seed);
+        var border = m.BuildBoundaryVertexFlags();
+        var v = (Vec3d[])m.Vertices.Clone();
+        for (int i = 0; i < v.Length; i++)
+        {
+            if (interiorOnly && border[i]) continue;
+            v[i] += amplitude * new Vec3d(rng.NextDouble() - 0.5, rng.NextDouble() - 0.5, rng.NextDouble() - 0.5) * 2;
+        }
+        return new MeshData(v, m.Faces);
+    }
+
     public static MeshData CreateQuadGrid(int nx = 5, int ny = 5, double size = 1.0)
     {
         var verts = new Vec3d[(nx + 1) * (ny + 1)];

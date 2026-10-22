@@ -1188,13 +1188,67 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         numbers["dynrelaxGrid"] = new { laths = gs.Laths.Length, iterations = gs.Iterations, resets = gs.Resets, converged = gs.Converged, ms = t.ElapsedMilliseconds, rise = R3(rise), riseExact = R3(riseExact), riseErr = worstRise, rowOff = worstRow, arc, maxCurv = R3(maxCurv), curvExact = R3(curvExact) };
     }
     // Planarization: noisy grid
+    numbers["dynrelax"] = new { iterations = dr.Iterations, converged = dr.Converged, ms = t.ElapsedMilliseconds, sag = R3(-dr.Vertices.Min(p => p.Z)), residual = dr.Residual, maxForce = R3(dr.EdgeForces.Max()), minForce = R3(dr.EdgeForces.Min()) };
+    // Planarization: noisy grid — the projection loop (Method 0) against the guided projection (Method 1)
     var rng = new Random(3); var nz = (Vec3d[])grid.Vertices.Clone();
     for (int i = 0; i < nz.Length; i++) nz[i] = new Vec3d(nz[i].X, nz[i].Y, 0.3 * Math.Sin(nz[i].X * 0.7) * Math.Cos(nz[i].Y * 0.5) + 0.15 * (rng.NextDouble() - 0.5));
     var noisy = new MeshData(nz, grid.Faces);
     var dev0 = Planarization.ComputeDeviation(noisy);
-    var pl = Planarization.Compute(noisy, bnd, new Planarization.Options { MaxIterations = 100, Tolerance = 1e-6 });
-    scenes["planar"] = new { before = GridWire(noisy, n, n, 2), after = GridWire(new MeshData(pl.Vertices, grid.Faces), n, n, 2) };
-    numbers["planar"] = new { devBefore = R3(dev0.Max()), devAfter = pl.FaceDeviations.Max(), iterations = pl.Iterations, maxMove = R3(pl.Vertices.Zip(nz, (a2, b2) => (a2 - b2).Length).Max()) };
+    t.Restart();
+    var pl = Planarization.Compute(noisy, bnd, new Planarization.Options { MaxIterations = 2000, Tolerance = 1e-9 });
+    t.Stop(); long plMs = t.ElapsedMilliseconds;
+    t.Restart();
+    var gp = PlanarizationOptimizer.Optimize(noisy, bnd, null, new PlanarizationOptimizer.Options { Iterations = 30, Tolerance = 1e-9 });
+    t.Stop();
+    scenes["planar"] = new { before = GridWire(noisy, n, n, 2), after = GridWire(new MeshData(gp.Vertices, grid.Faces), n, n, 2) };
+    double gridArea0 = double.MaxValue, gridArea = double.MaxValue;
+    foreach (var f in grid.Faces)
+    {
+        Vec3d a0 = Vec3d.Zero, a1 = Vec3d.Zero;
+        for (int e = 0; e < 4; e++) { a0 += Vec3d.Cross(nz[f[e]], nz[f[(e + 1) % 4]]); a1 += Vec3d.Cross(gp.Vertices[f[e]], gp.Vertices[f[(e + 1) % 4]]); }
+        gridArea0 = Math.Min(gridArea0, 0.5 * a0.Length); gridArea = Math.Min(gridArea, 0.5 * a1.Length);
+    }
+    numbers["planar"] = new
+    {
+        devBefore = R3(dev0.Max()), devAfter = gp.MaxDeviation, iterations = gp.Iterations, maxMove = R3(gp.MaxDisplacement), ms = t.ElapsedMilliseconds, converged = gp.Converged, areaRatio = R3(gridArea / gridArea0),
+        projDevAfter = pl.FaceDeviations.Max(), projIterations = pl.Iterations, projMaxMove = R3(pl.Vertices.Zip(nz, (a2, b2) => (a2 - b2).Length).Max()), projMs = plMs
+    };
+    // a conjugate net knocked off its surface: meridians × parallels of the hyperboloid, every node jittered by 0.02
+    {
+        var exact = TestMeshes.HyperboloidQuadRevolve(32, 10, 1.0);
+        var knocked = TestMeshes.Jitter(exact, 0.02, 7, interiorOnly: false);
+        var reference = TestMeshes.CreateHyperboloid(1, 1, 1.3, 96, 48);
+        var refProj = new MeshProjection(reference);
+        t.Restart();
+        var r = PlanarizationOptimizer.Optimize(knocked, null, reference, new PlanarizationOptimizer.Options { Iterations = 30, Tolerance = 1e-9 });
+        t.Stop();
+        var p = Planarization.Compute(knocked, new bool[knocked.VertexCount], new Planarization.Options { MaxIterations = 2000, Tolerance = 1e-9 });
+        numbers["planarConjugate"] = new
+        {
+            nodes = knocked.VertexCount, quads = knocked.FaceCount, devBefore = R3(Planarization.ComputeDeviation(knocked).Max()), devAfter = r.MaxDeviation, iterations = r.Iterations, converged = r.Converged,
+            maxMove = R3(r.MaxDisplacement), offSurface = r.MaxSurfaceDistance, fromExact = R3(exact.Vertices.Zip(r.Vertices, (a2, b2) => (a2 - b2).Length).Max()), ms = t.ElapsedMilliseconds,
+            projDevAfter = p.FaceDeviations.Max(), projOffSurface = p.Vertices.Max(q => (refProj.ClosestPointGlobal(q).Point - q).Length)
+        };
+    }
+    // the asymptotic ruling net of the same hyperboloid: self-conjugate, no planar realisation nearby — the optimiser must say so
+    {
+        var net = TestMeshes.HyperboloidRulingNet(24, 1.0, out int rulingRows);
+        var reference = TestMeshes.CreateHyperboloid(1, 1, 1.3, 96, 48);
+        var d0 = Planarization.ComputeDeviation(net);
+        var r = PlanarizationOptimizer.Optimize(net, null, reference, new PlanarizationOptimizer.Options { Iterations = 30, Tolerance = 1e-9 });
+        double minArea0 = double.MaxValue, minArea = double.MaxValue;
+        foreach (var f in net.Faces)
+        {
+            Vec3d a0 = Vec3d.Zero, a1 = Vec3d.Zero;
+            for (int e = 0; e < 4; e++) { a0 += Vec3d.Cross(net.Vertices[f[e]], net.Vertices[f[(e + 1) % 4]]); a1 += Vec3d.Cross(r.Vertices[f[e]], r.Vertices[f[(e + 1) % 4]]); }
+            minArea0 = Math.Min(minArea0, 0.5 * a0.Length); minArea = Math.Min(minArea, 0.5 * a1.Length);
+        }
+        numbers["planarAsymptotic"] = new
+        {
+            nodes = net.VertexCount, quads = net.FaceCount, rows = rulingRows, devBefore = R3(d0.Max()), devMeanBefore = R3(d0.Average()), devAfter = r.MaxDeviation, iterations = r.Iterations,
+            converged = r.Converged, stalled = r.Stalled, maxMove = R3(r.MaxDisplacement), meanEdge = R3(r.MeanEdge), offSurface = R3(r.MaxSurfaceDistance), areaRatio = R3(minArea / minArea0)
+        };
+    }
 }
 
 // ---------- Mesh cleanup + pull to mesh ----------

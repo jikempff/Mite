@@ -875,6 +875,7 @@ remains the self-test review page.
       points (a star at a flat point, K = 0 and k1 = k2 = 0, is exactly the
       3-fold Enneper centre); a sub-facet position by a jet fit round the face.
 - [ ] Conjugate and planar-quad nets: Liu, Pottmann, Wallner, Yang, Wang
+- [x] Conjugate and planar-quad nets: Liu, Pottmann, Wallner, Yang, Wang
       2006 (Geometric modeling with conical meshes and developable
       surfaces); Zadravec, Schiftner, Wallner 2010 (Designing quad-dominant
       meshes with planar faces); Pottmann, Asperl, Hofer, Kilian —
@@ -933,6 +934,70 @@ remains the self-test review page.
       panels of the Asymptotic Web's own quads are its `Quads` already — the
       web's planarity could be reported there; a `Panels` output on Mite Net
       once that lands.
+      Planarizer done 2026-10-22 (session 2), `FormFinding/PlanarizationOptimizer`
+      behind Planarize Mesh `Method` 1 (default; 0 = the old per-face
+      projection). Read: Tang, Sun, Gomes, Wallner & Pottmann 2014
+      (Form-finding with polyhedral meshes made simple, §3–4: auxiliary unit
+      normals n_f, planarity n_f·(v_i − v_j) = 0 on every edge, one guided
+      projection step = ‖HΔ + φ‖² + ‖Kx − s‖² + ε²‖Δ‖² → min, ε = 1e-3, about
+      10 iterations, weights only for regularisation); Liu et al. 2006 §3.2
+      (angle-sum / determinant constraints, fairness + closeness with weights
+      halved every iteration so planarity gets exact, SQP vs penalty); Zadravec
+      et al. 2010 §5–6 (f_PQ + λ_fair‖Δ² − Δ²_orig‖² + proximity through the
+      tangent plane at the closest point + boundary proximity, Gauss–Newton,
+      13–39 iterations, δ_PQ 3e-4 … 1.3e-3 with δ_prox 3e-4); Bouaziz, Deuss,
+      Schwartzburg, Weise & Pauly 2012 (Shape-Up: the local–global projection
+      scheme the old Method 0 is a Jacobi version of; it cannot beat a compromise
+      either); Poranne, Ovreiu & Gotsman 2013 (planar meshes as a linear space
+      once the normals are fixed). Implemented: Tang's constraints and step with
+      Zadravec's relative fairness, Liu's decay (0.4 per iteration), LM damping
+      on the gain ratio, a tangential anchor at the start positions, normals
+      eliminated per face (3 × 3 Schur complement) before the envelope LDLᵀ,
+      everything in units of the mean edge length, a fold guard (no face below
+      ¼ of its area). Numbers: exact PQ meshes fixed to 1e-12; jittered grid
+      with plane reference back to z = 0 in 13 iterations (projection loop
+      1.7e-4 after 2000); conjugate net knocked 0.02 off a hyperboloid planar
+      to 7e-10 in 11 iterations, 0.014 off (projection 2.3e-5 / 0.016); 1 600
+      nodes 10 iterations / 6 s; scale and position invariant to 4e-13.
+      Findings:
+      - The raw bilinear residual n·(v_i − v_j) scales with the edge, so a
+        least-squares path lowers it by shrinking quads; dividing by the rest
+        length removes that route but a folded quad (bow-tie, equal edges,
+        zero area) is still a planar solution — the fold guard refuses it.
+      - Measuring soft terms in bounding-box units while the planarity rows
+        are angles under-weights anchor and closeness by the number of edges
+        across the mesh (×34 on a 24 × 24 grid): the step then sheared quads
+        sideways by half an edge. Edge units fix it.
+      - Zadravec's relative fairness is what keeps quads from crumpling: at
+        weight 0.1 a noisy 24 × 24 grid with its border held folds quads into
+        the guard and stalls; at 0.5 / 1.0 it planarizes with every quad above
+        0.39 / 0.55 of its area. Default 1.0; the price is that a jittered
+        input keeps more of its jitter (0.009 → 0.014 off the surface).
+      - With constant weights (Tang, Zadravec) the fixed point is a compromise
+        Hᵀφ = −Kᵀ(Kx − s), planarity 1e-5 … 5e-2; the decay is what makes it
+        exact. Near the manifold the soft cost dominates and a step that halves
+        the hard cost raises the total by parts in 10⁵, which a plain LM
+        refuses — such steps are accepted (≤ 1 % total increase) and the
+        damping is reset when the weights decay.
+      - The hyperboloid's asymptotic ruling net has no planar realisation on
+        its surface (self-conjugate directions): the optimiser either stalls
+        with the quads intact (Decay 0.5) or finds a planar mesh 0.15 off the
+        surface with nodes moved an edge length (Decay 0.4); the projection
+        loop moves nodes 0.5 and is still at 1.4e-4 after 2000 iterations. The
+        component warns in both cases. A warm start from the projection loop
+        is erratic (converges from 20 projection steps, stalls from 100 or
+        500): not used.
+      Open: the panels of a traced net (this morning's `NetFaces` bundle)
+      wired into Planarize Mesh through Net Topology's `Mesh` output with the
+      design surface as `Reference`; Zadravec's boundary proximity (border
+      nodes on the border curve rather than the tangent plane); conical
+      (ω₁ + ω₃ = ω₂ + ω₄) and circular variants on the same solver (Liu §2.2,
+      Pottmann et al. 2007 §4) for offset meshes; nested dissection or a
+      supernodal LDLᵀ for 4 k-node nets (16 s now; 3 s per factorisation);
+      `AagWeb` and `ScissorNet` could share the row-based `NormalEquations`
+      (they keep their own copies); the 1.4.0 mode catalogue must list Planarize
+      Mesh `Method` (0 projection, 1 guided projection) — its test fails until
+      it does, by design.
 - [ ] Chebyshev nets and elastic gridshells: Masson 2017 (Existence and
       construction of Chebyshev nets and application to gridshells);
       Garg et al. 2014 (Wire mesh design); Baek, Reis 2019 (Rigidity of
@@ -1612,6 +1677,11 @@ Open
       deviation), Net Topology `Mesh` / `Planarity` / `Deviation` outputs, the
       web app's panels switch and planarize button, 7 exact tests, two bench
       self-tests (77 PASS), web smoke 33 PASS.
+- [x] 2026-10-22 (session 2, D): Planarize Mesh by guided projection (Tang et
+      al. 2014 with Liu et al. 2006's decay and Zadravec et al. 2010's relative
+      fairness): planar to 1e-9 in 10–15 iterations on conjugate nets, fixed
+      points exact, honest stall or far-off-surface warning on asymptotic nets;
+      11 tests, three bench self-tests (77 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench
