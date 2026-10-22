@@ -2070,7 +2070,7 @@
   "file": "NetTopologyComponent.cs",
   "name": "Net Topology",
   "nick": "NetTopo",
-  "desc": "Turns a two-family lath net into a structural graph: unique nodes at the crossings and one member per lath piece between consecutive crossings (free tails included). Feed Nodes / Members to a structural package (e.g. Karamba) or use the node schedule for fabrication.",
+  "desc": "Turns a two-family lath net into a structural graph: unique nodes at the crossings and one member per lath piece between consecutive crossings (free tails included). Feed Nodes / Members to a structural package (e.g. Karamba) or use the node schedule for fabrication. Mesh is the panel mesh of the net (one face per panel between the laths, quads where two families cross cleanly) with its planarity per face: a conjugate net (curvature lines) gives nearly planar panels, an asymptotic net skew ones (Liu et al. 2006) — wire it into Planarize Mesh.",
   "tab": "Fabrication",
   "icon": "NetTopology",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFD",
@@ -2188,6 +2188,27 @@
     "desc": "Per node: the two lath indices crossing there",
     "access": "tree",
     "default": null
+   },
+   {
+    "name": "Mesh",
+    "nick": "Me",
+    "type": "Mesh",
+    "access": "item",
+    "desc": "Panel mesh of the net: one face per panel between the laths (vertices = the nodes that bound a panel), counter-clockwise about the surface normal; polygons at T-junctions are fan-triangulated by Rhino"
+   },
+   {
+    "name": "Planarity",
+    "nick": "Pl",
+    "type": "Number",
+    "access": "list",
+    "desc": "Per panel, dimensionless: for a quad the distance between its diagonals over the mean diagonal (Zadravec, Schiftner & Wallner 2010; above 0.01 is visibly skew); 0 for triangles; for a polygon its plane deviation over its mean radius"
+   },
+   {
+    "name": "Deviation",
+    "nick": "Dv",
+    "type": "Number",
+    "access": "list",
+    "desc": "Per panel, model units: the largest distance of a corner from the panel's plane (the Planarize Mesh measure)"
    }
   ]
  },

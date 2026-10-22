@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Grasshopper;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
@@ -16,7 +17,10 @@ public class NetTopologyComponent : MiteComponent
             "and one member per lath piece between consecutive crossings (free tails included). " +
             "Same-family crossings and T-junctions (a lath ending on a neighbour) are nodes too. " +
             "Feed Nodes / Members to a structural package (e.g. Karamba) or use the node " +
-            "schedule for fabrication.",
+            "schedule for fabrication. Mesh is the panel mesh of the net (one face per panel between " +
+            "the laths, quads where two families cross cleanly) with its planarity per face: a " +
+            "conjugate net (curvature lines) gives nearly planar panels, an asymptotic net skew ones " +
+            "(Liu et al. 2006) — wire it into Planarize Mesh.",
             "Fabrication", "NetTopology") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDFD");
@@ -41,6 +45,9 @@ public class NetTopologyComponent : MiteComponent
         pManager.AddIntegerParameter("Lath", "L", "Input lath of each member: family A indices, then family B continuing", GH_ParamAccess.list);
         pManager.AddNumberParameter("Lengths", "Le", "Member lengths", GH_ParamAccess.list);
         pManager.AddIntegerParameter("NodeLaths", "Nl", "Per node: the two lath indices crossing there", GH_ParamAccess.tree);
+        pManager.AddMeshParameter("Mesh", "Me", "Panel mesh of the net: one face per panel between the laths (vertices = the nodes that bound a panel), counter-clockwise about the surface normal; polygons at T-junctions are fan-triangulated by Rhino", GH_ParamAccess.item);
+        pManager.AddNumberParameter("Planarity", "Pl", "Per panel, dimensionless: for a quad the distance between its diagonals over the mean diagonal (Zadravec, Schiftner & Wallner 2010; above 0.01 is visibly skew); 0 for triangles; for a polygon its plane deviation over its mean radius", GH_ParamAccess.list);
+        pManager.AddNumberParameter("Deviation", "Dv", "Per panel, model units: the largest distance of a corner from the panel's plane (the Planarize Mesh measure)", GH_ParamAccess.list);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -106,5 +113,21 @@ public class NetTopologyComponent : MiteComponent
         DA.SetDataList(6, laths);
         DA.SetDataList(7, lengths);
         DA.SetDataTree(8, nodeLaths);
+
+        var faces = NetFaces.Build(topo);
+        if (faces.Faces.Count > 0)
+        {
+            var panelMesh = faces.ToMesh(out _);
+            DA.SetData(9, MeshConvert.ToRhinoMesh(panelMesh));
+            DA.SetDataList(10, faces.Faces.Select(f => f.Planarity));
+            DA.SetDataList(11, faces.Faces.Select(f => f.Deviation));
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                $"{faces.Faces.Count} panels: {faces.Quads} quads, {faces.Triangles} triangles, {faces.Polygons} polygons" +
+                (faces.Lenses > 0 ? $", {faces.Lenses} lens(es) dropped" : "") +
+                $"; planarity mean {faces.MeanPlanarity:F4}, max {faces.MaxPlanarity:F4} (0.01 = visibly skew); " +
+                $"deviation max {faces.MaxDeviation:G3}; {faces.OuterLoops} boundary loop(s), {faces.Tails} tail(s) left out.");
+        }
+        else
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "No closed panels between the laths (fewer than two crossings per lath?): Mesh is empty.");
     }
 }

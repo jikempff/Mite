@@ -381,6 +381,37 @@ export class Viewer {
     this.overlayGroup.add(mesh);
   }
 
+  /**
+   * Polygon faces with one colour each (fan-triangulated, vertices duplicated per face so the
+   * colour is flat), slightly see-through so the laths underneath stay visible; a thin outline
+   * per face marks the panel edges.
+   */
+  showFaces(tag, vertices, faces, colors, opacity = 0.85) {
+    this.clearOverlay(tag); this.clearOverlay(tag + 'Edges');
+    if (!vertices?.length || !faces?.length) return;
+    const pos = [], col = [], edges = [], idx = [];
+    for (let f = 0; f < faces.length; f++) {
+      const ring = faces[f], c = colors[f] || [0.5, 0.5, 0.5];
+      const base = pos.length / 3;
+      for (const vi of ring) { pos.push(vertices[3 * vi], vertices[3 * vi + 1], vertices[3 * vi + 2]); col.push(c[0], c[1], c[2]); }
+      for (let k = 0; k < ring.length; k++) {
+        const a = ring[k], b = ring[(k + 1) % ring.length];
+        edges.push(vertices[3 * a], vertices[3 * a + 1], vertices[3 * a + 2], vertices[3 * b], vertices[3 * b + 1], vertices[3 * b + 2]);
+      }
+      for (let k = 1; k + 1 < ring.length; k++) idx.push(base, base + k, base + k + 1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(pos), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(Float32Array.from(col), 3));
+    g.setIndex(new THREE.BufferAttribute(Uint32Array.from(idx), 1));
+    g.computeVertexNormals();
+    const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide, transparent: opacity < 0.999, opacity, depthWrite: opacity >= 0.999 });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.userData.tag = tag; mesh.renderOrder = 5;
+    this.overlayGroup.add(mesh);
+    this.showSegments(tag + 'Edges', edges, this.ink(), 0.8);
+  }
+
   /** Principal direction glyphs: short segments along d1 (teal) and d2 (plum) at a subset of vertices */
   showDirections(vertices, d1, d2, normals, every, length) {
     const segA = [], segB = [];
