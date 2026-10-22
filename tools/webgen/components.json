@@ -2732,6 +2732,27 @@
     "desc": "Per node: the two lath indices crossing there",
     "access": "tree",
     "default": null
+   },
+   {
+    "name": "Mesh",
+    "nick": "Me",
+    "type": "Mesh",
+    "access": "item",
+    "desc": "Panel mesh of the net: one face per panel between the laths (vertices = the nodes that bound a panel), counter-clockwise about the surface normal; polygons at T-junctions are fan-triangulated by Rhino"
+   },
+   {
+    "name": "Planarity",
+    "nick": "Pl",
+    "type": "Number",
+    "access": "list",
+    "desc": "Per panel, dimensionless: for a quad the distance between its diagonals over the mean diagonal (Zadravec, Schiftner & Wallner 2010; above 0.01 is visibly skew); 0 for triangles; for a polygon its plane deviation over its mean radius"
+   },
+   {
+    "name": "Deviation",
+    "nick": "Dv",
+    "type": "Number",
+    "access": "list",
+    "desc": "Per panel, model units: the largest distance of a corner from the panel's plane (the Planarize Mesh measure)"
    }
   ]
  },

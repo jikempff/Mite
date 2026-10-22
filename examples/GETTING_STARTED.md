@@ -301,7 +301,14 @@ no Joints or Supports (every contact is coupled, every border end supported).
 - **Lath Preview** — colors the swept laths by utilization: green OK, neon
   yellow close to the limit, neon red over (the web app's colours).
 - **Net Topology** — nodes and members of the net as a graph, for a structural
-  package or a node schedule.
+  package or a node schedule. Its `Me` output is the panel mesh of the net (one
+  face per panel between the laths) and `Pl` / `Dv` say how skew each panel is
+  (`Pl` is the distance between a quad's diagonals over its mean diagonal; above
+  0.01 it is visibly skew). Planar quads need a conjugate net: a **Conjugate
+  Net** (curvature lines) gives nearly planar panels, an **Asymptotic Net** the
+  skewest ones a surface has, so **Planarize Mesh** on `Me` barely moves the
+  first and cannot flatten the second without leaving the surface. Colour `Me`
+  by `Pl` with **Mesh Colour Map** to see where glass or sheet panels would fit.
 
 Optionally, check the whole network structurally with **Gridshell Analysis**
 (Mite > Analysis): supports at the boundary, a downward `L` load in N/m, and it

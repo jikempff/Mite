@@ -127,6 +127,12 @@
           <label class="chk" id="continuous-row"><input id="continuous" type="checkbox" checked> continuous <span class="unit">fill: run to the border</span></label>
           <label class="chk"><input id="crossings" type="checkbox"> crossing dots</label>
         </div>
+        <div class="row toggles" data-for="asymptotic conjugate geodesicBoth chebyshev" id="panels-row">
+          <label class="chk" title="The panels between the laths (Net Topology → Mesh), coloured by how skew each one is: the distance between its diagonals over the mean diagonal (Zadravec, Schiftner & Wallner 2010) — red from 0.01. Curvature lines are a conjugate net and give panels planar to second order (Liu et al. 2006); asymptotic nets the skewest ones"><input id="panels" type="checkbox"> panels · planarity</label>
+          <label class="chk" id="panels-fix-row" title="Hold the nodes on the net's boundary while planarizing"><input id="panels-fixborder" type="checkbox"> hold the border</label>
+          <button id="planarize" class="btn" title="Planarize Mesh on the panel mesh: every node moves to the best-fit planes of its panels until every panel is flat — a conjugate net barely moves, an asymptotic net has to leave the surface">planarize</button>
+        </div>
+        <p id="panels-stats" class="stats hidden"></p>
         <div class="row toggles" data-for="geodesic geodesicBoth">
           <label class="chk"><input id="jacobi" type="checkbox" checked> Jacobi start angles <span class="unit">even strips</span></label>
           <label class="chk"><input id="fromborder" type="checkbox"> from the border</label>

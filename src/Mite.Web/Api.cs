@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Mite.Core.Analysis;
 using Mite.Core.Curvature;
 using Mite.Core.Fabrication;
+using Mite.Core.FormFinding;
 using Mite.Core.Geometry;
 using Mite.Core.Gridshells;
 using Mite.Core.Kinetics;
@@ -356,7 +357,56 @@ public class KitPayload
     public long Ms { get; set; }
 }
 
+public class PanelOptions
+{
+    /// <summary>Run Planarize Mesh on the panel mesh and return the moved nodes.</summary>
+    public bool Planarize { get; set; }
+    /// <summary>Hold the nodes on the net's boundary loops while planarizing.</summary>
+    public bool FixBorder { get; set; }
+    public int Iterations { get; set; } = 200;
+    /// <summary>Include the geodesic diagonals (G) as a third family.</summary>
+    public bool Diagonals { get; set; }
+}
+
+public class PanelPayload
+{
+    /// <summary>Flat xyz of the panel mesh vertices (the nodes that bound a panel).</summary>
+    public double[] Vertices { get; set; } = Array.Empty<double>();
+    /// <summary>Faces as vertex index rings, counter-clockwise about the surface normal.</summary>
+    public int[][] Faces { get; set; } = Array.Empty<int[]>();
+    /// <summary>Per face: planarity (diagonal distance / mean diagonal; Zadravec et al. 2010 — 0.01 is visibly skew) and plane deviation (model units).</summary>
+    public double[] Planarity { get; set; } = Array.Empty<double>();
+    public double[] Deviation { get; set; } = Array.Empty<double>();
+    public int Quads { get; set; }
+    public int Triangles { get; set; }
+    public int Polygons { get; set; }
+    public int Nodes { get; set; }
+    public int Edges { get; set; }
+    public int Tails { get; set; }
+    public int Loops { get; set; }
+    public double MeanPlanarity { get; set; }
+    public double MaxPlanarity { get; set; }
+    public double MaxDeviation { get; set; }
+    /// <summary>Share of panels with planarity ≤ 0.01.</summary>
+    public double PlanarShare { get; set; }
+    public double TotalArea { get; set; }
+    /// <summary>Planarized mesh (same faces): vertices, planarity, deviation; how far nodes moved and left the surface.</summary>
+    public double[] PlanarizedVertices { get; set; } = Array.Empty<double>();
+    public double[] PlanarizedPlanarity { get; set; } = Array.Empty<double>();
+    public double PlanarizedMaxDeviation { get; set; }
+    public double PlanarizedMeanPlanarity { get; set; }
+    public double MaxMove { get; set; }
+    public double MeanMove { get; set; }
+    public double MaxOffSurface { get; set; }
+    public int PlanarizeIterations { get; set; }
+    public int FixedNodes { get; set; }
+    public string? Error { get; set; }
+    public long Ms { get; set; }
+}
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(PanelOptions))]
+[JsonSerializable(typeof(PanelPayload))]
 [JsonSerializable(typeof(MeshStats))]
 [JsonSerializable(typeof(CurvaturePayload))]
 [JsonSerializable(typeof(NetOptions))]
@@ -818,6 +868,78 @@ public static partial class MiteApi
         catch (Exception ex) { p.Error = ex.Message; }
         p.Ms = sw.ElapsedMilliseconds;
         return JsonSerializer.Serialize(p, MiteJson.Default.AagPayload);
+    }
+
+    // ---- panels: the faces of the net and their planarity --------------------------
+
+    /// <summary>
+    /// The panels between the laths of the current net (Net Topology → NetFaces) with
+    /// their planarity, and optionally the panel mesh planarized (Planarize Mesh). A
+    /// conjugate net — curvature lines — gives panels planar to second order, an
+    /// asymptotic net the skewest ones (Liu et al. 2006).
+    /// </summary>
+    [JSExport]
+    public static string Panels(string optionsJson)
+    {
+        var sw = Stopwatch.StartNew();
+        var p = new PanelPayload();
+        var o = JsonSerializer.Deserialize(optionsJson, MiteJson.Default.PanelOptions) ?? new PanelOptions();
+        if (_mesh == null || _proj == null || _famA.Count == 0) { p.Error = "Trace a net first."; return JsonSerializer.Serialize(p, MiteJson.Default.PanelPayload); }
+        try
+        {
+            List<Vec3d[]> a = _famA, b = _famB;
+            if (o.Diagonals && _famG.Count > 0) { b = b.Concat(_famG).ToList(); }
+            if (b.Count == 0) { p.Error = "One family of curves alone bounds no panels: trace a two-family net."; return JsonSerializer.Serialize(p, MiteJson.Default.PanelPayload); }
+            var xs = NetIntersections.FindAll(a, b, _web != null ? 0.3 * _proj.AverageEdgeLength : 0.0);
+            var topo = NetTopology.Build(a, b, xs);
+            var faces = NetFaces.Build(topo, _mesh);
+            var mesh = faces.ToMesh(out var nodeOf);
+            p.Vertices = Flat(mesh.Vertices); p.Faces = mesh.Faces;
+            p.Planarity = faces.Faces.Select(f => f.Planarity).ToArray();
+            p.Deviation = faces.Faces.Select(f => f.Deviation).ToArray();
+            p.Quads = faces.Quads; p.Triangles = faces.Triangles; p.Polygons = faces.Polygons;
+            p.Nodes = faces.NodeCount; p.Edges = faces.EdgeCount; p.Tails = faces.Tails; p.Loops = faces.OuterLoops;
+            p.MeanPlanarity = faces.MeanPlanarity; p.MaxPlanarity = faces.MaxPlanarity; p.MaxDeviation = faces.MaxDeviation;
+            p.PlanarShare = faces.Faces.Count > 0 ? faces.Faces.Count(f => f.Planarity <= 0.01) / (double)faces.Faces.Count : 0;
+            p.TotalArea = faces.TotalArea;
+            if (o.Planarize && mesh.FaceCount > 0)
+            {
+                var fixedV = new bool[mesh.VertexCount];
+                if (o.FixBorder)
+                {
+                    // boundary nodes: those on an edge that bounds only one panel
+                    var edgeFaces = new Dictionary<(int, int), int>();
+                    foreach (var f in mesh.Faces)
+                        for (int k = 0; k < f.Length; k++)
+                        {
+                            int u = f[k], v = f[(k + 1) % f.Length];
+                            var key = u < v ? (u, v) : (v, u);
+                            edgeFaces[key] = edgeFaces.TryGetValue(key, out int c) ? c + 1 : 1;
+                        }
+                    foreach (var kv in edgeFaces) if (kv.Value == 1) { fixedV[kv.Key.Item1] = true; fixedV[kv.Key.Item2] = true; }
+                }
+                p.FixedNodes = fixedV.Count(f => f);
+                var r = Planarization.Compute(mesh, fixedV, new Planarization.Options { MaxIterations = Math.Max(1, o.Iterations), Tolerance = 1e-7 * _proj.AverageEdgeLength });
+                var planar = new MeshData(r.Vertices, mesh.Faces);
+                p.PlanarizedVertices = Flat(r.Vertices);
+                var pl = NetFaces.Planarity(planar);
+                p.PlanarizedPlanarity = pl;
+                p.PlanarizedMaxDeviation = r.FaceDeviations.Length > 0 ? r.FaceDeviations.Max() : 0;
+                p.PlanarizedMeanPlanarity = pl.Length > 0 ? pl.Average() : 0;
+                p.PlanarizeIterations = r.Iterations;
+                double maxMove = 0, sumMove = 0, off = 0;
+                for (int i = 0; i < mesh.VertexCount; i++)
+                {
+                    double d = (r.Vertices[i] - mesh.Vertices[i]).Length;
+                    maxMove = Math.Max(maxMove, d); sumMove += d;
+                    off = Math.Max(off, (_proj.ClosestPointGlobal(r.Vertices[i]).Point - r.Vertices[i]).Length);
+                }
+                p.MaxMove = maxMove; p.MeanMove = mesh.VertexCount > 0 ? sumMove / mesh.VertexCount : 0; p.MaxOffSurface = off;
+            }
+        }
+        catch (Exception ex) { p.Error = ex.Message; }
+        p.Ms = sw.ElapsedMilliseconds;
+        return JsonSerializer.Serialize(p, MiteJson.Default.PanelPayload);
     }
 
     // ---- every lath with one section ---------------------------------------------

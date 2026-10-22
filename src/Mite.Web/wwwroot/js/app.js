@@ -59,7 +59,7 @@ const S = {
   net: 'none', netData: null, seed: -1, seedPoint: null, seedNormal: [0, 0, 1], dir: [1, 0.35, 0],
   loft: null, file: null,
   lath: null, selected: null, lathUtil: null,
-  frame: null, aag: null, kin: null, kit: null, kinTimer: null, drive: 'flatten', picked: [], picking: false,
+  frame: null, aag: null, kin: null, kit: null, panels: null, kinTimer: null, drive: 'flatten', picked: [], picking: false,
   busy: 0, gen: 0, loading: false, layout: 3,
 };
 
@@ -352,6 +352,7 @@ async function traceNet() {
   $('lath-result').classList.add('hidden');
   $('frame-stats').textContent = ''; $('laths-stats').textContent = ''; $('aag-stats').classList.add('hidden');
   v.clearOverlay('supports'); v.clearOverlay('deformed'); v.clearOverlay('sweepAll');
+  S.panels = null; v.clearOverlay('panels'); v.clearOverlay('panelsEdges'); $('panels-stats').classList.add('hidden');
   $('net-note').textContent = NET_NOTES[S.net];
   showComponent('gh-net', GH_NET[S.net]);
   $('famB-row').classList.toggle('hidden', ['geodesic', 'streamMax', 'streamMin', 'isocurves'].includes(S.net));
@@ -397,6 +398,53 @@ async function traceNet() {
     await updateSeedHandle();
     showNetParams();
     if ($('colorutil').checked || $('solid').checked) await runLathAll();
+    if ($('panels').checked && !$('panels-row').classList.contains('hidden')) await runPanels(false);
+    updateRecipe();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Panels: the faces between the laths and their planarity (Net Topology → Mesh,
+// Planarity; Planarize Mesh). Liu, Pottmann, Wallner, Yang & Wang 2006: planar
+// quad meshes are discrete conjugate nets — curvature lines give nearly planar
+// panels, asymptotic directions the skewest ones.
+// ---------------------------------------------------------------------------
+
+const PANEL_RED = 0.01; // Zadravec et al. 2010 colour their faces red from this planarity
+
+function panelsDisabled() { return S.net === 'none' || $('panels-row').classList.contains('hidden'); }
+
+async function runPanels(planarize) {
+  const v = S.viewer;
+  if (!$('panels').checked || panelsDisabled() || !S.netData) {
+    S.panels = null; v.clearOverlay('panels'); v.clearOverlay('panelsEdges'); $('panels-stats').classList.add('hidden');
+    if (!S.lathUtil) showUtilLegend(false);
+    updateRecipe(); return;
+  }
+  const gen = S.gen;
+  await withBusy(planarize ? 'planarizing the panels…' : 'panels…', async () => {
+    const r = await K('panels', { planarize: !!planarize, fixBorder: $('panels-fixborder').checked, iterations: 300, diagonals: !!S.netData.web && $('diagonals').checked });
+    if (gen !== S.gen) return;
+    const el = $('panels-stats'); el.classList.remove('hidden');
+    if (r.error) { el.innerHTML = `<span class="bad">${r.error}</span>`; v.clearOverlay('panels'); v.clearOverlay('panelsEdges'); S.panels = null; return; }
+    S.panels = r; r.planarized = !!planarize && r.planarizedVertices.length > 0;
+    const verts = r.planarized ? r.planarizedVertices : r.vertices;
+    const pl = r.planarized ? r.planarizedPlanarity : r.planarity;
+    v.showFaces('panels', verts, r.faces, pl.map((x) => utilizationColor(x / PANEL_RED)), 0.85);
+    showUtilLegend(true, `panel planarity · 1 = ${PANEL_RED} (visibly skew)`);
+    const mm = (x) => fmt(x * toMetres() * 1000, 1);
+    const n = r.faces.length;
+    const kind = { asymptotic: 'asymptotic net — self-conjugate: the skewest panels a surface has', conjugate: 'curvature lines — a conjugate net: panels planar to second order', geodesicBoth: 'geodesic net — conjugate only by accident', chebyshev: 'Chebyshev net — conjugate only by accident' }[S.net] || '';
+    let s = `<b>${n}</b> panels: ${r.quads} quads · ${r.triangles} triangles · ${r.polygons} polygons · <b>${fmt(100 * r.planarShare, 0)} %</b> planar (≤ ${PANEL_RED}) · planarity mean <b>${fmt(r.meanPlanarity, 4)}</b> max <b>${fmt(r.maxPlanarity, 4)}</b> · deviation up to <b>${mm(r.maxDeviation)} mm</b> · ${r.ms} ms`;
+    if (kind) s += `
+${kind}`;
+    if (r.planarized) {
+      const flat = r.planarizedMaxDeviation * toMetres() * 1000 < 1;
+      s += `
+planarized (${r.planarizeIterations} iterations, ${r.fixedNodes ? `${r.fixedNodes} border nodes held` : 'every node free'}): deviation <b>${mm(r.maxDeviation)} → ${mm(r.planarizedMaxDeviation)} mm</b> · nodes moved <b>${mm(r.meanMove)} mm</b> mean, <b>${mm(r.maxMove)} mm</b> max · up to <b>${mm(r.maxOffSurface)} mm</b> off the surface` +
+        (flat ? ' <span class="ok">✓ every panel flat</span>' : ` <span class="bad">— not flat after ${r.planarizeIterations} iterations: these panels only flatten by leaving the surface${r.fixedNodes ? ', and with the border held there is no planar solution at all' : ''} (Liu et al. 2006 §2: planar quads need a conjugate net)</span>`);
+    }
+    el.innerHTML = s;
     updateRecipe();
   });
 }
@@ -851,6 +899,7 @@ function updateRecipe() {
     if ((S.net === 'geodesic' || S.net === 'geodesicBoth') && o.fromBorder) p += `, FromBorder = True, BorderAngle = ${o.borderAngle}`;
     lines.push(p);
   }
+  if (S.panels && !S.panels.error) lines.push(`Net Topology (A, B from the net) → Mesh, Planarity, Deviation${S.panels.planarized ? ` → Planarize Mesh (Iterations = 300${$('panels-fixborder').checked ? ', Fixed = the border nodes' : ''})` : ''}`);
   if (S.lathUtil || S.lath) {
     const o = lathOpts();
     lines.push(`every lath (model units, span ${$('span').value} m): Lath Analysis / Lath Sweep: Width = ${fmt(o.width, 4)} (${$('width').value} mm), Thickness = ${fmt(o.thickness, 4)} (${$('thick').value} mm), Upright = ${o.upright} (G flat), MaxStrain = ${o.maxStrain}, Shape = ${o.section}`);
@@ -975,6 +1024,9 @@ async function main() {
   $('crossings').addEventListener('change', () => {
     if (S.netData?.crossings && $('crossings').checked) S.viewer.showPoints('crossings', S.netData.crossings.points, S.viewer.ink(), 3.5); else S.viewer.clearOverlay('crossings');
   });
+  $('panels').addEventListener('change', () => runPanels(false));
+  $('panels-fixborder').addEventListener('change', () => { if (S.panels?.planarized) runPanels(true); });
+  $('planarize').addEventListener('click', () => { $('panels').checked = true; runPanels(true); });
   $('famA').addEventListener('change', () => S.viewer.setFamilyVisible('A', $('famA').checked));
   $('famB').addEventListener('change', () => S.viewer.setFamilyVisible('B', $('famB').checked));
 

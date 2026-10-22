@@ -111,6 +111,30 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   check(/seed/.test(fill.legend), 'marker legend names the seed');
   await page.click("#layouts [data-layout='3']"); await idle(180000);
 
+  // 5b. panels: the curvature-line net of the catenoid (meridians and parallels — a conjugate net on a
+  //     surface of revolution) gives planar panels; the asymptotic web the skewest ones (Liu et al. 2006);
+  //     planarizing the asymptotic panels makes them flat only by leaving the surface
+  await page.click('#nets [data-net=conjugate]'); await idle(180000);
+  await page.check('#panels'); await idle(180000);
+  const pc = await page.evaluate(() => window.__mite.panels);
+  check(pc && !pc.error && pc.quads > 50 && pc.meanPlanarity < 0.004 && pc.planarShare > 0.9, `curvature-line panels are planar (${pc?.error || `${pc?.quads} quads, mean planarity ${pc?.meanPlanarity?.toExponential(1)}, ${Math.round(100 * (pc?.planarShare || 0))} % ≤ 0.01`})`);
+  const panelMesh = await page.evaluate(() => window.__mite.viewer.overlayGroup.children.find((c) => c.userData.tag === 'panels')?.geometry.index.count || 0);
+  check(panelMesh >= 3 * (pc?.quads || 0), `panels drawn in the viewport (${panelMesh} indices)`);
+  await page.click('#planarize'); await idle(180000);
+  const pq = await page.evaluate(() => window.__mite.panels);
+  const size = await page.evaluate(() => window.__mite.size);
+  check(pq && pq.planarized && pq.planarizedMaxDeviation < 0.2 * pq.maxDeviation && pq.maxMove < 0.01 * size, `curvature-line panels planarize almost in place (deviation ${pq?.maxDeviation?.toExponential(1)} → ${pq?.planarizedMaxDeviation?.toExponential(1)}, nodes moved up to ${pq?.maxMove?.toExponential(1)}, ${pq?.planarizeIterations} iterations)`);
+  await page.click('#nets [data-net=asymptotic]'); await idle(180000);
+  const pa = await page.evaluate(() => window.__mite.panels);
+  check(pa && !pa.error && pa.quads > 50 && pa.meanPlanarity > 4 * (pc?.meanPlanarity || 0) && pa.meanPlanarity > 0.004, `asymptotic panels are skew (mean planarity ${pa?.meanPlanarity?.toExponential(1)} vs ${pc?.meanPlanarity?.toExponential(1)} for curvature lines)`);
+  await page.click('#planarize'); await idle(180000);
+  const pp = await page.evaluate(() => window.__mite.panels);
+  check(pp && pp.planarized && pp.maxMove > 20 * (pq?.maxMove || 0) && pp.maxOffSurface > 10 * (pq?.maxOffSurface || 0), `asymptotic panels flatten only by leaving the surface (nodes moved up to ${pp?.maxMove?.toExponential(1)} vs ${pq?.maxMove?.toExponential(1)}; deviation ${pp?.maxDeviation?.toExponential(1)} → ${pp?.planarizedMaxDeviation?.toExponential(1)} after ${pp?.planarizeIterations} iterations)`);
+  const recipe = await page.$eval('#recipe', (e) => e.textContent);
+  check(/Net Topology .*Planarize Mesh/.test(recipe), 'recipe names Net Topology → Planarize Mesh');
+  await page.uncheck('#panels'); await idle(60000);
+  check(await page.evaluate(() => !window.__mite.panels && !window.__mite.viewer.overlayGroup.children.some((c) => c.userData.tag === 'panels')), 'panels clear when switched off');
+
   // 6. one section for every lath; the section choice reaches the kernel
   await page.check('#solid'); await idle(180000);
   const rect = await page.evaluate(() => ({ faces: window.__mite.viewer.overlayGroup.children.find((c) => c.userData.tag === 'sweepAll')?.geometry.index.count || 0, util: window.__mite.lathUtil?.length }));

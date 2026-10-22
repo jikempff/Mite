@@ -487,6 +487,20 @@ remains the self-test review page.
 - [ ] App: lath segmentation and a 3-D joint view (the Kit's slots and holes
       are on the strips only).
 - [ ] App: planarization and Chebyshev angle map; isocurve labels.
+- [ ] App: lath segmentation, joints and nesting sheet (material %).
+- [x] App: planarization — 2026-10-22 (session 1, C with B): a *panels ·
+      planarity* switch on every two-family net (Net Topology → Mesh) colours
+      the panels by Zadravec's δ_PQ,n (red from 0.01) and *planarize* runs
+      Planarize Mesh on the panel mesh (border held or free) and reports the
+      deviation before / after, how far the nodes moved and left the surface.
+      Measured on the catenoid: curvature-line panels mean δ 5.1e-4 (100 %
+      ≤ 0.01), planarized almost in place (1.5 → 0.1 mm, nodes ≤ 3 mm);
+      asymptotic web mean δ 6.8e-2 (0 % ≤ 0.01), not flat after 300
+      iterations with nodes moved up to 0.9 m — Liu et al. 2006's point made
+      visible. `tools/web-smoke.js` checks both (33 PASS).
+      Open: the Chebyshev angle map (colour the Chebyshev nodes by shear
+      angle with the Hazzidakis check 2π − Σα = ∫∫K per quad; the 10-19
+      compass bundle's `Report` carries the angles) and isocurve labels.
 - [x] App: catalogue extended with n-fold Enneper, the bilinear ruled patch,
       Schwarz D and gyroid (nodal form → marching tetrahedra → relaxation);
       Lath block section choice (rectangle / round); favicon, touch icon and
@@ -866,6 +880,60 @@ remains the self-test review page.
       meshes with planar faces); Pottmann, Asperl, Hofer, Kilian —
       Architectural Geometry (2007) for the whole vocabulary.
 - [x] Chebyshev nets and elastic gridshells: Masson 2017 (Existence and
+- [x] Conjugate and planar-quad nets, first part — 2026-10-22 (session 1):
+      `Fabrication/NetFaces` traces the panels of any net (the faces of the
+      net graph: members sorted about the node normal by their quarter-point
+      direction so tangentially touching laths order correctly, next edge =
+      clockwise from the reverse edge, clockwise cycles = outer loops and
+      holes dropped, tails out, closed laths' seams fused, duplicate members
+      along one path dropped) and measures each panel: the distance between a
+      quad's diagonals over the mean diagonal (Zadravec, Schiftner & Wallner
+      2010, §6; red above 0.01) and the largest corner distance from the
+      plane (the Planarize Mesh measure). Read: Liu, Pottmann, Wallner, Yang &
+      Wang 2006 (§1.1, §2 "quad meshes with planar faces may be seen as a
+      discrete version of so-called conjugate curve networks", Sauer 1970;
+      §2.2 the angle-sum planarity constraint; §4 curvature lines the main
+      conjugate net, asymptotic directions "degenerate"); Zadravec et al. 2010
+      (§1 planarization "in general succeeds if it follows a network of
+      conjugate curves", §3 the conjugate directions lie between the
+      asymptotic ones, §6 δ_PQ,n and the proximity term); Pottmann, Liu,
+      Wallner, Bobenko & Wang 2007 §3.4 (asymptotic directions "cause heavy
+      distortions"). Derived: the corners of a panel with step h close up to
+      (p₀₀ − p₁₀ − p₀₁ + p₁₁)·n = h²·II(t₁,t₂) + O(h³), so the diagonal
+      distance is ½h²|II(t₁,t₂)| + O(h³) — zero at second order on a conjugate
+      net, maximal on an asymptotic one. Exact tests (`NetFacesTests`, 7): a
+      lifted-corner quad's diagonal distance δ/(2√(1 + δ²/2)); the x / y
+      grid of z = x² − y² (a translation surface) planar to 1e-12, every
+      panel counter-clockwise, areas summing to the patch within 1 %; the
+      catenoid's meridians × closed parallels planar to 1e-12 with the seam
+      panels present (Euler 0 on the annulus); the hyperboloid's rulings:
+      diagonal distance within 0.2 % of ½h² at the throat and δ_PQ,n
+      5.9e-2 → 2.9e-2 (ratio 2.02) when the ruling count doubles, its
+      meridians × parallels 4e-16; exact RK4-traced curvature lines of a
+      cubic graph: δ 8.2e-5 → 1.5e-5 (ratio 5.4, ≥ 4 = second order) against
+      asymptotic lines 7.7e-2 → 3.8e-2 (ratio 2.0), the central panels at
+      0.98–0.99 of the predicted h²; a traced classic saddle net with
+      T-junctions: V − E + F + lenses = 1, pentagons at the T-junctions, every
+      panel along the mesh normal; Planarize Mesh leaves the curvature-line
+      mesh in place (< 1e-9) and flattens the ruling mesh only by moving nodes
+      0.4 (off the hyperboloid by 0.83), and not at all with the outer ring
+      held (8.86e-3 → 8.82e-3). Findings: (1) NetTopology's member ends are
+      snapped to the crossing nodes, half the crossing gap off the lath, so a
+      closed lath's seam has to be recognised within a quarter segment, not at
+      1e-6; (2) the tracer leaves two laths running together for a piece where
+      curves merge — identical members between the same nodes — which no face
+      tracer can order: they are deduplicated; (3) the simple projection
+      planarizer converges slowly (2000 iterations to 1e-5 on 912 skew quads,
+      300 iterations take the catenoid's curvature-line panels only from
+      1.5 to 0.1 mm) and drifts the mesh when nothing is held.
+      Open: a Newton / Gauss–Newton planarizer with Liu's fairness and
+      proximity terms (a few iterations instead of thousands, the mesh kept
+      near the surface); conical / circular meshes from curvature-line nets
+      (offset meshes for multi-layer structures, Pottmann et al. 2007 §4);
+      panels of the Asymptotic Web's own quads are its `Quads` already — the
+      web's planarity could be reported there; a `Panels` output on Mite Net
+      once that lands.
+- [ ] Chebyshev nets and elastic gridshells: Masson 2017 (Existence and
       construction of Chebyshev nets and application to gridshells);
       Garg et al. 2014 (Wire mesh design); Baek, Reis 2019 (Rigidity of
       hemispherical elastic gridshells under point load indentation);
@@ -1539,6 +1607,11 @@ Open
       masses, reset to the kinetic-energy peak, half-step start, 3–6 × fewer
       steps at the same equilibria; elastic laths (bending stiffness, cut
       lengths) checked against the Euler elastica; exact FDM tests.
+- [x] 2026-10-22 (session 1, C/B with D): panels of a net and their planarity
+      — `NetFaces` (faces of the net graph, Zadravec's δ_PQ,n and the plane
+      deviation), Net Topology `Mesh` / `Planarity` / `Deviation` outputs, the
+      web app's panels switch and planarize button, 7 exact tests, two bench
+      self-tests (77 PASS), web smoke 33 PASS.
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

@@ -655,8 +655,14 @@ internal static class Tests
                     new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1, 0, 0), new Rhino.Geometry.Point3d(1, 4, 0)),
                     new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(2, 0, 0), new Rhino.Geometry.Point3d(2, 4, 0)));
             },
-            c => Expect(Points(c, 0).Count == 4 && CurveCount(c, 2) == 12,
-                $"4 nodes / 12 members, got {Points(c, 0).Count} / {CurveCount(c, 2)}"));
+            c =>
+            {
+                // the four laths bound one planar panel: a quad with planarity 0
+                var panels = Meshes(c, 9).FirstOrDefault();
+                var pl = Numbers(c, 10);
+                return Expect(Points(c, 0).Count == 4 && CurveCount(c, 2) == 12 && panels != null && panels.Faces.Count == 1 && panels.Faces[0].IsQuad && pl.Count == 1 && pl[0] < 1e-12,
+                    $"4 nodes / 12 members / 1 planar quad panel, got {Points(c, 0).Count} / {CurveCount(c, 2)} / {panels?.Faces.Count} faces, planarity {(pl.Count > 0 ? pl[0] : double.NaN)}");
+            });
 
         // Net Trim: three asymptotic lines x − y = c of the saddle, cookie-cut by a plan circle of
         // radius 0.6 drawn above the surface and projected down; each line keeps one piece whose

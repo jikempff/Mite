@@ -358,6 +358,24 @@ var sw = Stopwatch.StartNew();
     foreach (var x in xs) { var ta = NetIntersections.TangentAt(famA, x, false); var tb = NetIntersections.TangentAt(famB, x, true); angles.Add(Math.Acos(Math.Abs(Vec3d.Dot(ta, tb))) * 180 / Math.PI); }
     scenes["joints"] = new { a = famA.Select(l => Line(l, 3)).ToArray(), b = famB.Select(l => Line(l, 3)).ToArray(), nodes = xs.Select(x => P(x.Point)).ToArray() };
     numbers["joints"] = new { crossings = xs.Count, contacts = xsAll.Count, tJunctions = xsAll.Count(x => x.IsTJunction), maxGap = R3(xs.Max(x => x.Gap)), minAngle = R3(angles.Min()), maxAngle = R3(angles.Max()), members = topo.Members.Count, nodes = topo.Nodes.Length, valence4 = topo.Valence.Count(vv => vv == 4), tails = topo.Members.Count(m => m.NodeStart < 0 || m.NodeEnd < 0), boundaryEnds = endsA.boundary };
+    // Panels of the nets (NetFaces): the asymptotic saddle net is skew, the curvature-line net nearly planar;
+    // on the hyperboloid the meridian / parallel panels are planar exactly and the ruling panels' planarity ∝ h
+    {
+        object Census(NetFaces.Result r) => new { faces = r.Faces.Count, quads = r.Quads, triangles = r.Triangles, polygons = r.Polygons, lenses = r.Lenses, euler = r.NodeCount - r.EdgeCount + r.Faces.Count + r.Lenses, loops = r.OuterLoops, meanPlanarity = r.MeanPlanarity, maxPlanarity = r.MaxPlanarity, maxDeviation = r.MaxDeviation };
+        var fAsym = NetFaces.Build(topo, saddle);
+        var conjTopo = NetTopology.Build(conj.FamilyA, conj.FamilyB, NetIntersections.FindAll(conj.FamilyA, conj.FamilyB));
+        var fConj = NetFaces.Build(conjTopo, saddle);
+        Vec3d[] Samp(Func<double, Vec3d> f, double t0, double t1, int n) { var pts = new Vec3d[n + 1]; for (int i = 0; i <= n; i++) pts[i] = f(t0 + (t1 - t0) * i / n); return pts; }
+        List<Vec3d[]> Rulings(int n, int sign) { var list = new List<Vec3d[]>(); for (int i = 0; i < n; i++) { double th = 2 * Math.PI * i / n; list.Add(Samp(z => new Vec3d(Math.Cos(th) - sign * z * Math.Sin(th), Math.Sin(th) + sign * z * Math.Cos(th), z), -0.8, 0.8, 2)); } return list; }
+        var hypRef = TestMeshes.CreateHyperboloid(1, 1, 0.8, 64, 32);
+        NetFaces.Result HypFaces(List<Vec3d[]> fa, List<Vec3d[]> fb) => NetFaces.Build(NetTopology.Build(fa, fb, NetIntersections.FindAll(fa, fb)), hypRef);
+        var r24 = HypFaces(Rulings(24, 1), Rulings(24, -1)); var r48 = HypFaces(Rulings(48, 1), Rulings(48, -1));
+        var mer = new List<Vec3d[]>(); var par = new List<Vec3d[]>();
+        for (int i = 0; i < 24; i++) { double th = 2 * Math.PI * i / 24; mer.Add(Samp(z => new Vec3d(Math.Sqrt(1 + z * z) * Math.Cos(th), Math.Sqrt(1 + z * z) * Math.Sin(th), z), -0.8, 0.8, 40)); }
+        for (int j = 0; j < 7; j++) { double z = -0.8 + 1.6 * j / 6, rr = Math.Sqrt(1 + z * z); par.Add(Samp(tt => new Vec3d(rr * Math.Cos(tt), rr * Math.Sin(tt), z), 0, 2 * Math.PI, 96)); }
+        var lines = HypFaces(mer, par);
+        numbers["panels"] = new { asym = Census(fAsym), conj = Census(fConj), rulings24 = Census(r24), rulings48 = Census(r48), curvatureLines = Census(lines) };
+    }
     // lath sweep of one asymptotic curve, upright
     var longest = famA.OrderByDescending(ArcLen).First();
     var swp = StripSweep.Sweep(proj, longest, new LathProfile(0.08, 0.012, true))!.Value;
