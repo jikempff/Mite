@@ -2195,7 +2195,7 @@
   "file": "PlanarizationComponent.cs",
   "name": "Planarize Mesh",
   "nick": "Planarize",
-  "desc": "Iterative quad planarization by projecting vertices onto per-face best-fit planes. Set Strength to 0 to only measure planarity without moving anything.",
+  "desc": "Planarizes the faces of a quad-dominant mesh. Method 1 (default) is the guided projection of Tang et al. 2014 with the fairness and closeness terms of Liu et al. 2006 and Zadravec et al. 2010: planar in about ten iterations, nodes held on the Reference surface (the input mesh when none is given) and anchored where they started. Method 0 is the old projection onto per-face best-fit planes. Set Strength to 0 to only measure planarity without moving anything.",
   "tab": "Form Finding",
   "icon": "Planarization",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDE5",
@@ -2212,7 +2212,7 @@
     "name": "Iterations",
     "nick": "I",
     "type": "Integer",
-    "desc": "Max iterations (default 100)",
+    "desc": "Max iterations (default 100; the optimisation usually needs about ten)",
     "access": "item",
     "default": "100"
    },
@@ -2237,7 +2237,40 @@
     "name": "Strength",
     "nick": "S",
     "type": "Number",
-    "desc": "Step strength per iteration 0..1 (default 1; 0 = measure only)",
+    "desc": "Method 0: step strength per iteration 0..1 (default 1). Either method: 0 = measure only",
+    "access": "item",
+    "default": "1.0"
+   },
+   {
+    "name": "Method",
+    "nick": "Mt",
+    "type": "Integer",
+    "desc": "0 = projection onto per-face best-fit planes (slow, drifts off the surface); 1 = guided projection: Gauss–Newton on n·(vi − vj) = 0 with auxiliary face normals, soft fairness, closeness to the Reference and an anchor at the start positions, weights halved every iteration (default)",
+    "access": "item",
+    "default": "1"
+   },
+   {
+    "name": "Reference",
+    "nick": "R",
+    "type": "Mesh",
+    "desc": "Design surface the nodes are kept on (Method 1); the input mesh itself when empty",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Fairness",
+    "nick": "Fa",
+    "type": "Number",
+    "desc": "Method 1: weight of the fairness term — second differences along the mesh polylines, relative to the input, so laths keep their shape and quads do not crumple (default 1; lower it to let a noisy input straighten)",
+    "access": "item",
+    "default": "1.0"
+   },
+   {
+    "name": "Closeness",
+    "nick": "Cl",
+    "type": "Number",
+    "desc": "Method 1: weight of the closeness to the Reference (default 1; 0 lets the mesh leave the surface freely)",
     "access": "item",
     "default": "1.0"
    }
@@ -2264,6 +2297,22 @@
     "nick": "I",
     "type": "Integer",
     "desc": "Iterations performed",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Moved",
+    "nick": "Mv",
+    "type": "Number",
+    "desc": "Largest node displacement from the input, model units",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Distance",
+    "nick": "Ds",
+    "type": "Number",
+    "desc": "Largest distance of a free node from the Reference surface after planarizing (Method 1)",
     "access": "item",
     "default": null
    }

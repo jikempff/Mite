@@ -246,6 +246,14 @@ metre-scale models — scale them up ~1000x if you model in millimetres.
 
 ## Form finding
 
+- **Planarize Mesh** makes the faces of a quad-dominant mesh planar. Wire the
+  design surface into `R` so the nodes stay on it (without it the input mesh is
+  the reference) and read `Mv` / `Ds`: how far nodes moved and how far off the
+  surface they are. A conjugate or curvature-line net (Conjugate Net → Net
+  Topology → `Me`) planarizes in about ten iterations and stays on the surface;
+  an asymptotic net cannot — the component warns that no planar mesh exists
+  nearby, or reports a planar mesh well off the surface. `Mt` 0 is the old
+  per-face projection, kept for comparison.
 - **Minimal Surface** and **Force Density Method** fix the mesh boundary when
   `F` is left empty. Force densities `Q` follow the `E` (Edges) output order.
 - **Dynamic Relaxation** hangs a net under `G` (gravity) or point loads, or
