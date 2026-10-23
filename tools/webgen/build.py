@@ -16,7 +16,7 @@ TAB_BLURB = {
     "Kinetics": "Nets that move: scissor-jointed asymptotic grids as mechanisms.",
     "Util": "Mesh intake, projection and colouring helpers.",
 }
-COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics",
+COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Test Shape",
               "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
               "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
               "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
@@ -74,11 +74,21 @@ for tab in TAB_ORDER:
                     f'<label><input type="radio" name="sh-{slug(n)}" value="{key}" {"checked" if k == 0 else ""}> {lbl}</label>'
                     for k, (key, lbl) in enumerate(note.get("shapes", []))) + '<span class="ctl-l" style="flex-basis:100%"></span>' if note.get("shapes") else "") + \
                     f'<label style="flex-basis:100%"><span class="ctl-l">{esc(note["slider"])}</span><input type="range" min="0" max="1" step="0.001" value="1" style="flex:1"></label><span class="fold-label" style="flex-basis:100%"></span></div>'
-            if demo == "torusK":
+            if demo == "curv":
+                # curvature against the exact truth: shape × quantity × (measured | exact | error)
                 mode = note.get("demoMode", "K")
-                controls = '<div class="demo-ctl"><span class="ctl-l">show</span>' + "".join(
+                shape = note.get("demoShape", "torus")
+                shapes = [("torus", "torus"), ("sphere", "sphere"), ("ellipsoid", "ellipsoid"), ("hyperboloid", "hyperboloid"),
+                          ("catenoid", "catenoid"), ("monkey", "monkey saddle"), ("cone", "cone"), ("wave", "wave")]
+                controls = ('<div class="demo-ctl" style="max-width:calc(100% - 160px)"><span class="ctl-l">shape</span>' + "".join(
+                    f'<label><input type="radio" name="sh-{slug(n)}" value="{key}" {"checked" if key == shape else ""}> {lbl}</label>'
+                    for key, lbl in shapes) +
+                    '<span class="ctl-l" style="flex-basis:100%"></span><span class="ctl-l">show</span>' + "".join(
                     f'<label><input type="radio" name="tk-{slug(n)}" value="{m}" {"checked" if m == mode else ""}> {lbl}</label>'
-                    for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2")]) + '</div>'
+                    for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2"), ("um", "|k1 − k2|")]) +
+                    '<span class="ctl-l">·</span>' + "".join(
+                    f'<label><input type="radio" name="vw-{slug(n)}" value="{m}" {"checked" if m == note.get("demoView", "measured") else ""}> {lbl}</label>'
+                    for m, lbl in [("measured", "measured"), ("truth", "exact"), ("error", "|error|")]) + '</div>')
             hint = "drag to rotate · scroll to zoom" if kind == "3d" else ""
             demo_html = f'<div class="demo{" tall" if note.get("tall") else ""}" data-demo="{demo}" data-kind="{kind}" data-id="{slug(n)}">{controls}<canvas></canvas><div class="demo-legend" id="lg-{slug(n)}"></div><div class="demo-hint">{hint}</div></div>'
         checks_html = ""

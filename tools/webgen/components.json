@@ -2582,6 +2582,147 @@
   ]
  },
  {
+  "file": "TestShapeComponent.cs",
+  "name": "Test Shape",
+  "nick": "Shape",
+  "desc": "Builds one of Mite's analytic test surfaces (sphere, torus, ellipsoid, hyperboloid, catenoid, Enneper, monkey saddle, cone, vault, annulus, wave, Schwarz D, gyroid …) as a mesh together with the exact Gaussian, mean and principal curvatures, principal and asymptotic directions at every vertex, from the closed-form parametrisation — the ground truth to wire next to Principal / Gaussian / Mean Curvature and Umbilics. The mesh is the one the bench page and the test suite measure.",
+  "tab": "Curvature",
+  "icon": "TestShape",
+  "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCE21",
+  "inputs": [
+   {
+    "name": "Name",
+    "nick": "N",
+    "type": "Text",
+    "desc": "Shape: saddle, sphere, torus, hyperboloid, monkey, ellipsoid, catenoid, enneper, vault, cone, dome, annulus, wave, enneper3, ruled, schwarzd, gyroid. Parameters P1–P3 (0 = default): saddle size, a, b (z = a x² − b y²); sphere r; dome r, half-angle°; ellipsoid a, b, c; torus R, r; hyperboloid a, c, height; catenoid c, height; enneper radius; vault R, width, length; cone r, height, top r; annulus r in, r out, k; wave size, amplitude, frequency; monkey size, k; enneper3 folds, radius; ruled size, twist, skew; schwarzd / gyroid extent (× π), cells, relaxation iterations (< 0: none)",
+    "access": "item",
+    "default": "torus"
+   },
+   {
+    "name": "P1",
+    "nick": "P1",
+    "type": "Number",
+    "desc": "First shape parameter (0 = default)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "P2",
+    "nick": "P2",
+    "type": "Number",
+    "desc": "Second shape parameter (0 = default)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "P3",
+    "nick": "P3",
+    "type": "Number",
+    "desc": "Third shape parameter (0 = default)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Resolution",
+    "nick": "R",
+    "type": "Integer",
+    "desc": "Segments along the longer direction (default 40)",
+    "access": "item",
+    "default": "40"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "The test surface as a triangle mesh (vertex normals along x_u × x_v)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "K",
+    "nick": "K",
+    "type": "Number",
+    "desc": "Exact Gaussian curvature per vertex",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "H",
+    "nick": "H",
+    "type": "Number",
+    "desc": "Exact mean curvature per vertex, in Mite's sign (a sphere with outward normals: +1/r)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "K1",
+    "nick": "K1",
+    "type": "Number",
+    "desc": "Exact larger principal curvature per vertex",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "K2",
+    "nick": "K2",
+    "type": "Number",
+    "desc": "Exact smaller principal curvature per vertex",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "D1",
+    "nick": "D1",
+    "type": "Vector",
+    "desc": "Exact unit principal direction of K1 (a line: the sign is arbitrary)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "D2",
+    "nick": "D2",
+    "type": "Vector",
+    "desc": "Exact unit principal direction of K2",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "A1",
+    "nick": "A1",
+    "type": "Vector",
+    "desc": "Exact unit asymptotic direction where K ≤ 0 (zero vector where K > 0)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "A2",
+    "nick": "A2",
+    "type": "Vector",
+    "desc": "The other exact asymptotic direction (equal to A1 where K = 0)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "UV",
+    "nick": "UV",
+    "type": "Point",
+    "desc": "Chart parameters (u, v, 0) of every vertex (empty for the implicit shapes)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "Rp",
+    "type": "Text",
+    "desc": "What was built and how exact the values are",
+    "access": "item",
+    "default": null
+   }
+  ]
+ },
+ {
   "file": "NetKineticsComponent.cs",
   "name": "Net Kinetics",
   "nick": "Kinetics",

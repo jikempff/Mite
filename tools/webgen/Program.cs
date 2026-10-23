@@ -84,11 +84,6 @@ var sw = Stopwatch.StartNew();
         rows.Add(new { phi = R3(phi * 180 / Math.PI), K = R3(K[vi]), Kt = R3(Kt), H = R3(H[vi]), Ht = R3(Ht), k1 = R3(pc.K1[vi]), k2 = R3(pc.K2[vi]) });
     }
     numbers["torusCurvature"] = rows;
-    // per-vertex K for colour map scene (torus 64x32 = 2048 verts, quads)
-    var verts = torus.Vertices.Select(P).ToArray();
-    var faces = new List<int[]>();
-    for (int i = 0; i < 64; i++) for (int j = 0; j < 32; j++) { int a = i * 32 + j, b = ((i + 1) % 64) * 32 + j, c = ((i + 1) % 64) * 32 + (j + 1) % 32, d = i * 32 + (j + 1) % 32; faces.Add(new[] { a, b, c, d }); }
-    scenes["torusK"] = new { verts, faces = faces.ToArray(), values = K.Select(R3).ToArray(), valuesH = H.Select(R3).ToArray() };
     // isocurves K = 0
     var iso = MeshIsocurves.Compute(torus, K, new[] { 0.0 })[0];
     scenes["torusIso"] = new { wire = TorusWire(3, 1, 64, 32, 4, 4), iso = iso.Select(l => Line(l, 2)).ToArray() };
@@ -109,6 +104,97 @@ var sw = Stopwatch.StartNew();
     var laRoundUp = LathAnalysis.Analyze(proj, sl1[0], new LathAnalysis.Options { Profile = LathProfile.Round(0.01), MaxStrain = 0.005, Upright = true });
     var sq = new LathProfile(0.02, 0.02).SectionProperties();
     numbers["lathRound"] = new { util = R3(laRound.MaxUtilization), utilUpright = R3(laRoundUp.MaxUtilization), theoryUtil = 1.0, squareJ = R3(sq.J / Math.Pow(0.02, 4) * 1000) / 1000, squareTwist = R3(sq.TwistLength / 0.02) };
+}
+
+// ---------- Curvature against the exact truth on the analytic catalogue (AnalyticSurface) ----------
+{
+    // Every shape is built from its closed-form parametrisation, so K, H, k1, k2 are known at every vertex
+    // (do Carmo §3-3); the discrete estimators are measured against them over the interior vertices: mean
+    // and largest absolute error, relative to the shape's largest curvature, and the mean error at half the
+    // resolution for the convergence (the protocol of Magid, Soldea & Rivlin 2007).
+    var catalogue = new (string key, string label, double p1, double p2, double p3, int res)[] {
+        ("torus", "torus R = 3, r = 1", 0, 0, 0, 48),
+        ("sphere", "unit sphere", 0, 0, 0, 36),
+        ("ellipsoid", "ellipsoid 1.5 × 1 × 0.7 (four umbilics)", 0, 0, 0, 36),
+        ("hyperboloid", "hyperboloid x² + y² − z² = 1", 0, 0, 0, 36),
+        ("catenoid", "catenoid (H = 0)", 0, 0, 0, 36),
+        ("monkey", "monkey saddle z = x³ − 3xy²", 0, 0, 0, 36),
+        ("cone", "cone (K = 0)", 0, 0, 0, 36),
+        ("wave", "wave z = 0.3 sin 2x cos 2y", 0, 0, 0, 36),
+    };
+    var truthRows = new List<object>();
+    foreach (var (key, label, p1, p2, p3, res) in catalogue)
+    {
+        var s = AnalyticShapes.Surface(key, p1, p2, p3);
+        (double[] mK, double[] mH, double[] m1, double[] m2, double maxK, double maxk, int n) Measure(int r, out MeshData mesh, out int[][] quads, out int[] border, out double[] K, out double[] H, out double[] k1, out double[] k2, out double[] Kt, out double[] Ht)
+        {
+            mesh = s.Mesh(r, out var uv, out quads);
+            var truth = s.AtVertices(uv);
+            K = GaussianCurvature.Compute(mesh); H = MeanCurvature.Compute(mesh).Values; var pc = PrincipalCurvature.Compute(mesh); k1 = pc.K1; k2 = pc.K2;
+            var bnd = mesh.BuildBoundaryVertexFlags();
+            Kt = truth.Select(t => t.Degenerate ? 0 : t.K).ToArray(); Ht = truth.Select(t => t.Degenerate ? 0 : t.H).ToArray();
+            border = Enumerable.Range(0, mesh.VertexCount).Where(i => bnd[i] || truth[i].Degenerate).ToArray();
+            double mK = 0, mH = 0, m1 = 0, m2 = 0, xK = 0, xH = 0, x1 = 0, x2 = 0, maxK = 0, maxk = 0; int n = 0;
+            for (int i = 0; i < mesh.VertexCount; i++)
+            {
+                if (bnd[i] || truth[i].Degenerate) continue;
+                n++; var t = truth[i];
+                maxK = Math.Max(maxK, Math.Abs(t.K)); maxk = Math.Max(maxk, Math.Max(Math.Abs(t.K1), Math.Abs(t.K2)));
+                double eK = Math.Abs(K[i] - t.K), eH = Math.Abs(H[i] - t.H), e1 = Math.Abs(k1[i] - t.K1), e2 = Math.Abs(k2[i] - t.K2);
+                mK += eK; mH += eH; m1 += e1; m2 += e2; xK = Math.Max(xK, eK); xH = Math.Max(xH, eH); x1 = Math.Max(x1, e1); x2 = Math.Max(x2, e2);
+            }
+            return (new[] { mK / n, xK }, new[] { mH / n, xH }, new[] { m1 / n, x1 }, new[] { m2 / n, x2 }, maxK, maxk, n);
+        }
+        var full = Measure(res, out var mesh, out var quads, out var border, out var K, out var H, out var k1, out var k2, out var Kt, out var Ht);
+        var half = Measure(res / 2, out _, out _, out _, out _, out _, out _, out _, out _, out _);
+        double scaleK = Math.Max(full.maxK, full.maxk * full.maxk), scalek = full.maxk;
+        object Err(double[] e, double scale) => new { mean = e[0], max = e[1], meanRel = R3(100 * e[0] / scale), maxRel = R3(100 * e[1] / scale) };
+        truthRows.Add(new
+        {
+            key, label, resolution = res, vertices = mesh.VertexCount, interior = full.n, largestK = R3(full.maxK), largestPrincipal = R3(full.maxk),
+            K = Err(full.mK, scaleK), H = Err(full.mH, scalek), k1 = Err(full.m1, scalek), k2 = Err(full.m2, scalek),
+            halfRes = res / 2, halfK = R3(100 * half.mK[0] / scaleK), halfH = R3(100 * half.mH[0] / scalek), halfK1 = R3(100 * half.m1[0] / scalek), halfK2 = R3(100 * half.m2[0] / scalek),
+            developable = key == "cone",
+        });
+        scenes["curv_" + key] = new
+        {
+            label, verts = mesh.Vertices.Select(P).ToArray(), faces = quads, b = border,
+            K = K.Select(R3).ToArray(), H = H.Select(R3).ToArray(), k1 = k1.Select(R3).ToArray(), k2 = k2.Select(R3).ToArray(),
+            Kt = Kt.Select(R3).ToArray(), Ht = Ht.Select(R3).ToArray(),
+        };
+    }
+    numbers["curvTruth"] = truthRows;
+
+    // the wave's saddle points: a valence-4 star whose edges follow the asymptotic lines is flat as a polyhedron,
+    // so Gauss–Bonnet reads K = 0 there against −1.44 at any resolution; the Rusinkiewicz tensor still sees it
+    {
+        var s = AnalyticShapes.Surface("wave");
+        var m = s.Mesh(48, out var uv, out _); var tr = s.AtVertices(uv);
+        var K = GaussianCurvature.Compute(m); var pc = PrincipalCurvature.Compute(m); var bnd = m.BuildBoundaryVertexFlags();
+        var val = new int[m.VertexCount]; foreach (var f in m.Faces) foreach (int i in f) val[i]++;
+        int worst = Enumerable.Range(0, m.VertexCount).Where(i => !bnd[i]).OrderByDescending(i => Math.Abs(K[i] - tr[i].K)).First();
+        numbers["flatStar"] = new { K = K[worst], truth = R3(tr[worst].K), valence = val[worst], tensor = R3(pc.K1[worst] * pc.K2[worst]), point = P(m.Vertices[worst]) };
+    }
+
+    // the ellipsoid's four umbilics (a > b > c): (±a √((a² − b²)/(a² − c²)), 0, ±c √((b² − c²)/(a² − c²)))
+    {
+        double a = 1.5, b = 1.0, c = 0.7;
+        double ux = a * Math.Sqrt((a * a - b * b) / (a * a - c * c)), uz = c * Math.Sqrt((b * b - c * c) / (a * a - c * c));
+        var m = AnalyticShapes.Build("ellipsoid", 0, 0, 0, 96);
+        var pc = PrincipalCurvature.Compute(m);
+        var found = Umbilics.Find(pc, 0.1);
+        var clusters = new List<List<int>>();
+        foreach (var i in found)
+        {
+            var cl = clusters.FirstOrDefault(cl => cl.Any(j => (m.Vertices[i] - m.Vertices[j]).Length < 0.3));
+            if (cl == null) { cl = new List<int>(); clusters.Add(cl); }
+            cl.Add(i);
+        }
+        var centres = clusters.Select(cl => new Vec3d(cl.Average(i => m.Vertices[i].X), cl.Average(i => m.Vertices[i].Y), cl.Average(i => m.Vertices[i].Z))).ToArray();
+        double worstD = centres.Length == 0 ? 99 : centres.Max(cen => new[] { 1, -1 }.SelectMany(sx => new[] { 1, -1 }.Select(sz => (cen - new Vec3d(sx * ux, 0, sz * uz)).Length)).Min());
+        numbers["umbilics"] = new { flagged = found.Length, clusters = clusters.Count, worstDistance = R3(worstD), ux = R3(ux), uz = R3(uz), vertices = m.VertexCount, tolerance = 0.1, centres = centres.Select(P).ToArray() };
+        scenes["curv_ellipsoid_umbilics"] = new { pts = centres.Select(P).ToArray(), truth = new[] { 1, -1 }.SelectMany(sx => new[] { 1, -1 }.Select(sz => P(new Vec3d(sx * ux, 0, sz * uz)))).ToArray() };
+    }
 }
 
 // ---------- Sphere: principal curvature accuracy, umbilics, geodesics, geodesic path, chebyshev ----------
@@ -210,6 +296,7 @@ var sw = Stopwatch.StartNew();
     var famB2 = EvenlySpacedNet.TraceField(saddle, field.Family2, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.15, Continuous = false }, field.Family1);
     var endsA2 = Ends(famA2.Concat(famB2).ToList(), proj);
     numbers["asymClassic"] = new { a = famA2.Count, b = famB2.Count, ends = endsA2.ends, boundaryEnds = endsA2.boundary, tEnds = endsA2.onCurve, floatingEnds = endsA2.floating };
+    scenes["asymClassic"] = new { a = famA2.Select(l => Line(l, 3)).ToArray(), b = famB2.Select(l => Line(l, 3)).ToArray() };
     // conjugate net on saddle
     var conj = ConjugateNet.Trace(saddle, -1, new EvenlySpacedNet.Options { Spacing = 0.2 });
     scenes["conj"] = new { wire = SaddleWire(40, 2.0, 5), a = conj.FamilyA.Select(l => Line(l, 3)).ToArray(), b = conj.FamilyB.Select(l => Line(l, 3)).ToArray() };

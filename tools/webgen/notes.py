@@ -2,25 +2,33 @@
 # checks: list of (label, js-expression over N (numbers) returning [ok:boolean, text:string])
 
 NOTES = {
-"Principal Curvature": dict(demo="torusK", demoMode="k1", expect=[
+"Principal Curvature": dict(demo="curv", demoMode="k1", expect=[
     "K1 ≥ K2 at every vertex; on a sphere both equal 1/radius, on a torus K1 = 1/r on the whole tube and K2 varies from +1/(R+r) outside to −1/(R−r) inside.",
     "D1, D2 and N form a right-handed frame at every vertex; D1 and D2 are tangent to the surface. Signs of D1/D2 are still arbitrary per vertex (they are lines, not arrows), so do not expect them to point 'the same way' along a row.",
-    "Radius 1 gives the raw per-face fit (noisy on coarse or irregular meshes); radius 2 (default) averages the curvature tensor over one ring; higher radii blur real features."],
-    checks=[("Sphere K1, K2 within 2% of 1", "[Math.abs(N.sphere.k1-1)<0.02 && Math.abs(N.sphere.k2-1)<0.02, 'k1 = '+N.sphere.k1+', k2 = '+N.sphere.k2+' on a 24-division unit sphere']"),
+    "Radius 1 gives the raw per-face fit (noisy on coarse or irregular meshes); radius 2 (default) averages the curvature tensor over one ring; higher radii blur real features.",
+    "Exact truth beside the estimate: every shape in the viewer is built from its closed-form parametrisation (AnalyticShapes.Surface), so k1 and k2 are known at every vertex (do Carmo §3-3: the shape operator I⁻¹ II); pick 'exact' to see them and '|error|' for the difference, with the mean and largest error over the interior vertices in the legend. The Rusinkiewicz tensor is within 1–5 % of the largest curvature on average; its worst vertices sit in the coarse rows next to a pole (sphere, ellipsoid) and on the monkey saddle's valence-7 stars."],
+    checks=[("Eight analytic shapes: k1 and k2 within 5 % of the largest principal curvature on average, converging with resolution", "(()=>{const r=N.curvTruth;const ok=r.every(x=>x.k1.meanRel<5&&x.k2.meanRel<5&&x.k1.meanRel<0.8*x.halfK1&&x.k2.meanRel<0.8*x.halfK2);return [ok,r.map(x=>x.key+': k1 '+x.k1.meanRel+' % (was '+x.halfK1+' % at half the resolution), k2 '+x.k2.meanRel+' % ('+x.halfK2+' %)').join('; ')];})()"),
+            ("Sphere K1, K2 within 2% of 1", "[Math.abs(N.sphere.k1-1)<0.02 && Math.abs(N.sphere.k2-1)<0.02, 'k1 = '+N.sphere.k1+', k2 = '+N.sphere.k2+' on a 24-division unit sphere']"),
             ("Torus k1 = 1/r along the meridian", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.k1-1)));return [e<0.05,'max |k1 − 1| = '+e.toFixed(3)+' over 16 samples'];})()"),
             ("Cylinder (R = 1): k1 = 1, k2 = 0 — exact inside, the jet-fitted border rows within 1 % / 1e-4", "[N.cylinder.k1Err<0.01&&N.cylinder.k2Max<1e-4,'max |k1 − 1| = '+N.cylinder.k1Err+', max |k2| = '+N.cylinder.k2Max.toExponential(1)+' over all vertices of a 64 × 32 cylinder (border rows included)']")]),
-"Gaussian Curvature": dict(demo="torusK", demoMode="K", expect=[
+"Gaussian Curvature": dict(demo="curv", demoMode="K", expect=[
     "Positive on domes, negative on saddles, zero on cylinders and planes. Boundary vertices report 0 (there is no angle deficit on an open fan), which is intentional.",
     "Signed and area-normalized: values scale with 1/length², so a millimetre model shows numbers a million times smaller than the same shape in metres.",
-    "On the torus demo the sign flips exactly at the top and bottom circles (φ = ±90°)."],
-    checks=[("Sphere K within 1% of 1", "[Math.abs(N.sphere.K-1)<0.01,'mean K = '+N.sphere.K]"),
+    "On the torus demo the sign flips exactly at the top and bottom circles (φ = ±90°).",
+    "Exact truth beside the estimate: the viewer's shapes carry their closed-form K at every vertex (sphere 1/R², torus cos v / (r (R + r cos v)), hyperboloid −1/(1 + 2z²)², catenoid −1/cosh⁴z, monkey saddle −36r²/(1 + 9r⁴)², ellipsoid 1/(a²b²c² (x²/a⁴ + y²/b⁴ + z²/c⁴)²), cone 0); 'exact' shows them, '|error|' the difference with the mean and largest error in the legend. The angle deficit is within 2.5 % of the largest |K| on average and exactly 0 on the developable cone; its worst vertices are the ring next to a pole (coarse fan: +15 % on the sphere, the same at every resolution) and the valence-7 stars of the monkey saddle.",
+    "A blind spot to know: a valence-4 vertex whose four edges follow the asymptotic directions is flat as a polyhedron — its one-ring is coplanar — so the angle deficit reads exactly 0 however curved the surface is. The wave's saddle points (truth −1.44) and the one 4-valent vertex of the bilinear patch (−0.22) show it; the tensor estimator (k1·k2 from the normals of a two-ring) still reads −1.15 there. Remesh or triangulate across the diagonal before trusting K on such grids."],
+    checks=[("Eight analytic shapes: K within 2.5 % of the largest |K| on average, converging with resolution, exact on the cone", "(()=>{const r=N.curvTruth;const ok=r.every(x=>x.K.meanRel<2.5&&(x.developable?x.K.max<1e-9:x.K.meanRel<0.8*x.halfK));return [ok,r.map(x=>x.key+': mean '+x.K.meanRel+' % (half res '+x.halfK+' %), max '+x.K.maxRel+' %').join('; ')];})()"),
+            ("Valence-4 star along the asymptotic lines: angle deficit 0, tensor still sees the saddle", "[N.flatStar.K===0&&N.flatStar.truth<-1.4&&Math.abs(N.flatStar.tensor-N.flatStar.truth)<0.25*Math.abs(N.flatStar.truth),'wave saddle point at ('+N.flatStar.point.join(', ')+'): valence '+N.flatStar.valence+', angle-deficit K = '+N.flatStar.K+', exact '+N.flatStar.truth+', k1·k2 from the tensor '+N.flatStar.tensor]"),
+            ("Sphere K within 1% of 1", "[Math.abs(N.sphere.K-1)<0.01,'mean K = '+N.sphere.K]"),
             ("Torus K matches cos φ / (r (R + r cos φ))", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.K-r.Kt)));return [e<0.03,'max |K − theory| = '+e.toFixed(4)];})()"),
             ("Cylinder K = 0 exactly, hyperboloid K = −1/(1 + 2z²)²", "[N.cylinder.KMax<1e-9&&N.asymHyp.KErr<0.005,'cylinder max |K| = '+N.cylinder.KMax.toExponential(1)+'; hyperboloid max |K − theory| = '+N.asymHyp.KErr+' (K runs from −1 at the throat to −1/9 at the rims)']")]),
-"Mean Curvature": dict(demo="torusK", demoMode="H", expect=[
+"Mean Curvature": dict(demo="curv", demoMode="H", expect=[
     "H = (k1 + k2)/2, signed against the vertex normal; HN is the mean curvature normal (length |H|).",
     "Uses the same mixed Voronoi areas as Gaussian Curvature, so H² − K ≥ 0 holds numerically away from the boundary.",
-    "Degenerate slivers are ignored: a mesh with collapsed triangles no longer produces values like 1e29."],
-    checks=[("Sphere H within 1% of 1", "[Math.abs(N.sphere.H-1)<0.01,'mean H = '+N.sphere.H]"),
+    "Degenerate slivers are ignored: a mesh with collapsed triangles no longer produces values like 1e29.",
+    "Exact truth beside the estimate: H = (k1 + k2)/2 from the closed-form parametrisation at every vertex, in Mite's sign (a sphere with outward normals: +1/R); 'exact' and '|error|' as on the other curvature cards. The cotangent H is within 2.5 % of the largest |k| on average and converges with resolution; the catenoid reads |H| ≤ 0.3 % of k1 (a minimal surface), the sphere's pole ring is the worst vertex again."],
+    checks=[("Eight analytic shapes: H within 2.5 % of the largest |k| on average, converging with resolution", "(()=>{const r=N.curvTruth;const ok=r.every(x=>x.H.meanRel<2.5&&x.H.meanRel<0.8*x.halfH);return [ok,r.map(x=>x.key+': mean '+x.H.meanRel+' % (half res '+x.halfH+' %), max '+x.H.maxRel+' %').join('; ')];})()"),
+            ("Sphere H within 1% of 1", "[Math.abs(N.sphere.H-1)<0.01,'mean H = '+N.sphere.H]"),
             ("Torus H matches (R + 2r cos φ) / (2r (R + r cos φ))", "(()=>{const rows=N.torusCurvature;const e=Math.max(...rows.map(r=>Math.abs(r.H-r.Ht)));return [e<0.03,'max |H − theory| = '+e.toFixed(4)];})()")]),
 "Curvature Streamlines": dict(demo="torusStream", expect=[
     "Max-curvature lines on the torus are the meridians (small circles around the tube), min-curvature lines are the parallels. Both must come out as single closed loops, not curves that wrap several times.",
@@ -29,11 +37,19 @@ NOTES = {
     checks=[("Meridian closes with length 2πr", "[Math.abs(N.torusStream.meridianLen-2*Math.PI)<0.1,'length '+N.torusStream.meridianLen+' vs 6.2832']"),
             ("Parallel closes with length 2π(R + r cos φ)", "[Math.abs(N.torusStream.parallelLen-24.07)<0.5,'length '+N.torusStream.parallelLen+' vs 24.07 (was 68.96 before the drift-tolerant closure)']"),
             ("AutoSpace fills the torus", "[N.torusStream.autoCount>20,N.torusStream.autoCount+' max-curvature lines at spacing 0.6']")]),
-"Umbilics": dict(demo=None, expect=[
+"Umbilics": dict(demo="curv", demoMode="um", demoShape="ellipsoid", expect=[
     "A sphere is umbilical everywhere, so every vertex is flagged; a torus has no umbilics; a saddle has one at the centre only if it is symmetric.",
     "Tolerance is relative: |k1 − k2| ≤ T · max(|k1|, |k2|). Flat vertices (curvature below 0.1% of the mesh maximum) are never flagged.",
-    "The Mask output (one boolean per input vertex) is meant to be inverted and used to filter seeds."],
-    checks=[("Every sphere vertex flagged", "[N.sphere.umbilics===N.sphere.vertices,N.sphere.umbilics+' / '+N.sphere.vertices+' vertices at tolerance 0.05']")]),
+    "The Mask output (one boolean per input vertex) is meant to be inverted and used to filter seeds.",
+    "The classic test: a triaxial ellipsoid a > b > c has exactly four umbilics, at (±a √((a² − b²)/(a² − c²)), 0, ±c √((b² − c²)/(a² − c²))) — for 1.5 × 1 × 0.7 at (±1.264, 0, ±0.377), where the exact |k1 − k2| (shown in the viewer) is 0. On a 96-division mesh Umbilics at tolerance 0.1 flags four clusters of vertices within 0.04 of those points and nothing else; the chart's poles (k1 = c/b², k2 = c/a²) are not umbilics and are not flagged."],
+    checks=[("Ellipsoid 1.5 × 1 × 0.7: exactly four umbilics, at the analytic positions", "[N.umbilics.clusters===4&&N.umbilics.worstDistance<0.05,N.umbilics.flagged+' vertices flagged at tolerance '+N.umbilics.tolerance+' on '+N.umbilics.vertices+' vertices, in '+N.umbilics.clusters+' clusters, each within '+N.umbilics.worstDistance+' of (±'+N.umbilics.ux+', 0, ±'+N.umbilics.uz+')']"),
+            ("Every sphere vertex flagged", "[N.sphere.umbilics===N.sphere.vertices,N.sphere.umbilics+' / '+N.sphere.vertices+' vertices at tolerance 0.05']")]),
+"Test Shape": dict(demo="curv", demoMode="K", demoShape="ellipsoid", demoView="truth", expect=[
+    "The ground truth as a component: one of the analytic test surfaces (the catalogue of AnalyticShapes — saddle, sphere, dome, ellipsoid, torus, hyperboloid, catenoid, Enneper 2/n, vault, cone, annulus, wave, bilinear ruled patch, Schwarz D, gyroid) as the very mesh the bench and the test suite measure, with the exact K, H, k1, k2, principal and asymptotic directions at every vertex from the closed-form parametrisation (do Carmo §3-3: first and second fundamental forms, the shape operator I⁻¹ II, II(d, d) = 0 for the asymptotic lines). Wire M into Gaussian Curvature and compare its K with the component's K in Mesh Colour Map, or into Umbilics against |K1 − K2|.",
+    "Every value is exact to round-off on the parametric shapes (the derivatives are checked against finite differences in the test suite, the formulas against the closed forms of MathWorld: torus, hyperboloid, catenoid, Enneper, monkey saddle, ellipsoid). The collapsed pole of a sphere / dome / ellipsoid and the centre of the n-fold Enneper are singular points of the chart, not of the surface: they are evaluated a step of 1e-7 inside and the Report says how many.",
+    "H carries Mite's sign (a sphere with outward normals reads +1/r, the dome's chart runs the other way and reads −1/r); the mesh normals follow x_u × x_v, the same as Mean Curvature sees. A1 / A2 are zero vectors where K > 0 and coincide (the ruling) where K = 0: the vault's rulings, the cone's generators, both rulings of the hyperboloid and the bilinear patch, 45° to the meridians on the catenoid.",
+    "Schwarz D and gyroid are nodal (implicit) surfaces: the curvature is Goldman's (2005) formula for F = 0 at the vertices — exact on the nodal mesh (P3 = −1), approximate once the mesh has been relaxed towards H = 0 (the default), and the Report says so."],
+    checks=[("Exact truth checked against the closed forms of six shapes and the finite differences of all fifteen (unit tests), and the two generators agree", "[N.curvTruth.length===8,'AnalyticSurfaceTests: 22 tests — derivatives of 15 parametric shapes vs central differences (< 1e-6), sphere / torus / hyperboloid / catenoid / Enneper / monkey saddle / ellipsoid closed forms to 1e-12, TestMeshes′ catenoid, torus and hyperboloid lie on AnalyticShapes′ surfaces; '+N.curvTruth.length+' shapes measured on this page']")]),
 "Planarize Mesh": dict(demo="planar", before_after=True, expect=[
     "Quads move toward their best-fit planes; triangles are already planar and are skipped. Fixed vertices stay put, everything else drifts a little.",
     "Deviation is the largest distance of a corner from its face's best-fit plane, measured on the mesh that is returned. It cannot always reach zero: a doubly curved quad mesh with a fixed boundary has no fully planar solution.",
@@ -57,7 +73,7 @@ NOTES = {
     "Stiffness and Gravity only set the ratio of sag to span; RestScale < 1 pre-tensions the net."],
     checks=[("Converges", "[N.dynrelax.converged,N.dynrelax.iterations+' steps, residual '+N.dynrelax.residual.toExponential(2)+', '+N.dynrelax.ms+' ms']"),
             ("All edges in tension", "[N.dynrelax.minForce>=0,'edge forces '+N.dynrelax.minForce+' … '+N.dynrelax.maxForce]")]),
-"Asymptotic Net": dict(demo="asym", shapes=[("asym", "saddle"), ("asymHyp", "hyperboloid"), ("asymCat_catenoid", "catenoid"), ("asymCat_enneper2", "Enneper 2"), ("asymCat_enneper3", "Enneper 3"), ("asymCat_bilinear", "ruled"), ("asymCat_schwarzD", "Schwarz D"), ("asymCat_catenoidWeb", "catenoid · web")], expect=[
+"Asymptotic Net": dict(demo="asym", shapes=[("asym", "saddle"), ("asymClassic", "saddle · classic"), ("asymHyp", "hyperboloid"), ("asymCat_catenoid", "catenoid"), ("asymCat_enneper2", "Enneper 2"), ("asymCat_enneper3", "Enneper 3"), ("asymCat_bilinear", "ruled"), ("asymCat_schwarzD", "Schwarz D"), ("asymCat_catenoidWeb", "catenoid · web")], expect=[
     "Minimal-surface catalogue (Studio X submission, p. 48): catenoid, 2- and 3-fold Enneper, a bilinear ruled patch and a relaxed Schwarz D patch. On H = 0 the two families cross at 90° everywhere, which is why minimal surfaces give the simplest joints. The 3-fold Enneper has a flat point at its centre where the asymptotic cross turns by 180° around one loop, so the two families are one connected family globally: the per-vertex A/B labels cannot separate them and some laths end on their neighbours as T-junctions there — expected, not a tracing error.",
     "Ruled-surface truth: on the hyperboloid of one sheet x² + y² − z² = 1 the two asymptotic families are exactly its two families of straight rulings (do Carmo 1976, §3-2), crossing at 90° on the throat; every traced curve must be a straight line rim to rim. On a cylinder K = 0 everywhere and the only asymptotic direction is the ruling (a double root): the component must report no anticlastic region and produce no curves rather than invent a second family from curvature noise.",
     "Two families of continuous curves that only exist where K < 0 — and only where the families cross at more than MinAngle (default 15°): near the K = 0 line they collapse onto each other and traced curves would swap family. The family labels are combed over the mesh, so A and B are consistent colours everywhere. On the saddle z = x² − y² they are the straight lines x = ±y + c, so every curve runs edge to edge with no stubs, no family mixing and no floating ends.",
@@ -206,9 +222,10 @@ NOTES = {
     "Closed curves stay closed. Distances tell you how far each point moved.",
     "The demo pulls a floating circle onto the unit sphere."],
     checks=[("Pulled points lie on the sphere", "[Math.abs(N.pull.radiusAfter-1)<0.01,'mean radius '+N.pull.radiusAfter+' after pulling from up to '+N.pull.maxDist+' away']")]),
-"Mesh Colour Map": dict(demo="torusK", demoMode="K", expect=[
+"Mesh Colour Map": dict(demo="curv", demoMode="K", expect=[
     "One step from values to a coloured mesh. Palette 0 is diverging and centred on zero (blue negative, white zero, red positive), so signed curvature reads correctly without remapping; 1 is sequential; 2 is traffic-light for utilization.",
     "Domain empty = automatic, using the 2%–98% percentiles so a few outliers do not wash out the map.",
-    "Values must be one per mesh vertex (as every Mite curvature output is)."],
+    "Values must be one per mesh vertex (as every Mite curvature output is).",
+    "The viewer is the same coloured mesh the curvature cards show — measured, exact or |error| on any of the analytic shapes — with the diverging palette centred on zero and the sequential one for the error."],
     checks=[]),
 }

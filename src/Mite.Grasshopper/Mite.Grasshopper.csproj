@@ -34,6 +34,7 @@
     <EmbeddedResource Include="Resources\ChebyshevNet.png" />
     <EmbeddedResource Include="Resources\ConjugateNet.png" />
     <EmbeddedResource Include="Resources\Umbilics.png" />
+    <EmbeddedResource Include="Resources\TestShape.png" />
     <EmbeddedResource Include="Resources\GridshellAnalysis.png" />
     <EmbeddedResource Include="Resources\LathUnroll.png" />
     <EmbeddedResource Include="Resources\LathSegment.png" />

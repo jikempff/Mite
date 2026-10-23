@@ -110,9 +110,9 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
 
 <div class="wrap">
   <header class="masthead">
-    <h1><small>Grasshopper plugin · version 1.3.2 · 30 components</small>Mite Bench</h1>
+    <h1><small>Grasshopper plugin · version 1.3.2 · 31 components</small>Mite Bench</h1>
     <p>Every component with its inputs, outputs and defaults, what it should do, a self-test run on the real Mite.Core library, and a live view of the result. Tick the ones that make sense, note what doesn't, and copy the summary back to the chat.</p>
-    <div class="progress"><b><span id="done">0</span> / 28</b>reviewed<div class="bar"><i id="barfill"></i></div></div>
+    <div class="progress"><b><span id="done">0</span> / <span id="total">28</span></b>reviewed<div class="bar"><i id="barfill"></i></div></div>
   </header>
 
   <nav class="nav" aria-label="Components">
@@ -146,11 +146,12 @@ const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).
 
 // ---------- persistence (per-viewer convenience only) ----------
 const store = { get(k){ try { return localStorage.getItem('mite-bench:'+k); } catch(e){ return null; } }, set(k,v){ try { localStorage.setItem('mite-bench:'+k, v); } catch(e){} }, del(k){ try { localStorage.removeItem('mite-bench:'+k); } catch(e){} } };
+const TOTAL = document.querySelectorAll('[data-ok]').length; document.getElementById('total').textContent = TOTAL;
 function updateProgress(){
   let n = 0;
   document.querySelectorAll('[data-ok]').forEach(cb => { const card = cb.closest('.card'); card.classList.toggle('done', cb.checked); const dot = document.querySelector(`[data-nav="${cb.dataset.ok}"] .dot`); if (dot) dot.classList.toggle('on', cb.checked); if (cb.checked) n++; });
   document.getElementById('done').textContent = n;
-  document.getElementById('barfill').style.width = (100*n/28)+'%';
+  document.getElementById('barfill').style.width = (100*n/TOTAL)+'%';
 }
 document.querySelectorAll('[data-ok]').forEach(cb => { cb.checked = store.get('ok:'+cb.dataset.ok) === '1'; cb.addEventListener('change', () => { store.set('ok:'+cb.dataset.ok, cb.checked ? '1':'0'); updateProgress(); }); });
 document.querySelectorAll('[data-note]').forEach(ta => { ta.value = store.get('note:'+ta.dataset.note) || ''; ta.addEventListener('input', () => store.set('note:'+ta.dataset.note, ta.value)); });
@@ -167,7 +168,7 @@ function summary(){
     fails.push(...failed.map(f => name + ': ' + f));
     if (ticked || note) lines.push(`${ticked ? '[x]' : '[ ]'} ${name}${note ? ' — ' + note.replace(/\s+/g,' ') : ''}`);
   });
-  lines.splice(1, 0, `${ok} of 28 marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
+  lines.splice(1, 0, `${ok} of ${TOTAL} marked as making sense; self-tests failing: ${fails.length ? fails.join('; ') : 'none'}`);
   return lines.join('\n');
 }
 function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); }
@@ -243,16 +244,32 @@ const A = () => css('--acc'), B = () => css('--fam-b'), WIRE = () => css('--wire
 const wireLayer = w => ({ lines: w, color: WIRE(), width: 0.8 });
 
 function mode(el){ const r = el.querySelector('.demo-ctl input:checked'); return r ? r.value : null; }
+function modeOf(el, prefix){ const r = el.querySelector(`.demo-ctl input[name^="${prefix}"]:checked`); return r ? r.value : null; }
 function slider(el){ const r = el.querySelector('.demo-ctl input[type=range]'); return r ? +r.value : 0; }
+const QTY_LABEL = { K: 'K', H: 'H', k1: 'k1', k2: 'k2', um: '|k1 − k2| / max(|k1|, |k2|)' };
 const builders = {
-  torusK(el){ const t = SC.torusK; const m = mode(el) || 'K'; const vals = m === 'K' ? t.values : m === 'H' ? t.valuesH : m === 'k1' ? N.torusCurvature && t.valuesK1 : t.valuesK2;
-    let v = vals; if (!v) { // k1/k2 not stored per vertex: derive from K and H (k = H ± sqrt(H²−K))
-      v = t.values.map((K, i) => { const H = t.valuesH[i]; const d = Math.sqrt(Math.max(0, H*H - K)); return m === 'k1' ? H + d : H - d; }); }
-    const sorted = [...v].sort((a,b)=>a-b); const lo = sorted[Math.floor(0.02*(sorted.length-1))], hi = sorted[Math.floor(0.98*(sorted.length-1))];
-    const mabs = Math.max(Math.abs(lo), Math.abs(hi)); const min = -mabs, max = mabs;
-    const colors = t.faces.map(f => { const av = f.reduce((a, vi) => a + v[vi], 0) / f.length; return colorRamp((av - min) / (max - min || 1), 'div'); });
-    legend(el.dataset.id, [[colorRamp(0,'div'), (min).toFixed(2)], [colorRamp(0.5,'div'), '0'], [colorRamp(1,'div'), '+' + (max).toFixed(2) + '  ' + m + ' on the torus (R = 3, r = 1)']]);
-    return { layers: [], mesh: { verts: t.verts, faces: t.faces, colors } }; },
+  // curvature against the exact truth: one analytic shape, one quantity, measured / truth / |error|
+  curv(el){ const key = modeOf(el, 'sh-') || 'torus'; const t = SC['curv_' + key]; const q = modeOf(el, 'tk-') || 'K'; const view = modeOf(el, 'vw-') || 'measured';
+    const bset = new Set(t.b);
+    const truthPrincipal = (i, which) => { const K = t.Kt[i], H = t.Ht[i]; const d = Math.sqrt(Math.max(0, H*H - K)); return which === 'k1' ? H + d : H - d; };
+    const um = (a, b) => Math.abs(a - b) / Math.max(1e-12, Math.abs(a), Math.abs(b));
+    const meas = q === 'K' ? t.K : q === 'H' ? t.H : q === 'k1' ? t.k1 : q === 'k2' ? t.k2 : t.k1.map((a, i) => um(a, t.k2[i]));
+    const truth = q === 'K' ? t.Kt : q === 'H' ? t.Ht : q === 'um' ? t.Kt.map((_, i) => um(truthPrincipal(i, 'k1'), truthPrincipal(i, 'k2'))) : t.Kt.map((_, i) => truthPrincipal(i, q));
+    const row = (N.curvTruth || []).find(r => r.key === key) || {};
+    let v, min, max, palette, items;
+    if (view === 'error') { v = meas.map((m, i) => bset.has(i) ? 0 : Math.abs(m - truth[i])); max = Math.max(1e-12, ...v); min = 0; palette = 'seq';
+      const e = row[q]; const stat = e ? ('mean ' + e.mean.toExponential(2) + ' (' + e.meanRel + ' % of the largest ' + (q === 'K' ? '|K|' : '|k|') + '), max ' + e.max.toExponential(2) + ' (' + e.maxRel + ' %) over ' + row.interior + ' interior vertices') : '';
+      items = [[colorRamp(0, 'seq'), '0'], [colorRamp(1, 'seq'), max.toExponential(2) + '  |' + QTY_LABEL[q] + ' − exact|'], ['transparent', stat]]; }
+    else { v = view === 'truth' ? truth : meas; const inner = v.filter((_, i) => !bset.has(i));
+      const sorted = [...inner].sort((a, b) => a - b); const lo = sorted[Math.floor(0.02 * (sorted.length - 1))], hi = sorted[Math.floor(0.98 * (sorted.length - 1))];
+      if (q === 'um') { min = 0; max = Math.max(0.05, hi); palette = 'seq'; items = [[colorRamp(0, 'seq'), '0 (umbilic)'], [colorRamp(1, 'seq'), max.toFixed(2) + '  ' + QTY_LABEL[q] + (view === 'truth' ? ' exact' : ' measured')]]; }
+      else { const mabs = Math.max(Math.abs(lo), Math.abs(hi)); min = -mabs; max = mabs; palette = 'div';
+        items = [[colorRamp(0, 'div'), (min).toFixed(2)], [colorRamp(0.5, 'div'), '0'], [colorRamp(1, 'div'), '+' + (max).toFixed(2) + '  ' + QTY_LABEL[q] + (view === 'truth' ? ' exact' : ' measured') + ' on the ' + t.label]]; } }
+    const colors = t.faces.map(f => { const inner = f.filter(vi => !bset.has(vi)); const src = inner.length ? inner : f; const av = src.reduce((a, vi) => a + v[vi], 0) / src.length; return colorRamp((av - min) / (max - min || 1), palette); });
+    const points = [];
+    if (key === 'ellipsoid' && SC.curv_ellipsoid_umbilics) { points.push({ pts: SC.curv_ellipsoid_umbilics.truth, color: INK(), r: 4 }, { pts: SC.curv_ellipsoid_umbilics.pts, color: css('--bad'), r: 2.2 }); items.push([INK(), 'analytic umbilics (' + SC.curv_ellipsoid_umbilics.truth.length + ') · red: found by Umbilics']); }
+    legend(el.dataset.id, items);
+    return { view: (key === 'monkey' || key === 'wave') ? SADDLE_VIEW : { yaw: -0.6, pitch: 0.5 }, layers: [], mesh: { verts: t.verts, faces: t.faces, colors }, points }; },
   torusIso(el){ legend(el.dataset.id, [[WIRE(), 'torus'], [A(), 'K = 0']]); return { layers: [wireLayer(SC.torusIso.wire), { lines: SC.torusIso.iso, color: A(), width: 2.2 }] }; },
   torusStream(el){ legend(el.dataset.id, [[WIRE(), 'torus'], [A(), 'max-curvature lines (AutoSpace)'], [B(), 'one min-curvature line']]); return { layers: [wireLayer(SC.torusStream.wire), { lines: SC.torusStream.max, color: A(), width: 1.6 }, { lines: SC.torusStream.min, color: B(), width: 2.2 }] }; },
   sphereGeo(el){ if (mode(el) === 'cylGeo') { legend(el.dataset.id, [[WIRE(), 'cylinder R = 1'], [A(), 'geodesics at 30°, 45°, 60°, 90° from the axis: helices and a circle']]); return { view: { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(SC.cylGeo.wire), { lines: SC.cylGeo.curves, color: A(), width: 1.8 }] }; }
@@ -263,6 +280,7 @@ const builders = {
     const g = SC.geoPath; legend(el.dataset.id, [[WIRE(), 'sphere'], [MUTED(), 'edge path (Dijkstra)'], [B(), 'curve shortening (Method 0)'], [A(), 'exact geodesic (FlipOut)']]); return { layers: [wireLayer(g.wire), { lines: [g.dijkstra], color: MUTED(), width: 1.2, dash: [4,3] }, { lines: [g.path], color: B(), width: 1.4 }, { lines: [g.flip], color: A(), width: 2.4 }], points: [{ pts: g.ends, color: INK(), r: 3.5 }] }; },
   cheb(el){ legend(el.dataset.id, [[WIRE(), 'sphere'], [A(), 'family U'], [B(), 'family V (all edges L = 0.2)']]); return { layers: [wireLayer(SC.cheb.wire), { lines: SC.cheb.u, color: A(), width: 1.6 }, { lines: SC.cheb.v, color: B(), width: 1.6 }] }; },
   asym(el){ const m = mode(el) || ''; if (m.startsWith('asymCat_')) { const sc = SC[m]; legend(el.dataset.id, [[WIRE(), sc.label], [A(), 'family A'], [B(), 'family B']]); return { view: { yaw: -0.6, pitch: 0.5 }, layers: [wireLayer(sc.wire), { lines: sc.a, color: A(), width: 1.6 }, { lines: sc.b, color: B(), width: 1.6 }] }; }
+    if (m === 'asymClassic') { legend(el.dataset.id, [[WIRE(), 'saddle z = x² − y²'], [A(), 'family A (classic: evenly spaced, ends on a neighbour)'], [B(), 'family B']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.asym.wire), { lines: SC.asymClassic.a, color: A(), width: 1.6 }, { lines: SC.asymClassic.b, color: B(), width: 1.6 }] }; }
     if (m === 'asymHyp') { legend(el.dataset.id, [[WIRE(), 'hyperboloid x² + y² − z² = 1'], [A(), 'family A (straight rulings)'], [B(), 'family B']]); return { view: { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(SC.asymHyp.wire), { lines: SC.asymHyp.a, color: A(), width: 1.6 }, { lines: SC.asymHyp.b, color: B(), width: 1.6 }] }; }
     legend(el.dataset.id, [[WIRE(), 'saddle z = x² − y²'], [A(), 'family A'], [B(), 'family B']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.asym.wire), { lines: SC.asym.a, color: A(), width: 1.6 }, { lines: SC.asym.b, color: B(), width: 1.6 }] }; },
   conj(el){ legend(el.dataset.id, [[WIRE(), 'saddle'], [A(), 'max-curvature family'], [B(), 'min-curvature family']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.conj.wire), { lines: SC.conj.a, color: A(), width: 1.6 }, { lines: SC.conj.b, color: B(), width: 1.6 }] }; },

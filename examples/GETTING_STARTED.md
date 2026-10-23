@@ -22,6 +22,14 @@ outputs the two curvature *directions* per vertex, which you can preview with
 Meshes with seams or duplicate vertices (STL imports, meshed Breps) are welded
 automatically; per-vertex outputs always line up with the input mesh.
 
+To see how good the numbers are, drop a **Test Shape** (Mite > Curvature), type
+`ellipsoid` (or `torus`, `catenoid`, `monkey`, `cone` …) into `N` and wire its
+`M` into Gaussian Curvature: the component's own `K` is the exact value at every
+vertex, so **Mesh Colour Map** on `K` from both, or a **Subtraction**, shows the
+estimator's error. Its `K1`, `K2`, `D1`, `D2` and `A1`, `A2` are the exact
+principal and asymptotic values; `Umbilics` on the ellipsoid finds its four
+umbilics where the component's `|K1 − K2|` is zero.
+
 For dirty meshes (booleans, imports, joined pieces) put **Mesh Cleanup**
 (Mite > Util) first: it welds, drops degenerate, duplicate and isolated
 elements and turns closed meshes outward, so the sign of Mean Curvature is

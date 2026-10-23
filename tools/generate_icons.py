@@ -271,6 +271,20 @@ def icon_umbilics():
     finish(img, "Umbilics")
 
 
+def icon_test_shape():
+    """An analytic test surface: a torus seen in parallels and meridians with a tick for the exact value."""
+    img, d = canvas()
+    patch(img)
+    # parallels (u) and meridians (v) of the chart as the two coordinate families
+    for v0 in (0.25, 0.5, 0.75):
+        uvline(d, lambda t, v0=v0: (t, v0), "surface", 0.8)
+    for u0 in (0.25, 0.5, 0.75):
+        uvline(d, lambda t, u0=u0: (u0, t), "surface", 0.8)
+    # the check mark: the truth is known here
+    stroke(d, [P(14.5, 4.5), P(17, 7.2), P(21.5, 2.2)], "surface", 1.3)
+    finish(img, "TestShape")
+
+
 # ================================================================ Form finding (mesh family)
 def icon_planarization():
     img, d = canvas()
@@ -577,7 +591,7 @@ def icon_flat_kit():
     finish(img, "FlatKit")
 
 
-ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics,
+ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics, icon_test_shape,
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
        icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
        icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,

@@ -13,6 +13,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 - **Gaussian Curvature** — angle deficit method with mixed Voronoi areas
 - **Mean Curvature** — cotangent Laplacian over the same mixed Voronoi areas (H and K are consistently normalized); degenerate triangles are ignored
 - **Umbilics** — flags vertices where k1 ≈ k2 (direction fields are undefined there; key for clean net layouts)
+- **Test Shape** — one of the analytic test surfaces (sphere, torus, ellipsoid, hyperboloid, catenoid, Enneper, monkey saddle, cone, vault, annulus, wave, Schwarz D, gyroid …) as a mesh with the exact K, H, k1, k2, principal and asymptotic directions at every vertex, to check the curvature components against the truth
 - **Mesh Isocurves** — level sets of any per-vertex field (marching triangles); K = 0 outlines the anticlastic regions asymptotic laths can occupy
 
 ### Streamlines
@@ -64,7 +65,7 @@ All Grasshopper components weld coincident vertices on intake (STL imports, Brep
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (30 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (31 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -125,7 +126,7 @@ This builds the Grasshopper project in Release mode, stages the files into `dist
 
 Components appear under the **Mite** tab:
 
-- **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines, Umbilics
+- **Curvature** — Principal Curvature, Gaussian Curvature, Mean Curvature, Curvature Streamlines, Umbilics, Test Shape
 - **Form Finding** — Planarize Mesh, Minimal Surface, Force Density Method, Dynamic Relaxation
 - **Gridshells** — Asymptotic Web, Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path
 - **Analysis** — Lath Analysis, Gridshell Analysis, Mesh Isocurves
@@ -142,6 +143,7 @@ plus IDs and a BOM from **Lath Labels**.
 ## Changelog
 
 ### Unreleased
+- **Exact curvature on the analytic test shapes, and a `Test Shape` component** (`Geometry/AnalyticSurface`, new; `AnalyticShapes.Surface(name, …)` gives every catalogue shape as a surface with closed-form first and second derivatives — or the implicit nodal function with gradient and Hessian for Schwarz D and the gyroid — so K, H, k1, k2, the principal and the asymptotic directions are known exactly at every vertex of the mesh `Build` returns: do Carmo §3-3 for the parametric shapes, Goldman 2005 for the implicit ones; `Build` is unchanged and now built from the same surface, bit for bit). Checked against the closed forms of the sphere, torus, hyperboloid, catenoid, Enneper, monkey saddle and ellipsoid to 1e-12, the derivatives of all fifteen parametric shapes against central differences, and the two shape generators (`AnalyticShapes`, `TestMeshes`) against each other. The discrete estimators measured against it over the interior vertices of nine shapes: angle-deficit K within 2.5 % of the largest |K| on average (exactly 0 on the cone), cotangent H within 2.5 % of the largest |k|, the Rusinkiewicz k1 / k2 within 5 %, all converging with resolution; the ellipsoid 1.5 × 1 × 0.7 gives exactly four umbilics at the analytic positions (±1.264, 0, ±0.377). A blind spot found on the way: a valence-4 vertex whose edges follow the asymptotic directions has a coplanar one-ring, so the angle deficit reads K = 0 there however curved the surface (the wave's saddle points: 0 against −1.44) while the tensor still reads −1.15. Grasshopper: **Test Shape** (Mite > Curvature) builds the shape by name with P1–P3 and a resolution and outputs the mesh, the exact `K`, `H`, `K1`, `K2`, `D1`, `D2`, `A1`, `A2`, the chart `UV` and a `Report` — wire it next to the curvature components and Umbilics. Bench: the four curvature cards and Umbilics show eight shapes with a *measured / exact / |error|* switch, the error numbers in the legend and five new self-tests; the Asymptotic Net demo gains a *classic* (Continuous off) view; the review counter follows the number of cards.
 - **Mesh Cleanup repairs dirty meshes** (`Geometry/MeshCleanup`: new `Options` / `Diagnostics`, the old `Compute` overload unchanged; Grasshopper: `Sliver` input appended, `Flipped`, `Slivers`, `NonManifold`, `Report` outputs appended). Winding is propagated across manifold edges only, then each closed part is turned outward (positive signed volume) and each open part keeps the winding most of its area had — before, the first face set the winding, so one flipped face 0 turned a whole sphere inside out and reversed the sign of the mean curvature at 217 of 225 saddle vertices. `Sliver` (degrees, 0 = off) removes slivers after Botsch & Kobbelt 2001 / CGAL: needles (longest edge ≥ 4 × shortest) by collapsing the short edge under the link condition (Dey et al. 1999), keeping the end with the smaller quadric error (Garland & Heckbert 1997), caps by flipping the long edge when that raises the smallest angle, border caps by dropping the face; no vertex is moved. On a sphere with 90 edges split 1e-4 from an end, all 180 needles go and the original 960 faces come back exactly (mean-curvature error 0.61 → 7e-16); six caps on a flat grid flip away with the area unchanged to 1e-15. Isolated vertices are dropped (Map −1). The report names what is left with the fix: slivers below 1° when `Sliver` is 0, non-manifold edges (also as lines), non-orientable parts, separate parts. 75 k-face polygon soup: 0.45 s (0.6 s with slivers); edge keys use a mixing hash.
 
 ### 1.3.2
