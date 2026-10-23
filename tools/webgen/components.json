@@ -2797,6 +2797,38 @@
     "access": "item",
     "default": null,
     "optional": true
+   },
+   {
+    "name": "Flatten",
+    "nick": "Fl",
+    "type": "Boolean",
+    "desc": "Press the net flat: the first Fixed joint (or the joint nearest the centre) is held and every lath end slides on a plane of normal SlideNormal that moves from its rest height onto the plane through that joint as Fold goes 0 → 1. The flat state is the one the mechanism reaches — a 3-fold Enneper web closes into a hexagon; read the states backwards for the deployment from the flat grid",
+    "access": "item",
+    "default": "False"
+   },
+   {
+    "name": "Deploy",
+    "nick": "Dp",
+    "type": "Integer",
+    "desc": "Deploy the net from its flat state on a table (every lath end rests on a one-sided ground through its rest position: it may lift off, not sink). 0 = off. 1 = open every scissor to Angle (a hub motor, the hands that open the kit; 90° for a web on a minimal surface): the flat 3-fold Enneper hexagon comes back to its web within a tenth of the joint spacing. 2 = the Move / To and Cable drivers act with the net on the table — pulling the singular node alone does not deploy a grid, the drivers' miss says so. With Flatten on, the net is pressed flat first and deployed from there (the states are the deployment); otherwise the input curves are taken as the flat state (a Flat Kit's flat assembly)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Angle",
+    "nick": "An",
+    "type": "Number",
+    "desc": "Deploy 1: crossing angle (degrees) the scissors are opened to (90 on a minimal surface)",
+    "access": "item",
+    "default": "90"
+   },
+   {
+    "name": "Kick",
+    "nick": "Kk",
+    "type": "Number",
+    "desc": "Deploy: the flat state is a bifurcation — a solver started exactly flat never leaves the plane — so the start is kicked along the net's softest mode by Kick × the mean joint spacing; the sign picks the branch (the deployment or its mirror image), 0 shows the lock",
+    "access": "item",
+    "default": "0.5"
    }
   ],
   "outputs": [

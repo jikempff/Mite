@@ -271,12 +271,19 @@ const builders = {
   frame(el){ const f = SC.frame; legend(el.dataset.id, [[MUTED(), 'net'], [B(), 'deformed × ' + f.scale + ' under 1 kN/m'], [INK(), 'supports']]); return { view: SADDLE_VIEW, layers: [{ lines: f.original, color: MUTED(), width: 0.8, alpha: 0.6 }, { lines: f.deformed, color: B(), width: 1.4 }], points: [{ pts: f.supports, color: INK(), r: 2 }] }; },
   kinetics(el){ const m = mode(el) || 'kinHyp'; const sc = SC[m]; const k = Math.min(sc.states.length - 1, Math.round(slider(el) * (sc.states.length - 1))); const st = sc.states[k]; const row = N[m].rows[k];
     const el2 = N[m].elastic ? N[m].elastic[k] : null; const els = el2 ? ' · utilization ' + (el2.util).toFixed(2) + ' · Π ' + (el2.total != null ? el2.total : el2.twist).toFixed(0) + ' J' : '';
-    const lab = el.querySelector('.fold-label'); if (lab) lab.textContent = 'fold ' + row.fold.toFixed(2) + (m === 'kinHyp' ? ' · β = ' + row.betaDeg + '° · waist ' + row.waist + ' (theory ' + row.waistTheory + ') · scissor angle ' + row.waistAngle + '°' : ' · cable ' + row.cable + ' → ' + row.cableTarget + ' · rise ' + row.rise + ' · scissor angles ' + row.minAngle + '°…' + row.maxAngle + '° · drift ' + row.drift.toExponential(1)) + els;
+    const text = m === 'kinHyp' ? ' · β = ' + row.betaDeg + '° · waist ' + row.waist + ' (theory ' + row.waistTheory + ') · scissor angle ' + row.waistAngle + '°'
+      : m === 'kinBundle' ? ' · β = ' + row.betaDeg + '° · top ring raised ' + row.rise + ' · waist ' + row.waist + ' (theory ' + row.waistTheory + ') · pairwise error ' + row.shapeErr.toExponential(1) + ' · ' + row.iterations + ' iterations'
+      : m === 'kinDeploy' ? ' · rise ' + row.rise + ' (design ' + N.kinDeploy.designRise + ') · vs design rms ' + row.rms + ' × spacing · scissors ' + row.minAngle + '°…' + row.maxAngle + '° (' + row.scissorMiss + '° short of 90°) · ' + row.contacts + ' ends on the table · drift ' + row.drift.toExponential(1)
+      : ' · cable ' + row.cable + ' → ' + row.cableTarget + ' · rise ' + row.rise + ' · scissor angles ' + row.minAngle + '°…' + row.maxAngle + '° · drift ' + row.drift.toExponential(1);
+    const lab = el.querySelector('.fold-label'); if (lab) lab.textContent = 'fold ' + row.fold.toFixed(2) + text + els;
     const L = m === 'kinCat' ? [wireLayer(sc.wire)] : [];
+    if (m === 'kinDeploy') L.push({ lines: sc.design, color: MUTED(), width: 0.9, alpha: 0.45, dash: [3,3] });
     L.push({ lines: st.a, color: A(), width: 1.6 }, { lines: st.b, color: B(), width: 1.6 });
     if (st.cables) L.push({ lines: st.cables, color: INK(), width: 1.2, dash: [4,3] });
     const pts = [{ pts: st.joints, color: INK(), r: 1.8 }];
-    legend(el.dataset.id, m === 'kinHyp' ? [[A(), 'family A rods'], [B(), 'family B rods'], [INK(), 'scissor joints (' + st.joints.length + ')']] : [[WIRE(), 'catenoid (rest surface)'], [A(), 'family A'], [B(), 'family B'], [INK(), 'scissor joints · dashed: actuator cables']]);
+    legend(el.dataset.id, m === 'kinHyp' || m === 'kinBundle' ? [[A(), 'family A rods'], [B(), 'family B rods'], [INK(), 'scissor joints (' + st.joints.length + ')']]
+      : m === 'kinDeploy' ? [[MUTED(), 'design web (dashed, aligned)'], [A(), 'family A'], [B(), 'family B'], [INK(), 'scissor joints (' + st.joints.length + ')']]
+      : [[WIRE(), 'catenoid (rest surface)'], [A(), 'family A'], [B(), 'family B'], [INK(), 'scissor joints · dashed: actuator cables']]);
     return { view: { yaw: -0.6, pitch: 0.35 }, layers: L, points: pts }; },
   pull(el){ const p = SC.pull; legend(el.dataset.id, [[WIRE(), 'sphere'], [MUTED(), 'input circle (floating)'], [A(), 'pulled + faired']]); return { layers: [wireLayer(p.wire), { lines: [p.before], color: MUTED(), width: 1.4, dash: [4,3] }, { lines: [p.after], color: A(), width: 2.2 }] }; },
 };

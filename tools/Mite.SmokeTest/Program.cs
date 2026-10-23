@@ -484,6 +484,26 @@ internal static class Tests
             c => Expect(CurveCount(c, 0) == 3 && Points(c, 2).Count == 9 && Numbers(c, 8).Max() < 1e-6,
                 $"3 A laths / 9 joints / drift < 1e-6, got {CurveCount(c, 0)} / {Points(c, 2).Count} / {Numbers(c, 8).Max():E1}"));
 
+        // Net Kinetics, Deploy 1: the same flat lattice on a table, every scissor opened to 60° without a kick:
+        // a grid of straight rods shears in its plane (the lazy tongs is exact), the joints read 60°, the spacing holds
+        TestComponent("Net Kinetics (deploy: scissors to 60°)",
+            new Mite.Grasshopper.Components.NetKineticsComponent(),
+            c =>
+            {
+                SetCurveList(c, 0,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 1, 0), new Rhino.Geometry.Point3d(2, 1, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 2, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(0, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1, 0, 0), new Rhino.Geometry.Point3d(1, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(2, 0, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetPointList(c, 2, new Rhino.Geometry.Point3d(0, 0, 0));
+                SetInputs(c, (8, 4), (26, 1), (27, 60.0), (28, 0.0));
+            },
+            c => Expect(Points(c, 2).Count == 9 && Numbers(c, 4).All(a => System.Math.Abs(a - 60) < 0.5) && Numbers(c, 8).Max() < 1e-6,
+                $"9 joints / scissors at 60° / drift < 1e-6, got {Points(c, 2).Count} / {Numbers(c, 4).Min():F2}…{Numbers(c, 4).Max():F2} / {Numbers(c, 8).Max():E1}"));
+
         // Flat Kit: the same flat lattice is its own flat state; 6 strips, 9 joints, half-width slots at the spacing
         TestComponent("Flat Kit",
             new Mite.Grasshopper.Components.FlatKitComponent(),

@@ -73,6 +73,13 @@ public class NetKineticsComponent : MiteComponent
         RegisterSectionInputs(pManager); // 23 Shape, 24 Section — the same profile Lath Sweep builds
         pManager.AddBooleanParameter("Flatten", "Fl", "Press the net flat: the first Fixed joint (or the joint nearest the centre) is held and every lath end slides on a plane of normal SlideNormal that moves from its rest height onto the plane through that joint as Fold goes 0 → 1. " +
             "The flat state is the one the mechanism reaches — a 3-fold Enneper web closes into a hexagon; read the states backwards for the deployment from the flat grid", GH_ParamAccess.item, false);
+        // deployment from the flat (assembled) state — the kit on the table
+        pManager.AddIntegerParameter("Deploy", "Dp", "Deploy the net from its flat state on a table (every lath end rests on a one-sided ground through its rest position: it may lift off, not sink). " +
+            "0 = off. 1 = open every scissor to Angle (a hub motor, the hands that open the kit; 90° for a web on a minimal surface): the flat 3-fold Enneper hexagon comes back to its web within a tenth of the joint spacing. " +
+            "2 = the Move / To and Cable drivers act with the net on the table — pulling the singular node alone does not deploy a grid, the drivers' miss says so. " +
+            "With Flatten on, the net is pressed flat first and deployed from there (the states are the deployment); otherwise the input curves are taken as the flat state (a Flat Kit's flat assembly).", GH_ParamAccess.item, 0);
+        pManager.AddNumberParameter("Angle", "An", "Deploy 1: crossing angle (degrees) the scissors are opened to (90 on a minimal surface)", GH_ParamAccess.item, 90.0);
+        pManager.AddNumberParameter("Kick", "Kk", "Deploy: the flat state is a bifurcation — a solver started exactly flat never leaves the plane — so the start is kicked along the net's softest mode by Kick × the mean joint spacing; the sign picks the branch (the deployment or its mirror image), 0 shows the lock", GH_ParamAccess.item, 0.5);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -140,6 +147,10 @@ public class NetKineticsComponent : MiteComponent
         DA.GetData(24, ref section);
         bool flatten = false;
         DA.GetData(25, ref flatten);
+        int deploy = 0; double deployAngle = 90.0, kick = 0.5;
+        DA.GetData(26, ref deploy);
+        DA.GetData(27, ref deployAngle);
+        DA.GetData(28, ref kick);
         if (width <= 0 || thickness <= 0 || maxStrain <= 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness and MaxStrain must be positive.");
@@ -157,8 +168,10 @@ public class NetKineticsComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Cables need target Lengths (at Fold = 1).");
             return;
         }
-        if (movePts.Count == 0 && cables.Count == 0 && !flatten)
+        if (movePts.Count == 0 && cables.Count == 0 && !flatten && deploy != 1)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "No driver (Move/To or Cables): the net is only settled onto the hinge constraints.");
+        if (deploy == 2 && movePts.Count == 0 && cables.Count == 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Deploy 2 needs a driver: a Move / To point (the node to pull) or a Cable.");
 
         if (sampling <= 0)
         {
@@ -239,12 +252,58 @@ public class NetKineticsComponent : MiteComponent
             MaxIterations = Math.Max(1, iterations),
             Cancel = Cancelled,
         };
+        int anchor = fixedIdx.Count > 0 ? fixedIdx[0] : net.NearestNode(net.Nodes.Aggregate(Vec3d.Zero, (a, b) => a + b) / net.Nodes.Length);
+        var normal = MeshConvert.ToVec3d(slideNormal);
+        string deployLine = "";
+        ScissorNet.Result? press = null;
         if (flatten)
         {
-            int anchor = fixedIdx.Count > 0 ? fixedIdx[0] : net.NearestNode(net.Nodes.Aggregate(Vec3d.Zero, (a, b) => a + b) / net.Nodes.Length);
-            net.PressFlat(opt, anchor, MeshConvert.ToVec3d(slideNormal));
-            slideIdx = opt.Sliding.ToList();
-            fixedIdx = opt.Fixed.ToList();
+            var pressOpt = opt;
+            if (deploy != 0)
+            {
+                // the press is a separate motion: its sliding planes must not carry into the deployment
+                pressOpt = new ScissorNet.Options
+                {
+                    Fixed = fixedIdx, Sliding = slideIdx, SlideNormal = normal, Fold = 1.0, Steps = Math.Max(1, steps),
+                    Fairness = Math.Max(0, stiffness), MaxIterations = Math.Max(1, iterations), Cancel = Cancelled,
+                };
+            }
+            net.PressFlat(pressOpt, anchor, normal);
+            if (deploy == 0) { slideIdx = pressOpt.Sliding.ToList(); fixedIdx = pressOpt.Fixed.ToList(); }
+            else
+            {
+                press = net.Solve(pressOpt);
+                if (press.Cancelled) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc during the press."); return; }
+                var flat = press.Last;
+                deployLine = $"Pressed flat first: joint spacing drift {flat.LengthDrift:E1}, height left {flat.Nodes.Max(p => Math.Abs(Vec3d.Dot(p - net.Nodes[anchor], normal))):G3}; ";
+                net = net.AtState(flat);
+                restStart = driven.Select(n => net.Nodes[n]).ToArray();
+                opt.TargetsAt = t => restStart.Select((s, i) => s + t * (targetEnd[i] - s)).ToArray();
+            }
+        }
+        if (deploy != 0)
+        {
+            bool wasFlat = net.IsFlat();
+            if (!wasFlat) AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "The net is not flat (normals differ by more than 2°): it is deployed from its current state anyway.");
+            if (wasFlat && kick == 0)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Kick 0 on a flat net: the flat state is a bifurcation and the solver cannot leave the plane (the deployment branches are tangent to the softest mode, which a Gauss–Newton step never excites). Set Kick to ±0.5 to deploy.");
+            try
+            {
+                if (deploy == 1)
+                {
+                    net = net.DeployFromFlat(opt, anchor, normal, deployAngle * Math.PI / 180, kick, out var mode);
+                    deployLine += $"Deploy 1: {opt.Scissors.Count} scissors opened to {deployAngle:0.#}° on a table of {opt.Ground.Count} lath ends";
+                    if (mode.HasValue) deployLine += $", kicked {kick:G3} × spacing along the softest mode (stiffness {mode.Value.stiffness:E1})";
+                }
+                else
+                {
+                    net = net.OnTable(opt, normal, kick);
+                    deployLine += $"Deploy 2: {driven.Count} moved joints and {cablePairs.Count} cables drive the net on a table of {opt.Ground.Count} lath ends";
+                    if (net.LastMode.HasValue || kick != 0) deployLine += $", kicked {kick:G3} × spacing along the softest mode";
+                }
+            }
+            catch (ArgumentException ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); return; }
+            slideIdx = opt.Sliding.ToList(); fixedIdx = opt.Fixed.ToList();
         }
         var result = net.Solve(opt);
         if (result.Cancelled) AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, the motion is partial.");
@@ -288,6 +347,8 @@ public class NetKineticsComponent : MiteComponent
         if (!buildable)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Laths exceed MaxStrain during the motion: peak utilization {utilPerState.Max():0.00} at Fold {result.States[utilPerState.IndexOf(utilPerState.Max())].Fold:0.##}.");
 
+        if (deploy != 0 && last.GroundMiss > 0.01 * net.Scale)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Lath ends sink {last.GroundMiss:G3} into the table: the drivers push the net through it.");
         int notConverged = result.States.Count(s => !s.Converged);
         if (notConverged > 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{notConverged} state(s) stopped at the iteration cap: raise Iterations or Steps, or lower Stiffness.");
@@ -300,6 +361,15 @@ public class NetKineticsComponent : MiteComponent
         sb.AppendLine($"Rest state settled: joints moved up to {result.States[0].Nodes.Zip(net.Nodes, (a, b) => (a - b).Length).Max():G3}, deviation {result.States[0].AsymptoticDeviation:0.###}° from asymptotic");
         sb.AppendLine($"At Fold {last.Fold:0.##}: joint spacing drift {last.LengthDrift:E2}, asymptotic deviation {last.AsymptoticDeviation:0.###}°, driver miss {Math.Max(last.TargetMiss, last.CableMiss):G3}, {last.Iterations} iterations{(last.Converged ? "" : " (cap)")}");
         sb.AppendLine($"Scissor angles at Fold {last.Fold:0.##}: {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Min():0.#}° … {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Max():0.#}°");
+        if (deploy != 0)
+        {
+            sb.AppendLine(deployLine);
+            double rise = last.Nodes.Max(p => Vec3d.Dot(p, normal)) - last.Nodes.Min(p => Vec3d.Dot(p, normal));
+            sb.AppendLine($"Deployed at Fold {last.Fold:0.##}: rise {rise:G4} above the table, {last.GroundContacts} of {opt.Ground.Count} lath ends on it, sunk {last.GroundMiss:E1}" +
+                (deploy == 1 ? $", scissors within {last.ScissorMiss:0.#}° of {deployAngle:0.#}°" : $", driver miss {Math.Max(last.TargetMiss, last.CableMiss):G3}"));
+            if (deploy == 2 && driven.Count > 0 && last.TargetMiss > 0.25 * targetEnd.Zip(restStart, (a, b) => (a - b).Length).DefaultIfEmpty(0).Max())
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"The pull is resisted: the moved joint misses its target by {last.TargetMiss:G3}. A flat asymptotic grid deploys along its softest mode, which does not move a singular node relative to the lath ends — open the scissors (Deploy 1) or lift the lath ends (Flatten read backwards) instead.");
+        }
         var eLast = elastic[elastic.Count - 1];
         sb.AppendLine($"Elastic ({(profile.Kind == Mite.Core.Fabrication.SectionKind.Rectangle ? (upright ? "upright" : "flat") + $" {width:G3} × {thickness:G3}" : profile.Kind.ToString().ToLowerInvariant())}, E {modulus / 1e9:G3} GPa, limit {maxStrain:P1}): utilization {utilPerState[0]:0.00} at rest → peak {utilPerState.Max():0.00} at Fold {result.States[utilPerState.IndexOf(utilPerState.Max())].Fold:0.##}; strain energy {elastic[0].StrainEnergy:G4} J → {eLast.StrainEnergy:G4} J (bending {eLast.BendingEnergy:G3}, twist {eLast.TwistEnergy:G3}){(density > 0 ? $", self-weight potential {eLast.Potential:G4} J" : "")}");
         sb.Append(natural >= 0 ? $"Natural state (least energy along the motion): Fold {naturalFold:0.##}{(natural == 0 || natural == elastic.Count - 1 ? " (at the end of the range: the grid wants to go further)" : "")}" : "Natural state: none — the energy is flat along the motion (rigid-body mechanism)");
