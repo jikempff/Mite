@@ -361,6 +361,18 @@ curves of an **Asymptotic Net**, then drive it:
   it (normal `Sn`). On an **Asymptotic Web** of the 3-fold Enneper, with `F` on
   the seed, the net lays flat into a hexagon — the flat grid you assemble; read
   `SA` / `SB` from the last state back to the first for the deployment.
+- `Dp` Deploy = 1 deploys the flat kit on a table: every lath end rests on a
+  one-sided ground (it may lift off, not sink) and every scissor is opened
+  towards `An` (90° for a web on a minimal surface). With `Fl` on as well the
+  net is pressed flat first and deployed from there, so `SA` / `SB` are the
+  deployment and the last state should be the design again (the 3-fold Enneper
+  web comes back within a tenth of the joint spacing). `Kk` kicks the flat start
+  along the net's softest mode by that fraction of the joint spacing — the flat
+  state is a bifurcation and the solver cannot leave the plane without it; its
+  sign picks the branch (the design or its mirror image). `Dp` = 2 puts the net
+  on the table and lets your `Mv` / `To` points and cables do the driving:
+  pulling the singular node alone does not deploy a grid (the report says how
+  far it got and why).
 
 Put `Fo` on a slider (0 = the settled rest state, 1 = drivers at their
 targets) to animate; `St` states are solved in sequence and come out as trees

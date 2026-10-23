@@ -30,9 +30,12 @@ where they overlap
    buckling, the AAG erection sequence.
 3. The kinetic behaviour of any web in the browser (done for scissor / lift /
    spread drives, 1.3.0; the flat state as the assembly state — press flat,
-   the 3-fold Enneper web into a hexagon — 1.3.1); next: speed, strain
-   colouring per state, the deployment driven from the flat grid by pulling
-   the singular node (José's Kangaroo sequence), the physical prototype
+   the 3-fold Enneper web into a hexagon — 1.3.1; the deployment from the flat
+   grid — 2026-10-23, session 2, in the core and Grasshopper: the flat state is
+   a bifurcation, the kit deploys by opening its scissors, and pulling the
+   singular node alone does not deploy it, see E); next: speed, strain
+   colouring per state, the deployment in the browser (press + deploy ≈ 15 s
+   natively on 451 nodes: needs the speed item first), the physical prototype
    dimensions.
 6. The kit to build it (done 1.3.1: Flat Kit — flat assembly 1 : 1, strips
    with slots / holes / hub on laser sheets, deployment sequence, cut list,
@@ -1477,6 +1480,73 @@ Plan
       regulariser, not EI), twist energy of the *change* of τ against the
       rest state for pre-twisted laths, and the Lath Preview colouring per
       state in the viewport.
+- [x] Deployment from the flat state — 2026-10-23 (session 2),
+      `ScissorNet.DeployFromFlat` / `OnTable` / `Lift` / `AtState` /
+      `SoftestModes` / `Kick` / `Stiffness`, `Options.Ground` (one-sided
+      table, Bouaziz et al. 2014 §4.1 half-space projection; penetration as
+      stiff as a hinge, `GroundWeight` as a soft weight), `Options.Scissors`
+      (crossing-angle drivers), Net Kinetics `Deploy` / `Angle` / `Kick`.
+      Literature: Schling & Schikore 2022 (DMS 2022, Morphology of Kinetic
+      Asymptotic Grids: "networks with one, two and four singularities cause
+      increasing rigidity and limit the kinetic transformability"; stiffness
+      does not change the transformation path when the grid is highly
+      constrained), Schikore 2023 (TUM dissertation, the kinetic umbrella
+      opening from its bundle), Pellegrino 1993 / Kumar & Pellegrino 2000
+      (mechanisms as the null space of the compatibility matrix, kinematic
+      bifurcations), the Caltech 2024 kirigami kinematics paper (SVD
+      predictor–corrector, rank drop at the flat configuration, a 1e-3 rad
+      perturbation to pick the branch), Tachi 2009 (rigid-origami simulation:
+      Euler steps projected onto the null space, rank condition). Findings:
+      - The flat state is a pitchfork bifurcation and Gauss–Newton cannot
+        pass it: at an exactly flat grid every out-of-plane first derivative
+        of an in-plane residual vanishes by symmetry, the coupling lives in
+        Σ rᵢ ∇²rᵢ (dropped by GN / LM / trust-region reflective), so a solver
+        held flat stays flat for any drive (test: scissors driven to 90°, the
+        net stays at height 0 and the scissors 41° short); random kicks of
+        1e-3 … 5e-2 × spacing do not help, the hinge constraints pull them
+        back. The deployment branch is the softest non-rigid mode of JᵀJ
+        (inverse iteration, rigid motions that keep the pinned nodes still
+        deflated): on the 3-fold Enneper hexagon stiffness 6e-5, 100 % out of
+        plane, |correlation| 0.999 with the design heights, the next mode
+        (in-plane lazy tongs) 140× stiffer; on the hyperboloid grid the exact
+        mechanism to 1e-13 (correlation 1.0000 with d/dβ), next mode 0.22.
+        A kick of 0.1 … 2 × spacing along it is enough; the sign is the branch.
+      - The drive that deploys a minimal-surface web is "every scissor to
+        90°" (Schling: asymptotic curves on minimal surfaces cross at right
+        angles) with the lath ends on a one-sided table: pairwise distances
+        within 0.07 × spacing of the design (rms, 0.33 max; nodes 0.09 / 0.2
+        after rigid alignment), rise 0.895 vs 0.905, drift 6e-4, 0.05° off
+        asymptotic, 6 ends on the table, scissors 5.8° short of 90° where the
+        design itself crosses at 60° (the rays). The reverse press (every end
+        lifted to its design height) returns to the design within 0.08 ×
+        spacing too; the in-plane lazy-tongs modes are what the height drive
+        does not control.
+      - Pulling the singular node (José's Kangaroo sequence) does not deploy
+        the flat grid, kicked or not: the deployment mode moves that node by
+        nothing relative to the lath ends (a saddle's centre is at the mean
+        height of its rim). With three lobes held it rises 0.13 of 0.45 and the
+        asymptotic condition gives (1.3°, a strained bump, further from the
+        design than the flat state); with a strong pull (target weight 100) a
+        dome-like bump with 2–6 % joint drift and 5° deviation; with nothing
+        held it lifts off the table as a rigid body; with a soft weight on the
+        ends it stays flat. A physical kit lifted at its centre must be
+        bending its lamellas about the strong axis.
+      - The kinetic umbrella opens from its fully collapsed bundle (β = 0, A
+        rod k on top of B rod k, both joints of a pair on one point) by lifting
+        the top ring's planes: the closed form at every state to 3e-12 through
+        the bifurcation, 17 iterations for the first step and 5 after — the
+        rising planes drive the mode directly, no kick needed.
+      - The 3-fold Enneper web is a mechanism only to 1e-3 (the press's joint
+        drift); its deployment therefore "costs" that much and the LM weights
+        decide whether a weak drive is followed — one singularity, as Schling
+        & Schikore say, limits the transformability.
+      Open: the deployment in the web app (press + deploy ≈ 15 s natively,
+      far too slow in wasm without the speed item); a second-order
+      predictor (Kumar & Pellegrino's higher-order compatibility) instead of
+      the kick, which would also give the branch tangent at any bifurcation
+      along a motion; the scissor drive on a chosen ring of joints (a hub
+      motor) and the actuation force along the drive (gradient of Π); gravity
+      as a linear potential instead of the quadratic `GroundWeight`.
 - [ ] Then the design side of Wan et al.: given a target family of surfaces
       (open/closed canopy), find the net whose motion passes through both —
       alternate the kinetic solve with the layout solve.
@@ -1757,6 +1827,11 @@ Open
       with measured / exact / |error| on eight shapes (81 PASS) and the
       `Test Shape` component (31 components).
 
+- [x] 2026-10-23 (session 2, E): deployment from the flat state — one-sided
+      ground, scissor drivers, the softest mode of the Gauss–Newton matrix as
+      the deployment branch, `Deploy` / `Angle` / `Kick` on Net Kinetics; exact
+      umbrella-from-bundle test, 12 deployment tests, four bench self-tests
+      (79 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

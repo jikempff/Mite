@@ -47,6 +47,24 @@ namespace Mite.Core.Kinetics;
 /// rest length), bending is a difference of unit vectors, targets and cables
 /// are divided by the mean segment length, so the weights are comparable
 /// across model scales.
+///
+/// Deployment from the flat (assembled) state — <see cref="DeployFromFlat"/>,
+/// <see cref="OnTable"/>, <see cref="Lift"/>, <see cref="SoftestModes"/>: the
+/// lath ends rest on a one-sided ground (the half-space projection of Bouaziz,
+/// Martin, Kavan, Schröder &amp; Pauly 2014, "Projective Dynamics", §4.1), the
+/// scissors are opened by crossing-angle drivers, and the flat state is
+/// treated as what it is, a kinematic bifurcation (Kumar &amp; Pellegrino 2000,
+/// "Computation of kinematic paths and bifurcation points", IJSS 37;
+/// Pellegrino 1993, mechanisms as the null space of the compatibility
+/// matrix): the softest non-rigid mode of JᵀJ is the deployment branch, and
+/// the start is kicked along it because a Gauss–Newton step never excites it
+/// — the in-plane / out-of-plane coupling sits in Σ rᵢ ∇²rᵢ, which
+/// Gauss–Newton drops. Schling &amp; Schikore 2022 ("Morphology of Kinetic
+/// Asymptotic Grids", DMS 2022) on singularities limiting the
+/// transformability, and Schikore 2023 (TUM dissertation, the kinetic umbrella
+/// opening from its bundle) are the architectural references; the perturbation
+/// to pick a branch follows the kirigami kinematics of the Caltech Space
+/// Structures Lab (2024).
 /// </summary>
 public sealed class ScissorNet
 {
@@ -129,6 +147,28 @@ public sealed class ScissorNet
         public Func<double, double[]>? SlideOffsetsAt { get; set; }
 
         /// <summary>
+        /// Ground contact (one-sided): nodes that may rise off the plane through
+        /// their rest position (normal <see cref="SlideNormal"/>) but not sink
+        /// below it — the table a flat-assembled grid lies on while it is
+        /// deployed. A node below the plane gets the residual of a sliding node,
+        /// a node above it none: the half-space projection of Bouaziz, Martin,
+        /// Kavan, Schröder &amp; Pauly 2014 (Projective Dynamics, §4.1), the
+        /// one-sided link of Barnes' slack cables. The lath ends of a pressed-
+        /// flat net are the usual choice (<see cref="OnTable"/>).
+        /// </summary>
+        public IReadOnlyList<int> Ground { get; set; } = Array.Empty<int>();
+
+        /// <summary>
+        /// Weight of the ground nodes' own weight: a soft pull of every ground
+        /// node back onto its plane, (height / mean segment) × this, so that a
+        /// lifted grid does not simply rise off the table as a rigid body but
+        /// deploys, the ends that the hinges need rising against the weight and
+        /// the others staying down. Relative to the target weight 1; 0 = no
+        /// weight (the ground only stops nodes from sinking).
+        /// </summary>
+        public double GroundWeight { get; set; } = 0.0;
+
+        /// <summary>
         /// The laths' stress-free shape. Given: the rest geometry is stress-free,
         /// so every lath keeps its turning (a net that was designed curved).
         /// Straight: the laths were cut straight and bent into the net (a lath
@@ -144,6 +184,22 @@ public sealed class ScissorNet
 
         /// <summary>Cable lengths at fold parameter t (one per cable).</summary>
         public Func<double, double[]>? CableLengthsAt { get; set; }
+
+        /// <summary>
+        /// Scissor drivers: joints whose crossing angle — the angle between the
+        /// two lath tangents, 0…π — is prescribed by <see cref="ScissorAnglesAt"/>:
+        /// a motor at the hub of a kinetic umbrella, or the hand that opens the
+        /// scissors of a flat-assembled grid at its singular node. The angle is
+        /// measured from the first lath through the joint to the second, so a
+        /// prescribed angle above 90° closes the scissors the other way.
+        /// </summary>
+        public IReadOnlyList<int> Scissors { get; set; } = Array.Empty<int>();
+
+        /// <summary>Crossing angles (radians) of the scissor drivers at fold parameter t (one per driver).</summary>
+        public Func<double, double[]>? ScissorAnglesAt { get; set; }
+
+        /// <summary>Weight of the scissor residual (cos of the crossing angle − cos of the prescribed one).</summary>
+        public double ScissorWeight { get; set; } = 1.0;
 
         /// <summary>Weight of the target residual (v − target)/scale; 1 = as strong as a length constraint.</summary>
         public double TargetWeight { get; set; } = 1.0;
@@ -200,8 +256,14 @@ public sealed class ScissorNet
         public double TargetMiss;
         /// <summary>Largest |cable length − prescribed| (model units).</summary>
         public double CableMiss;
+        /// <summary>Largest |crossing angle − prescribed| at the scissor drivers (degrees).</summary>
+        public double ScissorMiss;
         /// <summary>Largest distance of a sliding node from its plane (model units).</summary>
         public double SlideMiss;
+        /// <summary>Largest penetration of a ground node below its plane (model units; 0 when every ground node rests on or above it).</summary>
+        public double GroundMiss;
+        /// <summary>Number of ground nodes resting on their plane (within 1e-6 of the mean segment length); the others have lifted off.</summary>
+        public int GroundContacts;
         /// <summary>Largest absolute weighted residual at the end of the solve.</summary>
         public double Residual;
         public int Iterations;
@@ -382,6 +444,172 @@ public sealed class ScissorNet
         options.SlideOffsetsAt = t => height.Select(z => -t * amount * z).ToArray();
     }
 
+    /// <summary>
+    /// Sets up the deployment of a flat-assembled grid by pulling one node —
+    /// the hand that lifts the kit at its singular node (José's Kangaroo
+    /// sequence): the anchor is driven along <paramref name="normal"/> by
+    /// <paramref name="rise"/> as the fold goes 0 → 1, while every lath end
+    /// rests on the one-sided ground through its rest position
+    /// (<see cref="Options.Ground"/>): ends may lift off the table but not sink
+    /// into it; <see cref="Options.GroundWeight"/> or ends held with
+    /// <see cref="Options.Sliding"/> keep the grid from rising as a rigid body.
+    /// Nothing else is prescribed. Call it on the net in its flat state
+    /// (<see cref="AtState"/> of a <see cref="PressFlat"/> result, or a net built
+    /// from the flat curves); <paramref name="kick"/> seeds the softest mode as
+    /// in <see cref="DeployFromFlat"/>. Measured on the 3-fold Enneper web, the
+    /// pull does not deploy the grid: the deployment mode moves the singular
+    /// node not at all relative to the lath ends, so the pull is answered by a
+    /// strained bump (see the tests) — <see cref="DeployFromFlat"/> is the
+    /// drive that works. Solve the returned net with the same options.
+    /// </summary>
+    public ScissorNet Lift(Options options, int anchor, Vec3d normal, double rise, double kick = 0.0)
+    {
+        var nz = normal.Normalized();
+        var fixedSet = new HashSet<int>(options.Fixed);
+        options.Driven = options.Driven.Concat(new[] { anchor }).Distinct().Where(i => !fixedSet.Contains(i)).ToArray();
+        int k0 = Array.IndexOf(options.Driven.ToArray(), anchor);
+        var start = OnTable(options, normal, kick);
+        var c = start.Nodes[anchor];
+        var restDriven = options.Driven.Select(i => start.Nodes[i]).ToArray();
+        var others = options.TargetsAt;
+        options.TargetsAt = t =>
+        {
+            var o = others?.Invoke(t) ?? Array.Empty<Vec3d>();
+            var targets = new Vec3d[restDriven.Length];
+            for (int i = 0; i < targets.Length; i++) targets[i] = i < o.Length ? o[i] : restDriven[i];
+            targets[k0] = c + t * rise * nz;
+            return targets;
+        };
+        return start;
+    }
+
+    /// <summary>
+    /// Puts the net on a table: every lath end that is not fixed, driven or
+    /// sliding rests on the one-sided ground through its rest position
+    /// (<see cref="Options.Ground"/>, normal <paramref name="normal"/>), and the
+    /// drivers already in <paramref name="options"/> (Move / To, cables) act
+    /// from there. <paramref name="kick"/> ≠ 0 seeds the softest mode
+    /// (<see cref="SoftestModes"/>) by kick × the mean joint spacing — needed
+    /// on a flat grid, whose deployment branches a Gauss–Newton solver cannot
+    /// enter on its own; the sign is the branch. Returns the net to solve
+    /// (this one, or the kicked copy).
+    /// </summary>
+    public ScissorNet OnTable(Options options, Vec3d normal, double kick = 0.0)
+    {
+        var nz = normal.Normalized();
+        var fixedSet = new HashSet<int>(options.Fixed);
+        var drivenSet = new HashSet<int>(options.Driven);
+        options.SlideNormal = nz;
+        options.Ground = options.Ground.Concat(LathEnds()).Distinct().Where(i => !fixedSet.Contains(i) && !drivenSet.Contains(i) && !options.Sliding.Contains(i)).ToArray();
+        ScissorNet start = this;
+        if (kick != 0)
+        {
+            var modes = SoftestModes(new Options { Fairness = options.Fairness, Fixed = options.Fixed, Driven = options.Driven, Sliding = options.Sliding, SlideNormal = nz, Rest = options.Rest }, 1);
+            if (modes.Count > 0)
+            {
+                var md = modes[0];
+                int big = 0; for (int i = 1; i < md.positions.Length; i++) if (md.positions[i].Length > md.positions[big].Length) big = i;
+                if (Vec3d.Dot(md.positions[big], nz) < 0) md = (md.positions.Select(p => -p).ToArray(), md.normals.Select(p => -p).ToArray(), md.stiffness);
+                LastMode = md;
+                start = AtState(Kick(md, kick * Scale));
+            }
+        }
+        return start;
+    }
+
+    /// <summary>The softest mode the last <see cref="OnTable"/> / <see cref="DeployFromFlat"/> kicked along (null when no kick was applied).</summary>
+    public (Vec3d[] positions, Vec3d[] normals, double stiffness)? LastMode { get; private set; }
+
+    /// <summary>
+    /// True when every node normal lies within <paramref name="toleranceDeg"/>
+    /// of one direction — the net is flat (assembled on a table, or pressed
+    /// flat), the configuration where its deployment bifurcates.
+    /// </summary>
+    public bool IsFlat(double toleranceDeg = 2.0)
+    {
+        var mean = Vec3d.Zero;
+        foreach (var q in Normals) mean += Vec3d.Dot(q, Normals[0]) < 0 ? -q : q;
+        if (mean.Length < 1e-12) return false;
+        mean = mean.Normalized();
+        double c = Math.Cos(toleranceDeg * Math.PI / 180);
+        foreach (var q in Normals) if (Math.Abs(Vec3d.Dot(q, mean)) < c) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Sets up the deployment of a flat-assembled grid by opening its scissors
+    /// — the erection of a flat-assembled asymptotic gridshell driven at the
+    /// joints (a hub motor, the hands that open the kit) rather than at one
+    /// node: every joint but the anchor (a singular node keeps its own angle)
+    /// gets a scissor driver that turns its crossing angle from the flat
+    /// value to <paramref name="angle"/> (radians; π/2 for a web on a minimal
+    /// surface, whose asymptotic curves cross at right angles — Schling 2018),
+    /// the anchor is held, and lath ends rest on the one-sided ground through
+    /// their rest positions. The flat state is a bifurcation (pitchfork): the
+    /// two branches are the deployment and its mirror image, and a
+    /// Gauss–Newton solver started exactly flat never leaves the plane, so the
+    /// returned net is this one kicked along its softest mode
+    /// (<see cref="SoftestModes"/>) by <paramref name="kick"/> × the mean joint
+    /// spacing — the sign chooses the branch; 0 leaves the net flat, which
+    /// shows the lock. Solve the returned net with the same options.
+    /// </summary>
+    public ScissorNet DeployFromFlat(Options options, int anchor, Vec3d normal, double angle, double kick, out (Vec3d[] positions, Vec3d[] normals, double stiffness)? mode)
+    {
+        var joints = Enumerable.Range(0, Nodes.Length).Where(v => IsJoint[v] && v != anchor && NodeLaths[v].Length == 2).ToArray();
+        options.Scissors = joints;
+        LastMode = null;
+        var start = OnTable(options, normal, kick);
+        mode = LastMode;
+        var rest = new State { Nodes = start.Nodes, Normals = start.Normals };
+        var a0 = joints.Select(v => start.CrossingAngleSigned(rest, v)).ToArray();
+        options.ScissorAnglesAt = t => a0.Select(a => a + t * (angle - a)).ToArray();
+        return start;
+    }
+
+    /// <summary>
+    /// Crossing angle (radians, 0…π) at a joint measured from the tangent of
+    /// the first lath through it to the second — the angle the scissor drivers
+    /// prescribe (<see cref="CrossingAngles"/> folds it to 0…90°).
+    /// </summary>
+    public double CrossingAngleSigned(State s, int v)
+    {
+        if (NodeLaths[v].Length < 2) return double.NaN;
+        var ts = new List<Vec3d>();
+        foreach (int l in NodeLaths[v].Take(2))
+        {
+            var lath = Laths[l]; int k = Array.IndexOf(lath, v);
+            int i0 = Math.Max(0, k - 1), i1 = Math.Min(lath.Length - 1, k + 1);
+            ts.Add((s.Nodes[lath[i1]] - s.Nodes[lath[i0]]).Normalized());
+        }
+        return Math.Acos(Math.Max(-1, Math.Min(1, Vec3d.Dot(ts[0], ts[1]))));
+    }
+
+    /// <summary>
+    /// The same net re-based at one of its states: nodes and normals from the
+    /// state, the laths and their rest lengths (the joint spacing cut into the
+    /// strips) unchanged, so the state becomes the stress-free rest geometry
+    /// — a net pressed flat becomes the flat kit whose strips were cut as the
+    /// flat curves, and <see cref="Lift"/> deploys it from there.
+    /// </summary>
+    public ScissorNet AtState(State state)
+    {
+        if (state.Nodes.Length != Nodes.Length) throw new ArgumentException("The state belongs to another net.", nameof(state));
+        var net = new ScissorNet(state.Nodes, Laths, CountA, state.Normals, RestLengths);
+        net.RestArcs = RestArcs;
+        net.SourceLaths = SourceLaths;
+        return net;
+    }
+
+    private ScissorNet(Vec3d[] nodes, IReadOnlyList<int[]> laths, int countA, Vec3d[] normals, IReadOnlyList<double[]> restLengths)
+        : this(nodes, laths, countA, normals)
+    {
+        RestLengths = restLengths.Select(r => (double[])r.Clone()).ToList();
+        RestArcs = RestLengths;
+        double sum = 0; int count = 0;
+        foreach (var r in RestLengths) foreach (double l in r) { sum += l; count++; }
+        Scale = count > 0 ? sum / count : 1.0;
+    }
+
     private static int AddAndIndex(List<Vec3d> list, Vec3d p) { list.Add(p); return list.Count - 1; }
 
     /// <summary>For nets built by <see cref="FromTopology"/>: input lath index of every lath (family A first, then B).</summary>
@@ -515,39 +743,24 @@ public sealed class ScissorNet
         var segs = new List<(int a, int b, double l)>();
         for (int l = 0; l < Laths.Count; l++)
             for (int i = 0; i + 1 < Laths[l].Length; i++) segs.Add((Laths[l][i], Laths[l][i + 1], RestLengths[l][i]));
-        var fair = new List<Bend>();
-        if (opt.Fairness > 0)
-            for (int l = 0; l < Laths.Count; l++)
-                for (int i = 1; i + 1 < Laths[l].Length; i++)
-                {
-                    int p = Laths[l][i - 1], v = Laths[l][i], q = Laths[l][i + 1];
-                    double lp = RestLengths[l][i - 1], lq = RestLengths[l][i];
-                    // rest turning vector in the rest frame (t along the lath, n the normal, b = n × t)
-                    var d0 = (Nodes[q] - Nodes[v]) / lq - (Nodes[v] - Nodes[p]) / lp;
-                    var t0 = (Nodes[q] - Nodes[p]).Normalized();
-                    var n0 = Normals[v];
-                    n0 = (n0 - Vec3d.Dot(n0, t0) * t0).Normalized();
-                    var b0 = Vec3d.Cross(n0, t0);
-                    bool straight = opt.Rest == LathRest.Straight;
-                    fair.Add(new Bend { Prev = p, Node = v, Next = q, LPrev = lp, LNext = lq, Along = straight ? 0 : Vec3d.Dot(d0, t0), Normal = straight ? 0 : Vec3d.Dot(d0, n0), InPlane = straight ? 0 : Vec3d.Dot(d0, b0) });
-                }
-        // uniform twist through nodes that lie on one lath only (subdivision nodes): the normal's rate of
-        // change along the lath is the same on both sides — the torsion equilibrium of a rod free between
-        // hinges, and it removes the free spin of those normals. Joints are left alone (τg varies).
-        // Free tails (a lath end on one lath only) carry no torque: zero twist on the end segment, q = −1.
-        var twistNodes = new List<(int p, int v, int q, double lp, double lq)>();
-        for (int l = 0; l < Laths.Count; l++)
-        {
-            var lath = Laths[l]; int L = lath.Length;
-            for (int i = 1; i + 1 < L; i++)
-                if (NodeLaths[lath[i]].Length == 1)
-                    twistNodes.Add((lath[i - 1], lath[i], lath[i + 1], RestLengths[l][i - 1], RestLengths[l][i]));
-            if (L >= 2 && NodeLaths[lath[0]].Length == 1) twistNodes.Add((lath[1], lath[0], -1, RestLengths[l][0], 0));
-            if (L >= 2 && NodeLaths[lath[L - 1]].Length == 1) twistNodes.Add((lath[L - 2], lath[L - 1], -1, RestLengths[l][L - 2], 0));
-        }
+        var fair = BuildBends(opt);
+        var twistNodes = BuildTwists();
         double wF = Math.Sqrt(Math.Max(0, opt.Fairness));
         double wT = opt.TargetWeight / Scale;
         double wC = opt.CableWeight / Scale;
+        // scissor drivers: the two laths through the joint and their neighbours along each (ends use the one neighbour)
+        var scissors = new List<(int v, int p1, int q1, int p2, int q2)>();
+        foreach (int v in opt.Scissors)
+        {
+            if (NodeLaths[v].Length < 2) throw new ArgumentException($"Node {v} is not a joint: a scissor driver needs two laths.", nameof(options));
+            var nb = new List<(int p, int q)>();
+            foreach (int l in NodeLaths[v].Take(2))
+            {
+                var lath = Laths[l]; int k = Array.IndexOf(lath, v);
+                nb.Add((lath[Math.Max(0, k - 1)], lath[Math.Min(lath.Length - 1, k + 1)]));
+            }
+            scissors.Add((v, nb[0].p, nb[0].q, nb[1].p, nb[1].q));
+        }
 
         int steps = Math.Max(1, opt.Steps);
         for (int k = 0; k <= steps; k++)
@@ -556,6 +769,8 @@ public sealed class ScissorNet
             var targets = opt.TargetsAt != null && opt.Driven.Count > 0 ? opt.TargetsAt(t) : Array.Empty<Vec3d>();
             var cableLen = opt.CableLengthsAt != null && opt.Cables.Count > 0 ? opt.CableLengthsAt(t) : Array.Empty<double>();
             _slideOffsets = opt.SlideOffsetsAt != null && opt.Sliding.Count > 0 ? opt.SlideOffsetsAt(t) : null;
+            _scissorAngles = opt.ScissorAnglesAt != null && scissors.Count > 0 ? opt.ScissorAnglesAt(t) : Array.Empty<double>();
+            _scissors = scissors;
 
             var st = SolveState(opt, t, pos, nrm, dof, ndof, freeCount, segs, fair, twistNodes, wF, wT, wC, targets, cableLen);
             result.States.Add(st);
@@ -566,6 +781,15 @@ public sealed class ScissorNet
 
     private double[]? _slideOffsets;
     private double SlideOffset(int k) => _slideOffsets != null && k < _slideOffsets.Length ? _slideOffsets[k] : 0.0;
+    private double[] _scissorAngles = Array.Empty<double>();
+    private List<(int v, int p1, int q1, int p2, int q2)> _scissors = new List<(int, int, int, int, int)>();
+    private int ScissorCount => Math.Min(_scissors.Count, _scissorAngles.Length);
+    private static double CrossingCos(Vec3d[] pos, (int v, int p1, int q1, int p2, int q2) s)
+    {
+        var t1 = (pos[s.q1] - pos[s.p1]).Normalized();
+        var t2 = (pos[s.q2] - pos[s.p2]).Normalized();
+        return Vec3d.Dot(t1, t2);
+    }
 
     private State SolveState(Options opt, double t, Vec3d[] pos, Vec3d[] nrm, int[] dof, int[] ndof, int freeCount,
         List<(int a, int b, double l)> segs, List<Bend> fair, List<(int p, int v, int q, double lp, double lq)> twistNodes,
@@ -576,7 +800,7 @@ public sealed class ScissorNet
         int nDriven = Math.Min(opt.Driven.Count, targets.Length);
         int nCable = Math.Min(opt.Cables.Count, cableLen.Length);
         int nSlide = opt.Sliding.Count;
-        int m = segs.Count * 3 + Nodes.Length + fair.Count * 3 + nDriven * 3 + nCable + nSlide + twistNodes.Count;
+        int m = segs.Count * 3 + Nodes.Length + fair.Count * 3 + nDriven * 3 + nCable + nSlide + opt.Ground.Count + ScissorCount + twistNodes.Count;
         var r = new double[m];
         // Jacobian in triplets per residual row: (col, value) lists
         var rowsCols = new List<int>[m];
@@ -682,9 +906,22 @@ public sealed class ScissorNet
         double cm = 0;
         for (int i = 0; i < nCable; i++) cm = Math.Max(cm, Math.Abs((pos[opt.Cables[i].p] - pos[opt.Cables[i].q]).Length - cableLen[i]));
         st.CableMiss = cm;
+        double scm = 0;
+        for (int i = 0; i < ScissorCount; i++)
+            scm = Math.Max(scm, Math.Abs(Math.Acos(Math.Max(-1, Math.Min(1, CrossingCos(pos, _scissors[i])))) - _scissorAngles[i]) * 180 / Math.PI);
+        st.ScissorMiss = scm;
         double sm = 0;
         for (int k = 0; k < opt.Sliding.Count; k++) sm = Math.Max(sm, Math.Abs(Vec3d.Dot(pos[opt.Sliding[k]] - Nodes[opt.Sliding[k]], slideN) - SlideOffset(k)));
         st.SlideMiss = sm;
+        double gm = 0; int contacts = 0;
+        foreach (int v in opt.Ground)
+        {
+            double h = Vec3d.Dot(pos[v] - Nodes[v], slideN);
+            gm = Math.Max(gm, -h);
+            if (h < 1e-6 * Scale) contacts++;
+        }
+        st.GroundMiss = gm;
+        st.GroundContacts = contacts;
         return st;
     }
 
@@ -793,6 +1030,35 @@ public sealed class ScissorNet
             AddVec(v, false, wT * slideN);
             row++;
         }
+        foreach (int v in opt.Ground)
+        {
+            // one-sided: the sliding residual below the plane, nothing above it (the row stays empty)
+            double h = Vec3d.Dot(pos[v] - Nodes[v], slideN);
+            double wg = h < 0 ? wT * opt.HingeWeight : opt.GroundWeight / Scale;   // contact as hard as a hinge, weight as soft as a target
+            if (wg > 0) { r[row] = wg * h; AddVec(v, false, wg * slideN); }
+            else r[row] = 0;
+            row++;
+        }
+        for (int i = 0; i < ScissorCount; i++)
+        {
+            // crossing angle at a scissor driver: cos(angle between the lath tangents) − cos(prescribed);
+            // the Jacobian over the (up to four) neighbour positions by central differences
+            var sc = _scissors[i];
+            double wS = opt.ScissorWeight, target = Math.Cos(_scissorAngles[i]);
+            r[row] = wS * (CrossingCos(pos, sc) - target);
+            double hs = 1e-6 * Scale;
+            foreach (int node in new[] { sc.p1, sc.q1, sc.p2, sc.q2 }.Distinct())
+                for (int c = 0; c < 3; c++)
+                {
+                    var e = new Vec3d(c == 0 ? hs : 0, c == 1 ? hs : 0, c == 2 ? hs : 0);
+                    var saved = pos[node];
+                    pos[node] = saved + e; double fp = CrossingCos(pos, sc);
+                    pos[node] = saved - e; double fm = CrossingCos(pos, sc);
+                    pos[node] = saved;
+                    Add(node, c, false, wS * (fp - fm) / (2 * hs));
+                }
+            row++;
+        }
         foreach (var (p, v, q, lp, lq) in twistNodes)
         {
             // twist rate (rotation angle of the normal about the segment per length) equal on both sides of v;
@@ -821,6 +1087,230 @@ public sealed class ScissorNet
         }
         double cost = 0; foreach (double x in r) cost += x * x;
         return 0.5 * cost;
+    }
+
+    // ------------------------------------------------------------------ bifurcation at a flat state
+
+    /// <summary>
+    /// The Gauss–Newton matrix JᵀJ of the hinge, length, unit-normal, bending,
+    /// twist, target, cable, sliding and ground residuals at the rest state
+    /// (targets and cables at their rest values, no scissor drivers), over the
+    /// unknown layout dof (positions, −1 for fixed nodes) / ndof (normals).
+    /// </summary>
+    private SparseSymmetricSolver.Builder GaussNewton(Options opt, out int[] dof, out int[] ndof, out int freeCount)
+    {
+        int n = Nodes.Length;
+        var fixedSet = new HashSet<int>(opt.Fixed);
+        freeCount = 0;
+        dof = new int[n]; ndof = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (fixedSet.Contains(i)) dof[i] = -1; else { dof[i] = freeCount; freeCount += 3; }
+            ndof[i] = freeCount; freeCount += 3;
+        }
+        var segs = new List<(int a, int b, double l)>();
+        for (int l = 0; l < Laths.Count; l++)
+            for (int i = 0; i + 1 < Laths[l].Length; i++) segs.Add((Laths[l][i], Laths[l][i + 1], RestLengths[l][i]));
+        var fair = BuildBends(opt);
+        var twistNodes = BuildTwists();
+        double wF = Math.Sqrt(Math.Max(0, opt.Fairness));
+        double wT = opt.TargetWeight / Scale, wC = opt.CableWeight / Scale;
+        _slideOffsets = null; _scissorAngles = Array.Empty<double>(); _scissors = new List<(int, int, int, int, int)>();
+        var targets = opt.Driven.Select(i => Nodes[i]).ToArray();
+        var cableLen = opt.Cables.Select(c => (Nodes[c.p] - Nodes[c.q]).Length).ToArray();
+        int m = segs.Count * 3 + n + fair.Count * 3 + targets.Length * 3 + cableLen.Length + opt.Sliding.Count + opt.Ground.Count + twistNodes.Count;
+        var r = new double[m];
+        var cols = new List<int>[m]; var vals = new List<double>[m];
+        for (int i = 0; i < m; i++) { cols[i] = new List<int>(12); vals[i] = new List<double>(12); }
+        var slideN = opt.SlideNormal.Normalized();
+        Evaluate((Vec3d[])Nodes.Clone(), (Vec3d[])Normals.Clone(), dof, ndof, segs, fair, twistNodes, wF, wT, wC, opt, targets.Length, cableLen.Length, targets, cableLen, slideN, r, cols, vals);
+        var builder = new SparseSymmetricSolver.Builder(freeCount);
+        for (int i = 0; i < m; i++)
+        {
+            var rc = cols[i]; var rv = vals[i];
+            for (int p = 0; p < rc.Count; p++)
+                for (int q = p; q < rc.Count; q++) builder.Add(rc[p], rc[q], rv[p] * rv[q]);
+        }
+        return builder;
+    }
+
+    /// <summary>
+    /// ‖J v‖² for a direction v (a displacement per node and a change of every
+    /// normal): how fast the constraint residuals grow along v at the rest
+    /// state, 0 for an exact first-order mechanism. Fixed nodes' displacements
+    /// are ignored. The same quantity <see cref="SoftestModes"/> minimises.
+    /// </summary>
+    public double Stiffness(Vec3d[] positions, Vec3d[] normals, Options options)
+    {
+        var builder = GaussNewton(options, out var dof, out var ndof, out int freeCount);
+        var x = new double[freeCount];
+        for (int i = 0; i < Nodes.Length; i++)
+        {
+            if (dof[i] >= 0) { x[dof[i]] = positions[i].X; x[dof[i] + 1] = positions[i].Y; x[dof[i] + 2] = positions[i].Z; }
+            x[ndof[i]] = normals[i].X; x[ndof[i] + 1] = normals[i].Y; x[ndof[i] + 2] = normals[i].Z;
+        }
+        var y = builder.Multiply(x);
+        double s = 0; for (int c = 0; c < freeCount; c++) s += x[c] * y[c];
+        return s;
+    }
+
+    /// <summary>
+    /// The softest motions of the net at its rest state: the directions
+    /// (positions and normals per node) along which the hinge, length,
+    /// unit-normal, bending and twist residuals grow least, found by inverse
+    /// iteration on the Gauss–Newton matrix JᵀJ with the rigid-body motions
+    /// (and the fixed / driven / sliding constraints of <paramref name="options"/>)
+    /// deflated — the kinematic analogue of a buckling mode (Pellegrino 1993,
+    /// the null space of the compatibility matrix; Kumar &amp; Pellegrino 2000,
+    /// kinematic bifurcations). At a flat-assembled grid every such mode is
+    /// out of plane: the deployment branches of the pitchfork, which a
+    /// Gauss–Newton solver cannot find on its own because the coupling between
+    /// an in-plane drive and the out-of-plane motion sits in the second
+    /// derivative Σ rᵢ ∇²rᵢ that Gauss–Newton drops. <see cref="Kick"/> seeds a
+    /// state along such a mode so that the solver has a first-order path.
+    /// Returns count modes, each with its Rayleigh quotient ‖J v‖² (0 for an
+    /// exact mechanism), softest first; the modes are unit vectors over the
+    /// node positions (normals carried along) with the positions scaled so
+    /// that the largest node displacement is 1.
+    /// </summary>
+    public List<(Vec3d[] positions, Vec3d[] normals, double stiffness)> SoftestModes(Options options, int count = 1, int iterations = 60)
+    {
+        var opt = options;
+        int n = Nodes.Length;
+        var builder = GaussNewton(opt, out var dof, out var ndof, out int freeCount);
+        double maxDiag = 0;
+        for (int c = 0; c < freeCount; c++) maxDiag = Math.Max(maxDiag, builder.Get(c, c));
+        double shift = 1e-11 * Math.Max(maxDiag, 1e-300);
+        for (int c = 0; c < freeCount; c++) builder.Add(c, c, shift);
+        var solver = SparseSymmetricSolver.Factor(builder, 1e-16);
+        if (solver == null) return new List<(Vec3d[], Vec3d[], double)>();
+        for (int c = 0; c < freeCount; c++) builder.Add(c, c, -shift);
+
+        // deflation: the rigid-body motions that keep the pinned nodes (fixed, driven) still — these are exact
+        // null directions of JᵀJ; a rigid motion that moves a pinned node is not, and must not be removed
+        var pinned = opt.Fixed.Concat(opt.Driven).Distinct().ToList();
+        var basis = new List<double[]>();
+        void AddRigid(Vec3d omega, Vec3d tau)
+        {
+            var v = new double[freeCount];
+            for (int i = 0; i < n; i++)
+            {
+                var a = Vec3d.Cross(omega, Nodes[i]) + tau; var b = Vec3d.Cross(omega, Normals[i]);
+                if (dof[i] >= 0) { v[dof[i]] = a.X; v[dof[i] + 1] = a.Y; v[dof[i] + 2] = a.Z; }
+                v[ndof[i]] = b.X; v[ndof[i] + 1] = b.Y; v[ndof[i] + 2] = b.Z;
+            }
+            if (Orthonormalise(v, basis)) basis.Add(v);
+        }
+        var axes = new[] { new Vec3d(1, 0, 0), new Vec3d(0, 1, 0), new Vec3d(0, 0, 1) };
+        if (pinned.Count == 0)
+        {
+            var centroid = Vec3d.Zero; foreach (var p in Nodes) centroid += p; centroid /= n;
+            foreach (var e in axes) { AddRigid(Vec3d.Zero, e); AddRigid(e, -Vec3d.Cross(e, centroid)); }
+        }
+        else if (pinned.Count == 1)
+        {
+            var c0 = Nodes[pinned[0]];
+            foreach (var e in axes) AddRigid(e, -Vec3d.Cross(e, c0));
+        }
+        else if (pinned.Count == 2 && (Nodes[pinned[1]] - Nodes[pinned[0]]).Length > 1e-12 * Math.Max(1, Scale))
+        {
+            var c0 = Nodes[pinned[0]]; var e = (Nodes[pinned[1]] - c0).Normalized();
+            AddRigid(e, -Vec3d.Cross(e, c0));
+        }
+        int rigid = basis.Count;
+
+        var modes = new List<(Vec3d[] positions, Vec3d[] normals, double stiffness)>();
+        var rnd = new Random(12345);
+        for (int k = 0; k < count; k++)
+        {
+            var x = new double[freeCount];
+            for (int c = 0; c < freeCount; c++) x[c] = rnd.NextDouble() - 0.5;
+            if (!Orthonormalise(x, basis)) break;
+            for (int it = 0; it < iterations; it++)
+            {
+                x = solver.Solve(x);
+                if (!Orthonormalise(x, basis)) break;
+            }
+            var jx = builder.Multiply(x);
+            double stiffness = 0; for (int c = 0; c < freeCount; c++) stiffness += x[c] * jx[c];
+            basis.Add(x);
+            var pos = new Vec3d[n]; var nrm = new Vec3d[n];
+            double largest = 0;
+            for (int i = 0; i < n; i++)
+            {
+                pos[i] = dof[i] >= 0 ? new Vec3d(x[dof[i]], x[dof[i] + 1], x[dof[i] + 2]) : Vec3d.Zero;
+                nrm[i] = new Vec3d(x[ndof[i]], x[ndof[i] + 1], x[ndof[i] + 2]);
+                largest = Math.Max(largest, pos[i].Length);
+            }
+            if (largest > 0) for (int i = 0; i < n; i++) { pos[i] /= largest; nrm[i] /= largest; }
+            modes.Add((pos, nrm, stiffness));
+        }
+        modes.Sort((a, b) => a.stiffness.CompareTo(b.stiffness));
+        return modes;
+    }
+
+    private static bool Orthonormalise(double[] v, List<double[]> basis)
+    {
+        foreach (var b in basis)
+        {
+            double d = 0; for (int c = 0; c < v.Length; c++) d += v[c] * b[c];
+            for (int c = 0; c < v.Length; c++) v[c] -= d * b[c];
+        }
+        double norm = 0; for (int c = 0; c < v.Length; c++) norm += v[c] * v[c];
+        norm = Math.Sqrt(norm);
+        if (norm < 1e-300) return false;
+        for (int c = 0; c < v.Length; c++) v[c] /= norm;
+        return true;
+    }
+
+    /// <summary>
+    /// The rest state moved along a mode (positions by amplitude × mode, the
+    /// normals re-normalised), as a state of this net: the imperfection that
+    /// takes a flat grid off its bifurcation point onto one deployment branch
+    /// (amplitude &gt; 0) or the other (&lt; 0). Re-base with <see cref="AtState"/>
+    /// or drive the net from there.
+    /// </summary>
+    public State Kick((Vec3d[] positions, Vec3d[] normals, double stiffness) mode, double amplitude)
+    {
+        var st = new State { Fold = 0 };
+        st.Nodes = Nodes.Select((p, i) => p + amplitude * mode.positions[i]).ToArray();
+        st.Normals = Normals.Select((q, i) => (q + amplitude * mode.normals[i]).Normalized()).ToArray();
+        return st;
+    }
+
+    private List<Bend> BuildBends(Options opt)
+    {
+        var fair = new List<Bend>();
+        if (opt.Fairness > 0)
+            for (int l = 0; l < Laths.Count; l++)
+                for (int i = 1; i + 1 < Laths[l].Length; i++)
+                {
+                    int p = Laths[l][i - 1], v = Laths[l][i], q = Laths[l][i + 1];
+                    double lp = RestLengths[l][i - 1], lq = RestLengths[l][i];
+                    var d0 = (Nodes[q] - Nodes[v]) / lq - (Nodes[v] - Nodes[p]) / lp;
+                    var t0 = (Nodes[q] - Nodes[p]).Normalized();
+                    var n0 = Normals[v];
+                    n0 = (n0 - Vec3d.Dot(n0, t0) * t0).Normalized();
+                    var b0 = Vec3d.Cross(n0, t0);
+                    bool straight = opt.Rest == LathRest.Straight;
+                    fair.Add(new Bend { Prev = p, Node = v, Next = q, LPrev = lp, LNext = lq, Along = straight ? 0 : Vec3d.Dot(d0, t0), Normal = straight ? 0 : Vec3d.Dot(d0, n0), InPlane = straight ? 0 : Vec3d.Dot(d0, b0) });
+                }
+        return fair;
+    }
+
+    private List<(int p, int v, int q, double lp, double lq)> BuildTwists()
+    {
+        var twistNodes = new List<(int p, int v, int q, double lp, double lq)>();
+        for (int l = 0; l < Laths.Count; l++)
+        {
+            var lath = Laths[l]; int L = lath.Length;
+            for (int i = 1; i + 1 < L; i++)
+                if (NodeLaths[lath[i]].Length == 1)
+                    twistNodes.Add((lath[i - 1], lath[i], lath[i + 1], RestLengths[l][i - 1], RestLengths[l][i]));
+            if (L >= 2 && NodeLaths[lath[0]].Length == 1) twistNodes.Add((lath[1], lath[0], -1, RestLengths[l][0], 0));
+            if (L >= 2 && NodeLaths[lath[L - 1]].Length == 1) twistNodes.Add((lath[L - 2], lath[L - 1], -1, RestLengths[l][L - 2], 0));
+        }
+        return twistNodes;
     }
 
     // ------------------------------------------------------------------ read-outs

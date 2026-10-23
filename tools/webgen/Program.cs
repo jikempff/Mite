@@ -1156,6 +1156,130 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     };
     numbers["kinCat"] = new { strain = strainCat, laths = netC.Laths.Count, joints = netC.IsJoint.Count(j => j), nodes = netC.Nodes.Length, ground = ground.Length, cableStart = R3(d0), elastic = catEnergyRows, natural = catNatural, naturalFold = catNatural >= 0 ? R3(resC.States[catNatural].Fold) : -1, settleMove = R3(resC.States[0].Nodes.Zip(netC.Nodes, (a2, b2) => (a2 - b2).Length).Max()), settleDeg = resC.States[0].AsymptoticDeviation, ms = t.ElapsedMilliseconds, rows = catRows };
     scenes["kinCat"] = new { wire = Edges(cat, 4), states = catScenes };
+
+    // 3. Exact: the kinetic umbrella opened from its bundle. At β = 0 every rod lies in the plane and each A rod
+    //    coincides with its B twin; the top ring's sliding planes rise by 2 s_max sin β while the bottom ring stays
+    //    on the ground — through the bifurcation at β = 0 — and every state must be the closed form up to 60°.
+    {
+        int nb = 16, lb = 3, rowsB = 2 * lb + 1; double rhoB = 1.0, beta1 = 60 * Math.PI / 180;
+        var (nB, lB, nmB) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(nb, lb, rhoB, 0.0);
+        var netB = new Mite.Core.Kinetics.ScissorNet(nB, lB, nb, nmB);
+        var topB = Enumerable.Range(0, nb).Select(k => k * rowsB + 2 * lb).ToArray();
+        var botB = Enumerable.Range(0, nb).Select(k => k * rowsB).ToArray();
+        double smax = rhoB * Math.Tan(Math.PI * lb / nb);
+        var slideB = botB.Concat(topB).ToArray(); var topSet = new HashSet<int>(topB);
+        int stepsB = 12;
+        t.Restart();
+        var resB = netB.Solve(new Mite.Core.Kinetics.ScissorNet.Options { Sliding = slideB, SlideOffsetsAt = f => { double beta = f * beta1; double dz = 2 * smax * Math.Sin(beta); return slideB.Select(i => topSet.Contains(i) ? dz : 0.0).ToArray(); }, Steps = stepsB, Tolerance = 1e-11, MaxIterations = 200 });
+        t.Stop();
+        var bRows = new List<object>(); var bScenes = new List<object>();
+        double bShape = 0, bDrift = 0, bAsym = 0, bSlide = 0; int bIt = 0;
+        foreach (var st in resB.States)
+        {
+            double beta = st.Fold * beta1;
+            var (truth, _, _) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(nb, lb, rhoB, beta);
+            double shape = 0;
+            for (int i = 0; i < truth.Length; i++) for (int j = i + 1; j < truth.Length; j++) shape = Math.Max(shape, Math.Abs((st.Nodes[i] - st.Nodes[j]).Length - (truth[i] - truth[j]).Length));
+            bShape = Math.Max(bShape, shape); bDrift = Math.Max(bDrift, st.LengthDrift); bAsym = Math.Max(bAsym, st.AsymptoticDeviation); bSlide = Math.Max(bSlide, st.SlideMiss); bIt = Math.Max(bIt, st.Iterations);
+            var w = st.Nodes[lb];
+            bRows.Add(new { fold = R3(st.Fold), betaDeg = R3(beta * 180 / Math.PI), waist = R3(Math.Sqrt(w.X * w.X + w.Y * w.Y)), waistTheory = R3(rhoB * Math.Cos(beta)), rise = R3(2 * smax * Math.Sin(beta)), shapeErr = shape, drift = st.LengthDrift, asymDeg = st.AsymptoticDeviation, slideMiss = st.SlideMiss, iterations = st.Iterations, converged = st.Converged });
+            var polys = netB.LathPolylines(st);
+            bScenes.Add(new { a = polys.Take(nb).Select(l => Line(l)).ToArray(), b = polys.Skip(nb).Select(l => Line(l)).ToArray(), joints = st.Nodes.Select(P).ToArray() });
+        }
+        numbers["kinBundle"] = new { rods = 2 * nb, joints = nB.Length, states = resB.States.Count, worstShape = bShape, worstDrift = bDrift, worstAsym = bAsym, worstSlide = bSlide, firstIt = resB.States[1].Iterations, worstIt = bIt, ms = t.ElapsedMilliseconds, rows = bRows };
+        scenes["kinBundle"] = new { states = bScenes };
+    }
+
+    // 4. The flat kit deployed: the 3-fold Enneper web pressed flat (a hexagon), made exactly flat, and deployed
+    //    on a table by opening every scissor to the right angle of the minimal surface, after a kick along the
+    //    softest mode — the bifurcation at the flat state; compared with the design web by pairwise distances.
+    //    Also measured: the softest modes, the lock without a kick, and the pull at the singular node.
+    {
+        var meshE = AnalyticShapes.Build("enneper3", 3, 0.9, 0, 48).ToTriangulated();
+        var pcE = PrincipalCurvature.Compute(meshE, 2);
+        var web = AsymptoticWeb.Build(meshE, pcE, -1, new AsymptoticWeb.Options());
+        var topoE = NetTopology.Build(web.A, web.B, NetIntersections.FindAll(web.A, web.B, 0));
+        var projE = new MeshProjection(meshE);
+        var design = Mite.Core.Kinetics.ScissorNet.FromTopology(topoE, web.A.Count + web.B.Count, web.A.Count, 0, q => projE.ClosestPoint(q, projE.NearestVertexGlobal(q)).SmoothNormal);
+        int centre = design.NearestNode(web.Seed);
+        var up = new Vec3d(0, 0, 1);
+        t.Restart();
+        var pressOpt = new Mite.Core.Kinetics.ScissorNet.Options { Fairness = 0.3, Steps = 8, MaxIterations = 60 };
+        design.PressFlat(pressOpt, centre, up);
+        var pressed = design.Solve(pressOpt).Last;
+        long pressMs = t.ElapsedMilliseconds;
+        var flatState = new Mite.Core.Kinetics.ScissorNet.State { Nodes = pressed.Nodes.Select(q => new Vec3d(q.X, q.Y, 0)).ToArray(), Normals = pressed.Nodes.Select(_ => up).ToArray() };
+        var flat = design.AtState(flatState);
+        double zc = design.Nodes[centre].Z;
+        var designH = design.Nodes.Select(q => q.Z - zc).ToArray();
+        double Corr(double[] a, double[] b) { double num = 0, d1 = 0, d2 = 0; for (int k = 0; k < a.Length; k++) { num += a[k] * b[k]; d1 += a[k] * a[k]; d2 += b[k] * b[k]; } return num / Math.Sqrt(d1 * d2); }
+        (double rms, double max) Shape(Vec3d[] a, Vec3d[] b) { double e = 0, mx = 0; long cnt = 0; for (int i = 0; i < a.Length; i++) for (int j = i + 1; j < a.Length; j++) { double d = (a[i] - a[j]).Length - (b[i] - b[j]).Length; e += d * d; mx = Math.Max(mx, Math.Abs(d)); cnt++; } return (Math.Sqrt(e / cnt), mx); }
+        // modes
+        t.Restart();
+        var modes = flat.SoftestModes(new Mite.Core.Kinetics.ScissorNet.Options { Fairness = 0.3, Fixed = new[] { centre } }, 3);
+        long modeMs = t.ElapsedMilliseconds;
+        var modeRows = modes.Select(md => new { stiffness = md.stiffness, outOfPlane = R3(Math.Sqrt(md.positions.Sum(q => q.Z * q.Z) / md.positions.Sum(q => q.LengthSquared))), corr = R3(Corr(designH, md.positions.Select(q => q.Z).ToArray())) }).ToArray();
+        // the lock: held flat, no kick, no table
+        t.Restart();
+        var lockOpt = new Mite.Core.Kinetics.ScissorNet.Options { Fairness = 0.3, Steps = 4, MaxIterations = 60, Fixed = new[] { centre } };
+        var lockNet = flat.DeployFromFlat(lockOpt, centre, up, Math.PI / 2, 0.0, out _);
+        lockOpt.Ground = Array.Empty<int>();
+        var locked = lockNet.Solve(lockOpt).Last;
+        long lockMs = t.ElapsedMilliseconds;
+        // the deployment
+        t.Restart();
+        var depOpt = new Mite.Core.Kinetics.ScissorNet.Options { Fairness = 0.3, Steps = 10, MaxIterations = 80 };
+        var depNet = flat.DeployFromFlat(depOpt, centre, up, Math.PI / 2, 0.5, out var kickMode);
+        var dep = depNet.Solve(depOpt);
+        long depMs = t.ElapsedMilliseconds;
+        var depRows = new List<object>(); var depScenes = new List<object>();
+        foreach (var st in dep.States)
+        {
+            var (rms, mx) = Shape(st.Nodes, design.Nodes);
+            var ang = design.CrossingAngles(st).Where(a => !double.IsNaN(a)).ToArray();
+            double zmin = st.Nodes.Min(q => q.Z), zmax = st.Nodes.Max(q => q.Z);
+            depRows.Add(new { fold = R3(st.Fold), rms = R3(rms / design.Scale), max = R3(mx / design.Scale), corr = R3(Corr(designH, st.Nodes.Select(q => q.Z - st.Nodes[centre].Z).ToArray())), rise = R3(zmax - zmin), drift = st.LengthDrift, asymDeg = st.AsymptoticDeviation, scissorMiss = R3(st.ScissorMiss), contacts = st.GroundContacts, groundMiss = st.GroundMiss, minAngle = R3(ang.Min()), maxAngle = R3(ang.Max()), iterations = st.Iterations, converged = st.Converged });
+            var polys = design.LathPolylines(st);
+            depScenes.Add(new { a = polys.Take(design.CountA).Select(l => Line(l)).ToArray(), b = polys.Skip(design.CountA).Select(l => Line(l)).ToArray(), joints = Enumerable.Range(0, design.Nodes.Length).Where(i => design.IsJoint[i]).Select(i => P(st.Nodes[i])).ToArray() });
+        }
+        // the pull at the singular node (José's sequence): low lobes held on the table, centre pulled to its design height
+        t.Restart();
+        var ends = design.LathEnds();
+        var lowEnds = ends.Where(i => design.Nodes[i].Z - zc < -1e-6).ToArray();
+        double rise = -designH.Min();
+        var pullOpt = new Mite.Core.Kinetics.ScissorNet.Options { Fairness = 0.3, Steps = 10, MaxIterations = 80, Sliding = lowEnds };
+        var pullNet = flat.Lift(pullOpt, centre, up, rise, 0.5);
+        var pulled = pullNet.Solve(pullOpt).Last;
+        long pullMs = t.ElapsedMilliseconds;
+        var (prms, pmax) = Shape(pulled.Nodes, design.Nodes);
+        var designRise = designH.Max() - designH.Min();
+        var dLast = dep.Last; var (lrms, lmax) = Shape(dLast.Nodes, design.Nodes);
+        numbers["kinDeploy"] = new Dictionary<string, object>
+        {
+            ["laths"] = design.Laths.Count, ["joints"] = design.IsJoint.Count(j => j), ["nodes"] = design.Nodes.Length, ["spacing"] = R3(design.Scale), ["ends"] = ends.Length, ["scissors"] = depOpt.Scissors.Count,
+            ["pressDrift"] = pressed.LengthDrift, ["pressAsym"] = pressed.AsymptoticDeviation, ["pressHeight"] = pressed.Nodes.Max(q => Math.Abs(q.Z)), ["pressMs"] = pressMs,
+            ["modes"] = modeRows, ["modeMs"] = modeMs, ["kickStiffness"] = kickMode?.stiffness ?? 0,
+            ["lockHeight"] = locked.Nodes.Max(q => Math.Abs(q.Z)), ["lockScissorMiss"] = R3(locked.ScissorMiss), ["lockMs"] = lockMs,
+            ["designRise"] = R3(designRise), ["rms"] = R3(lrms / design.Scale), ["max"] = R3(lmax / design.Scale), ["corr"] = R3(Corr(designH, dLast.Nodes.Select(q => q.Z - dLast.Nodes[centre].Z).ToArray())),
+            ["worstDrift"] = dep.States.Max(x => x.LengthDrift), ["worstAsym"] = dep.States.Max(x => x.AsymptoticDeviation), ["contacts"] = dLast.GroundContacts, ["scissorMiss"] = R3(dLast.ScissorMiss), ["depMs"] = depMs, ["rows"] = depRows,
+            ["pull"] = new { rise = R3(rise), lifted = R3(pulled.Nodes[centre].Z - pullNet.Nodes[centre].Z), miss = R3(pulled.TargetMiss), drift = pulled.LengthDrift, asymDeg = pulled.AsymptoticDeviation, rms = R3(prms / design.Scale), held = lowEnds.Length, ms = pullMs },
+        };
+        // the design aligned onto the deployed state for the overlay: mirror if the other branch came out, then the
+        // best rotation about the table normal through the centre node (1-D search), the centre nodes coincident
+        var dNodes = (Vec3d[])design.Nodes.Clone();
+        if (Corr(designH, dLast.Nodes.Select(q => q.Z - dLast.Nodes[centre].Z).ToArray()) < 0) dNodes = dNodes.Select(q => new Vec3d(q.X, q.Y, 2 * zc - q.Z)).ToArray();
+        var dc = dNodes[centre]; var lc = dLast.Nodes[centre];
+        double AlignErr(double ang) { double c = Math.Cos(ang), sn = Math.Sin(ang), e = 0; for (int i = 0; i < dNodes.Length; i++) { var q = dNodes[i] - dc; var r = new Vec3d(c * q.X - sn * q.Y, sn * q.X + c * q.Y, q.Z) + lc; e += (r - dLast.Nodes[i]).LengthSquared; } return e; }
+        double best = 0, bestE = double.MaxValue;
+        for (int k = 0; k < 720; k++) { double a = k * Math.PI / 360; double e = AlignErr(a); if (e < bestE) { bestE = e; best = a; } }
+        for (double h = Math.PI / 720; h > 1e-7; h /= 2) { if (AlignErr(best + h) < AlignErr(best)) best += h; else if (AlignErr(best - h) < AlignErr(best)) best -= h; }
+        double cb = Math.Cos(best), sb = Math.Sin(best);
+        var aligned = dNodes.Select(q => { var r = q - dc; return new Vec3d(cb * r.X - sb * r.Y, sb * r.X + cb * r.Y, r.Z) + lc; }).ToArray();
+        double alignRms = Math.Sqrt(aligned.Zip(dLast.Nodes, (a, b) => (a - b).LengthSquared).Average()), alignMax = aligned.Zip(dLast.Nodes, (a, b) => (a - b).Length).Max();
+        var nd = (Dictionary<string, object>)numbers["kinDeploy"]; nd["alignRms"] = R3(alignRms / design.Scale); nd["alignMax"] = R3(alignMax / design.Scale);
+        var designPolys = design.LathPolylines(new Mite.Core.Kinetics.ScissorNet.State { Nodes = aligned });
+        scenes["kinDeploy"] = new { design = designPolys.Select(l => Line(l)).ToArray(), states = depScenes };
+    }
 }
 
 // ---------- Mite Net: one value for surface + both families (+ profile); lath-end classification ----------
