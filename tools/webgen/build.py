@@ -52,6 +52,13 @@ COMP_ORDER = [
     "Pull To Mesh",
     "Mesh Colour Map",
 ]
+COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Test Shape",
+              "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
+              "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
+              "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
+              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
+              "Net Kinetics",
+              "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 byname = {c["name"]: c for c in comps}
 assert set(byname) == set(COMP_ORDER), set(byname) ^ set(COMP_ORDER)
 
@@ -128,8 +135,16 @@ for tab in TAB_ORDER:
             if note.get("sheet"):
                 controls = '<div class="demo-ctl"><span class="ctl-l">sheet</span><select></select></div>'
             if demo == "torusK":
+            if demo == "curv":
+                # curvature against the exact truth: shape × quantity × (measured | exact | error)
                 mode = note.get("demoMode", "K")
-                controls = '<div class="demo-ctl"><span class="ctl-l">show</span>' + "".join(
+                shape = note.get("demoShape", "torus")
+                shapes = [("torus", "torus"), ("sphere", "sphere"), ("ellipsoid", "ellipsoid"), ("hyperboloid", "hyperboloid"),
+                          ("catenoid", "catenoid"), ("monkey", "monkey saddle"), ("cone", "cone"), ("wave", "wave")]
+                controls = ('<div class="demo-ctl" style="max-width:calc(100% - 160px)"><span class="ctl-l">shape</span>' + "".join(
+                    f'<label><input type="radio" name="sh-{slug(n)}" value="{key}" {"checked" if key == shape else ""}> {lbl}</label>'
+                    for key, lbl in shapes) +
+                    '<span class="ctl-l" style="flex-basis:100%"></span><span class="ctl-l">show</span>' + "".join(
                     f'<label><input type="radio" name="tk-{slug(n)}" value="{m}" {"checked" if m == mode else ""}> {lbl}</label>'
                     for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2")]) + '</div>'
             if demo == "palette":
@@ -139,6 +154,10 @@ for tab in TAB_ORDER:
                     '<span class="ctl-l" style="margin-left:8px">colours</span>' + "".join(
                     f'<label><input type="radio" name="ver-{slug(n)}" value="{k}" {"checked" if k == "new" else ""}> {lbl}</label>'
                     for k, lbl in [("new", "Mite palette"), ("old", "1.3.0")]) + '</div>'
+                    for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2"), ("um", "|k1 − k2|")]) +
+                    '<span class="ctl-l">·</span>' + "".join(
+                    f'<label><input type="radio" name="vw-{slug(n)}" value="{m}" {"checked" if m == note.get("demoView", "measured") else ""}> {lbl}</label>'
+                    for m, lbl in [("measured", "measured"), ("truth", "exact"), ("error", "|error|")]) + '</div>')
             hint = "drag to rotate · scroll to zoom" if kind == "3d" else ""
             demo_html = f'<div class="demo{" tall" if note.get("tall") else ""}" data-demo="{demo}" data-kind="{kind}" data-id="{slug(n)}">{controls}<canvas></canvas><div class="demo-legend" id="lg-{slug(n)}"></div><div class="demo-hint">{hint}</div></div>'
         checks_html = ""

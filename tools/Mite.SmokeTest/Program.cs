@@ -365,6 +365,27 @@ internal static class Tests
                     $"four lemons at (±{x0:F3}, 0, ±{z0:F3}): {u.Count} located, indices {string.Join(" ", ix)}, worst offset {worst:F3}");
             });
 
+        TestComponent("Test Shape (sphere: exact K = H = 1 at every vertex, poles included)",
+            new Mite.Grasshopper.Components.TestShapeComponent(),
+            c => SetInputs(c, (0, "sphere"), (4, 24)),
+            c =>
+            {
+                var m = MeshOut(c, 0); var K = Numbers(c, 1); var H = Numbers(c, 2); var K1 = Numbers(c, 3);
+                bool exact = K.Count == m?.Vertices.Count && K.All(k => System.Math.Abs(k - 1) < 1e-6) && H.All(h => System.Math.Abs(h - 1) < 1e-6) && K1.All(k => System.Math.Abs(k - 1) < 1e-6);
+                return Expect(exact, $"{K.Count} vertices, K = {K.Min():F6} … {K.Max():F6}, H = {H.Min():F6} … {H.Max():F6}");
+            });
+
+        TestComponent("Test Shape (hyperboloid: asymptotic directions are the rulings, K = −1 on the throat)",
+            new Mite.Grasshopper.Components.TestShapeComponent(),
+            c => SetInputs(c, (0, "hyperboloid"), (4, 24)),
+            c =>
+            {
+                var m = MeshOut(c, 0)!; var K = Numbers(c, 1); var A1 = Vectors(c, 7);
+                int throat = Enumerable.Range(0, m.Vertices.Count).OrderBy(i => System.Math.Abs(m.Vertices[i].Z)).First();
+                bool ok = System.Math.Abs(K[throat] + 1) < 1e-9 && A1.Count == m.Vertices.Count && A1.All(a => System.Math.Abs(a.Length - 1) < 1e-9);
+                return Expect(ok, $"K at the throat {K[throat]:F9}, {A1.Count} unit asymptotic directions");
+            });
+
         TestComponent("Gridshell Analysis",
             new Mite.Grasshopper.Components.GridshellAnalysisComponent(),
             c =>
@@ -973,13 +994,13 @@ internal static class Tests
         comp.Params.Output[index].VolatileData.AllData(true)
             .OfType<Grasshopper.Kernel.Types.GH_Number>().Select(n => n.Value).ToList();
 
-    private static System.Collections.Generic.List<bool> Bools(Grasshopper.Kernel.GH_Component comp, int index) =>
-        comp.Params.Output[index].VolatileData.AllData(true)
-            .OfType<Grasshopper.Kernel.Types.GH_Boolean>().Select(b => b.Value).ToList();
-
     private static System.Collections.Generic.List<Rhino.Geometry.Vector3d> Vectors(Grasshopper.Kernel.GH_Component comp, int index) =>
         comp.Params.Output[index].VolatileData.AllData(true)
             .OfType<Grasshopper.Kernel.Types.GH_Vector>().Select(v => v.Value).ToList();
+
+    private static System.Collections.Generic.List<bool> Bools(Grasshopper.Kernel.GH_Component comp, int index) =>
+        comp.Params.Output[index].VolatileData.AllData(true)
+            .OfType<Grasshopper.Kernel.Types.GH_Boolean>().Select(b => b.Value).ToList();
 
     private static int CurveCount(Grasshopper.Kernel.GH_Component comp, int index) =>
         comp.Params.Output[index].VolatileData.AllData(true)

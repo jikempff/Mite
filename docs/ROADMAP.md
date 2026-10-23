@@ -220,6 +220,15 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       Open: the tracer cannot resolve the field inside the facet ring round an
       umbilic (the lemon's one separatrix vs the three of a monstar is not
       checked); lemon vs monstar needs the cubic form (Berry & Hannay).
+- [x] Ellipsoid a ≠ b ≠ c: exactly four umbilics — 2026-10-23 (session 1).
+      `AnalyticShapes.Surface("ellipsoid")` (1.5 × 1 × 0.7) has |k1 − k2| = 0
+      to round-off exactly at (±a √((a² − b²)/(a² − c²)), 0, ±c √((b² − c²)/
+      (a² − c²))) = (±1.264, 0, ±0.377) and at no other local minimum of a
+      720 × 360 scan; `Umbilics.Find` on the 96-division mesh flags four
+      clusters within 0.04 of them at tolerance 0.05–0.2 and nothing else
+      (the chart's poles, k1 = c/b², k2 = c/a², are not umbilics). Bench:
+      Umbilics card with the markers and a self-test. Open: the curvature-line
+      net's lemon pattern (Conjugate Net on the ellipsoid as a bench shape).
 - [ ] Cone (developable with an apex): projection and tracing near a
       singular vertex. Partly done 2026-10-08 (session 1):
       `TestMeshes.CreatePolyCone` — n generators through the apex, rings
@@ -272,9 +281,53 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       bench and the tests, and write the analytic-curvature tests for the
       AnalyticShapes members that have none yet (dome, ellipsoid, monkey
       saddle, vault, cone, annulus, wave).
-- [ ] Bench: a typology switcher on every demo (done on Asymptotic Net and
+      Done 2026-10-23 (session 1): `Geometry/AnalyticSurface` — every
+      catalogue shape as x(u, v) with closed-form x_u, x_v, x_uu, x_uv, x_vv
+      (or F, ∇F, H(F) for the nodal Schwarz D / gyroid), giving exact K, H,
+      k1, k2, principal and asymptotic directions at any point (do Carmo
+      §3-3; Goldman 2005 for the implicit case); `AnalyticShapes.Build` is
+      now generated from that surface (`Surface(name).Mesh(res)`, meshes
+      bit-identical to before, checked by hash on 34 meshes) and
+      `Mesh(res, out uv, out quads)` returns the chart parameters of every
+      vertex. `AnalyticSurfaceTests` (22): derivatives of the 15 parametric
+      shapes vs central differences (< 1e-6), closed forms of the sphere,
+      torus, hyperboloid, catenoid, Enneper n-fold (incl. the Hopf
+      directions of TestMeshes), monkey saddle (MathWorld K and |H|),
+      ellipsoid (K and the four umbilics), vault / cone (K = 0, one ruling),
+      bilinear patch (rulings), implicit sphere / cylinder / Schwarz D nodal
+      (K ≤ 0 at all 3811 vertices, mean |H| 0.028 vs k1 0.76 — the nodal
+      approximation is not minimal); TestMeshes' catenoid, torus and
+      hyperboloid lie on AnalyticShapes' surfaces (1e-12); and the discrete
+      estimators against the truth on dome, ellipsoid, monkey saddle, vault,
+      cone, annulus, wave, sphere, torus at resolutions 48 and 96 (mean
+      absolute error over the interior vertices relative to the largest
+      curvature, the protocol of Magid, Soldea & Rivlin 2007): K ≤ 2.5 %,
+      H ≤ 2.5 %, k1 / k2 ≤ 10 %, every one falling by ≥ 25 % per doubling,
+      K exactly 0 on the developables. TestMeshes keeps its own generators
+      (tests index their vertices); the cross-check is the unification.
+      Findings: (1) a valence-4 vertex whose four edges follow the asymptotic
+      directions has a coplanar one-ring — the polyhedron is flat there — so
+      the angle deficit reads K = 0 however fine the mesh (wave saddle
+      points: 0 vs −1.44; the bilinear patch's one 4-valent vertex: 0 vs
+      −0.22); the Rusinkiewicz tensor reads −1.15 (two-ring normals). (2)
+      The ring next to a collapsed pole reads K and H 15 % high on the
+      sphere at every resolution (the fan is self-similar); the mean error
+      still converges. (3) Monkey saddle: the asymptotic lines make the angle
+      ±45° − 3θ/2 with the ray (z = r³ cos 3θ), so the line field turns by
+      −180° per loop (index −½) and each line returns to itself; the two
+      families are joined through the three straight asymptotic lines through
+      the flat point, which carry family A on one side and B on the other —
+      a sharper statement of the "one family globally" note above.
+- [x] Bench: a typology switcher on every demo (done on Asymptotic Net and
       Geodesic Net), with the analytic truth and the measured error side by
-      side; reuse the unified shape generator.
+      side; reuse the unified shape generator — 2026-10-23 (session 1) for
+      the curvature cards: Principal / Gaussian / Mean Curvature, Umbilics,
+      Mesh Colour Map and the new Test Shape card share one viewer with eight
+      shapes (torus, sphere, ellipsoid, hyperboloid, catenoid, monkey saddle,
+      cone, wave) × (K, H, k1, k2, |k1 − k2|) × (measured, exact, |error|),
+      the mean / max error and the half-resolution error in the legend and
+      in `numbers.curvTruth`. Open: Curvature Streamlines, Mesh Isocurves,
+      Conjugate Net, Chebyshev Net and the lath cards are still single-shape.
 
 ## B. Plugin UX (Grasshopper)
 
@@ -430,6 +483,15 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 - [x] Net Trim (cookie cutter) — 2026-10-21, see G: boundary curves, plan
       projection, holes, Inside / Invert, cut ends for the fabrication
       components.
+- [x] `Test Shape` component (Mite > Curvature) — 2026-10-23 (session 1):
+      the analytic test surface by name with P1–P3 and a resolution, as the
+      mesh the bench and the tests measure, with the exact `K`, `H`, `K1`,
+      `K2`, `D1`, `D2`, `A1`, `A2`, the chart `UV` and a `Report`; the
+      collapsed poles are evaluated 1e-7 of the chart inside the singular
+      row, the relaxed nodal surfaces say their values are approximate.
+      Smoke test: sphere exact at every vertex, hyperboloid throat K = −1 and
+      unit asymptotic directions. Open: a value list for `Name`, and a
+      `Quads` option returning the parameter grid instead of the triangles.
 
 ## C. Web app and bench UX
 
@@ -555,7 +617,12 @@ remains the self-test review page.
       Enneper 2/3, ruled, Schwarz D) and Geodesic Net (saddle, cylinder)
       demos; the viewer re-applies the scene view on switch — 2026-09-25.
 - [ ] Shape switch on the remaining demos and a "classic vs continuous"
-      toggle on the net demos.
+      toggle on the net demos. 2026-10-23: the curvature cards have the
+      switch (A above) and the Asymptotic Net demo has a "saddle · classic"
+      shape (Continuous off, the `asymClassic` numbers it already measured);
+      still single-shape: Curvature Streamlines, Mesh Isocurves, Conjugate
+      Net (the ellipsoid's lemon pattern belongs here), Chebyshev Net, the
+      lath cards; Geodesic Net has no classic view.
 - [x] Kinetic demo: a "fold" slider that plays the state sequence of E on
       the hyperboloid twist and on the catenoid net — 2026-09-26 (Net
       Kinetics card, Kinetics tab).
@@ -696,7 +763,9 @@ remains the self-test review page.
       parameter order as it appears on the canvas (icons refreshed
       2026-09-25).
 - [ ] Page weight: 1.7 MB with the catalogue scenes; thin the wireframes or
-      load scenes lazily per card.
+      load scenes lazily per card. 2026-10-23: 2.23 → 2.79 MB — the eight
+      curvature scenes carry six values per vertex (K, H, k1, k2, exact K and
+      H) at 4 decimals plus the quad grid; lazy loading per card is the fix.
 
 ## D. Algorithms to research and improve (with literature)
 
@@ -1682,6 +1751,12 @@ Open
       fairness): planar to 1e-9 in 10–15 iterations on conjugate nets, fixed
       points exact, honest stall or far-off-surface warning on asymptotic nets;
       11 tests, three bench self-tests (77 PASS).
+- [x] 2026-10-23 (session 1, A/C/B): exact curvature on the analytic
+      catalogue (`AnalyticSurface`, 22 tests, nine shapes measured against
+      the truth), the ellipsoid's four umbilics, the bench curvature cards
+      with measured / exact / |error| on eight shapes (81 PASS) and the
+      `Test Shape` component (31 components).
+
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

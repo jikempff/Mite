@@ -37,6 +37,13 @@ the plane of the longest and shortest axes, all +½, and Curvature Streamlines
 seeded near them show the lemon pattern. Set `Cn` to a few mesh edges when a
 nearly spherical mesh reports many ±½ pairs close together — they are facet
 noise and cancel.
+To see how good the numbers are, drop a **Test Shape** (Mite > Curvature), type
+`ellipsoid` (or `torus`, `catenoid`, `monkey`, `cone` …) into `N` and wire its
+`M` into Gaussian Curvature: the component's own `K` is the exact value at every
+vertex, so **Mesh Colour Map** on `K` from both, or a **Subtraction**, shows the
+estimator's error. Its `K1`, `K2`, `D1`, `D2` and `A1`, `A2` are the exact
+principal and asymptotic values; `Umbilics` on the ellipsoid finds its four
+umbilics where the component's `|K1 − K2|` is zero.
 
 For dirty meshes (booleans, imports, joined pieces) put **Mesh Cleanup**
 (Mite > Util) first: it welds, drops degenerate, duplicate and isolated
