@@ -110,7 +110,7 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
 
 <div class="wrap">
   <header class="masthead">
-    <h1><small>Grasshopper plugin · version 1.3.2 · 30 components</small>Mite Bench</h1>
+    <h1><small>Grasshopper plugin · version 1.3.2 · 31 components</small>Mite Bench</h1>
     <p>Every component with its inputs, outputs and defaults, what it should do, a self-test run on the real Mite.Core library, and a live view of the result. Tick the ones that make sense, note what doesn't, and copy the summary back to the chat.</p>
     <div class="progress"><b><span id="done">0</span> / 28</b>reviewed<div class="bar"><i id="barfill"></i></div></div>
   </header>
@@ -265,6 +265,11 @@ const builders = {
   asym(el){ const m = mode(el) || ''; if (m.startsWith('asymCat_')) { const sc = SC[m]; legend(el.dataset.id, [[WIRE(), sc.label], [A(), 'family A'], [B(), 'family B']]); return { view: { yaw: -0.6, pitch: 0.5 }, layers: [wireLayer(sc.wire), { lines: sc.a, color: A(), width: 1.6 }, { lines: sc.b, color: B(), width: 1.6 }] }; }
     if (m === 'asymHyp') { legend(el.dataset.id, [[WIRE(), 'hyperboloid x² + y² − z² = 1'], [A(), 'family A (straight rulings)'], [B(), 'family B']]); return { view: { yaw: -0.6, pitch: 0.35 }, layers: [wireLayer(SC.asymHyp.wire), { lines: SC.asymHyp.a, color: A(), width: 1.6 }, { lines: SC.asymHyp.b, color: B(), width: 1.6 }] }; }
     legend(el.dataset.id, [[WIRE(), 'saddle z = x² − y²'], [A(), 'family A'], [B(), 'family B']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.asym.wire), { lines: SC.asym.a, color: A(), width: 1.6 }, { lines: SC.asym.b, color: B(), width: 1.6 }] }; },
+  aggWeb(el){ const m = mode(el) || 'aggCyl'; const sc = SC[m]; const names = { aggCyl: 'cylinder: the exact web (helices ±50°, rulings as diagonals)', aggScatter: 'cylinder: interior nodes scattered by 0.1 spacing, optimised back', aggCone: 'cone r = 1 + z/4: the cylinder web carried onto it', aggSaddle: 'saddle z = xy: a ±45° lattice made geodesic' };
+    const L = [wireLayer(sc.wire)]; if (sc.before) L.push({ lines: sc.before, color: MUTED(), width: 0.9, dash: [3,3], alpha: 0.7 });
+    L.push({ lines: sc.a, color: A(), width: 1.5 }, { lines: sc.b, color: B(), width: 1.5 }, { lines: sc.d, color: INK(), width: 2.2 });
+    legend(el.dataset.id, [[WIRE(), names[m]], [A(), 'geodesic laths A (flat slats)'], [B(), 'geodesic laths B (flat slats)'], [INK(), 'asymptotic diagonals (upright slats)']].concat(sc.before ? [[MUTED(), 'dashed: the input net']] : []));
+    return { view: m === 'aggSaddle' ? SADDLE_VIEW : { yaw: -0.6, pitch: 0.35 }, layers: L }; },
   conj(el){ legend(el.dataset.id, [[WIRE(), 'saddle'], [A(), 'max-curvature family'], [B(), 'min-curvature family']]); return { view: SADDLE_VIEW, layers: [wireLayer(SC.conj.wire), { lines: SC.conj.a, color: A(), width: 1.6 }, { lines: SC.conj.b, color: B(), width: 1.6 }] }; },
   joints(el){ const j = SC.joints; legend(el.dataset.id, [[A(), 'family A'], [B(), 'family B'], [INK(), 'crossings (' + j.nodes.length + ')']]); return { view: SADDLE_VIEW, layers: [{ lines: j.a, color: A(), width: 1.2, alpha: 0.7 }, { lines: j.b, color: B(), width: 1.2, alpha: 0.7 }], points: [{ pts: j.nodes, color: INK(), r: 1.8 }] }; },
   sweep(el){ const s = SC.sweep; legend(el.dataset.id, [[WIRE(), 'saddle'], [A(), 'upright lath solid (0.08 × 0.012)']]); return { view: SADDLE_VIEW, layers: [wireLayer(s.wire)], mesh: { verts: s.mesh.verts, faces: s.mesh.faces, fill: css('--acc') } }; },

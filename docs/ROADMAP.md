@@ -625,9 +625,60 @@ Done 2026-09-27 (1.3.0)
 - [x] Web app and Grasshopper `Asymptotic Web` component.
 
 Open
-- [ ] AGG webs: a G-net (equal opposite angles) with asymptotic diagonals,
-      initialised from a developable (cylinder web of Graf & Sauer) — the
-      family with more freedom (Schling et al. 2022 §2.3).
+- [x] AGG webs — 2026-10-24 (session 2): `Gridshells/AggWeb` and the
+      `AGG Web` component (31 components). A G-net (Sauer's equal opposite
+      angles, eq. 9 of Schling et al. 2022, the laths' bisectors g₁ + g₃ and
+      g₂ + g₄ as the normal, eq. 10) with one family of asymptotic diagonals
+      (both diagonal edges at a node in that tangent plane, eq. 12), solved by
+      Levenberg–Marquardt on the node positions alone (the paper's Table 1)
+      with proximity, fairness (off for the final third), a reference-guided
+      start and a tangential hold of the border. `AggWeb.QuadNet` builds the
+      net from two crossing families (Net Topology), an Asymptotic Web, a
+      lattice function or as the exact cylinder web of Fig. 9 (three parallel
+      pencils in the development, Graf & Sauer 1924; exact to 1e-13° because
+      the half-turn about the cylinder normal maps each equally spaced helix
+      onto itself). Measured: scattered interior nodes (0.1 spacing) return to
+      2e-6°; cylinder web onto a cone r = 1 + z/4: within 2e-4 of the cone,
+      0.04° / 0.02°, diagonals 2.8° (mean) off the generators; z = xy lattice
+      8.9° → 0.26°, surface moved 0.5 % of the spacing. Findings:
+      - The discrete asymptotic condition is blind near a parabolic direction:
+        a chord ψ off the generator of a developable leaves the tangent plane
+        by ½ κ₁ h sin²ψ (0.03° at 4° here), so on K = 0 surfaces the
+        diagonals follow the rulings only to a few degrees; on K < 0 the two
+        asymptotic directions are simple roots and the condition is first
+        order. The test checks the angle out of the plane, not the direction.
+      - Sauer's angle condition has sawtooth solutions: a lath zigzagging in
+        the surface has equal opposite angles too, with its principal normal
+        in the surface. Started far from a solution (a lattice with 9° of
+        error, a web 2 spacings off its surface) Gauss–Newton finds them;
+        the reference-guided rows (bisectors along the mesh normal, diagonals
+        in its plane) and a step cap of ¼ spacing keep it on the smooth branch.
+        The auxiliary-normal form (eq. 11, n·b = 0, as Wang, Almaskin &
+        Pottmann 2024 prefer) was tried and dropped: with the normal defined
+        by the diagonals it only asks the normal to lie in each lath's
+        osculating plane, which the exact cylinder web satisfies but so does a
+        larger set of nets (opposite angles read 0.002° while its residual was
+        1e-14).
+      - Counting: eq. 9 + eq. 12 are four conditions per node on three
+        coordinates (both diagonal edges at a node); in the smooth limit the
+        two edge conditions are one. A one-row-per-edge form (3 per node) was
+        tried and is no better in practice; the paper's form is kept and the
+        least-squares residual reported.
+      - Two-colouring the diagonal chains by shared nodes alone leaves the two
+        parity classes of a lattice unrelated; the two diagonals of every quad
+        must be coloured differently as well.
+      - The automatic family choice reads the reference normals at the start
+        and takes the wrong diagonal when the web starts far from the surface
+        (the cylinder web on the cone picks the circles): the component says so
+        when the start is more than a spacing off.
+      Open: (a) AGG from the development directly for a developable target
+      (three pencils with the apex, geometric spacing — the exact cone web)
+      instead of carrying the cylinder web over; (b) continuation of the
+      reference (cylinder → target in steps) for large deformations; (c) the
+      web app's Web block (the 1.4.0 `Api.cs`); (d) Lath Strip / Flat Kit for
+      the flat G laths and the upright A diagonals of an AGG web; (e) AGAG
+      (both diagonal families) by the same code with a second asymptotic
+      family — the paper found numerically exact ones from AGG starts.
 - [ ] Propagation from a boundary strip (Wang et al. 2024) as a second way to
       start a web: two neighbouring polylines drawn by the user.
 - [ ] Refinement: subdivide the AAG web and re-optimise so the laths between
@@ -659,6 +710,10 @@ Open
 
 ## Done
 
+- [x] 2026-10-24 (session 2, G/D): AGG webs — `Gridshells/AggWeb`, the AGG
+      Web component, the exact cylinder web as a test typology, 16 tests
+      (eight with closed-form truth, seven Jacobian checks), bench card with
+      four shapes and four self-tests (79 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

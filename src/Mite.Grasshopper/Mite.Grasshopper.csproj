@@ -27,6 +27,7 @@
     <EmbeddedResource Include="Resources\ForceDensity.png" />
     <EmbeddedResource Include="Resources\AsymptoticNet.png" />
     <EmbeddedResource Include="Resources\AsymptoticWeb.png" />
+    <EmbeddedResource Include="Resources\AggWeb.png" />
     <EmbeddedResource Include="Resources\GeodesicNet.png" />
     <EmbeddedResource Include="Resources\LathAnalysis.png" />
     <EmbeddedResource Include="Resources\NetJoints.png" />

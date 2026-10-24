@@ -56,6 +56,28 @@ surface) is a singular node where six laths meet. Triangulating with `G` is what
 makes the grid stiff: on a 10 m Enneper web of 60 × 6 mm timber the deflection
 under self-weight and 0.5 kN/m² drops from 1.7 m (quads) to 11 mm (AAG).
 
+**AGG Web** (Mite > Gridshells) — the other hybrid: two families of flat
+slats on the surface and one of upright slats (Schling, Wang, Hoyer & Pottmann
+2022, §2.3). Feed it a quad net of two lath families and the mesh:
+
+- `M` — the mesh; `A`, `B` — the two lath families, each A crossing each B at
+  most once (a **Geodesic Net** traced at ±45° to the asymptotic directions,
+  an **Asymptotic Web**'s `A` / `B`, or your own curves)
+- `F` — which diagonal family becomes asymptotic: `−1` takes the one whose
+  edges lie nearer the surface's tangent planes at the start (right when the
+  net was traced on the surface); `0` / `1` to say so yourself
+- `It`, `Px`, `Fa` — iterations (40; the last third without fairness),
+  proximity to the surface (0.3; lower lets the surface change more), fairness
+- `T`, `S` — crossing tolerance and curve sampling, as on Net Topology
+
+`A` and `B` come back as geodesic laths node to node (flat slats), `D` are the
+asymptotic diagonals (upright slats), `O` the other diagonals, `Q` the quad
+mesh, `Ge` / `As` the largest angle errors in degrees (0 = exact), `Dv` how far
+the surface moved; `R` has the numbers before and after. Exact on a cylinder
+with helices as laths and the rulings as diagonals; elsewhere expect a
+fraction of a degree and a surface move of a percent of the spacing, and a
+warning above 1° when no AGG web lies close to the surface with these laths.
+
 **Asymptotic Net** (Mite > Gridshells) — the older evenly spaced layouts:
 
 - `M` — your mesh

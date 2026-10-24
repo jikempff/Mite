@@ -334,6 +334,53 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     scenes["cylGeo"] = new { wire = RevolveWire(z => 1.0, -1, 1, 8, 16), curves = helixLines.ToArray() };
     numbers["cylGeo"] = helixRows;
 
+    // ---------------------------------------------------------------- AGG Web
+    // (1) the exact cylinder web: helices at ±50° with the rulings as diagonals, (2) the same
+    // web with its interior nodes scattered by a tenth of the spacing, optimised back,
+    // (3) the cylinder web carried onto a cone (r = 1 + z/4), (4) a ±45° lattice on z = xy
+    {
+        var swAgg = Stopwatch.StartNew();
+        object Quality(AggWeb.Quality q) => new { geo = q.GeodesicError, geoMean = q.MeanGeodesicError, bis = q.BisectorError, asym = q.AsymptoticError, asymMean = q.MeanAsymptoticError, edges = q.AsymptoticEdges, normal = q.SurfaceNormalError, asymSurface = q.SurfaceAsymptoticError, dev = q.MaxDeviation, devMean = q.MeanDeviation };
+        double[][][] Fam(IEnumerable<Vec3d[]> lines) => lines.Select(l => Line(l)).ToArray();
+        double AxisDeg(IEnumerable<Vec3d[]> lines) { double w = 0; foreach (var l in lines) for (int k = 0; k + 1 < l.Length; k++) { var e = (l[k + 1] - l[k]).Normalized(); w = Math.Max(w, Math.Acos(Math.Min(1, Math.Abs(e.Z))) * 180 / Math.PI); } return w; }
+
+        var cylMesh = TestMeshes.CreateCylinder(1.0, 3.0, 256, 48);
+        var cylNet = AggWeb.QuadNet.Cylinder(1.0, 50, 0.15, 12, 10);
+        int rul = cylNet.RulingFamily;
+        var exactQ = AggWeb.Measure(cylNet, rul, cylMesh);
+        scenes["aggCyl"] = new { wire = RevolveWire(z => 1.0, -1.2, 1.2, 8, 16), a = Fam(cylNet.Chains(true).Select(ch => ch.Select(i => cylNet.Nodes[i]).ToArray())), b = Fam(cylNet.Chains(false).Select(ch => ch.Select(i => cylNet.Nodes[i]).ToArray())), d = Fam(cylNet.DiagonalPolylines(rul)), o = Fam(cylNet.DiagonalPolylines(1 - rul)) };
+
+        var rnd = new Random(7);
+        var scattered = cylNet.Nodes.Select((p, i) => cylNet.NeighborsA[i].Length + cylNet.NeighborsB[i].Length < 4 ? p : p + 0.1 * 0.15 * new Vec3d(rnd.NextDouble() * 2 - 1, rnd.NextDouble() * 2 - 1, rnd.NextDouble() * 2 - 1)).ToList();
+        var scatNet = AggWeb.QuadNet.FromNeighbors(scattered, cylNet.NeighborsA, cylNet.NeighborsB);
+        var scat = AggWeb.Optimize(cylMesh, scatNet, new AggWeb.Options { Iterations = 40 });
+        scenes["aggScatter"] = new { wire = RevolveWire(z => 1.0, -1.2, 1.2, 8, 16), a = Fam(scat.A), b = Fam(scat.B), d = Fam(scat.Asymptotic), o = Fam(scat.Other), before = Fam(scatNet.Chains(true).Concat(scatNet.Chains(false)).Select(ch => ch.Select(i => scatNet.Nodes[i]).ToArray())) };
+
+        var coneMesh = AnalyticShapes.Revolution(z => 1 + 0.25 * z, z => z, -1.6, 1.6, 64, 256, false, false).ToTriangulated();
+        var coneStart = AggWeb.QuadNet.Cylinder(1.0, 50, 0.16, 14, 12);
+        var cone = AggWeb.Optimize(coneMesh, coneStart, new AggWeb.Options { Iterations = 60, AsymptoticFamily = coneStart.RulingFamily, BorderHold = 0.01 });
+        var apex = new Vec3d(0, 0, -4);
+        double genWorst = 0, genSum = 0; int genCnt = 0;
+        foreach (var l in cone.Asymptotic) for (int k = 0; k + 1 < l.Length; k++) { var e = (l[k + 1] - l[k]).Normalized(); var g = (l[k] - apex).Normalized(); double a = Math.Acos(Math.Min(1, Math.Abs(Vec3d.Dot(e, g)))) * 180 / Math.PI; genWorst = Math.Max(genWorst, a); genSum += a; genCnt++; }
+        scenes["aggCone"] = new { wire = RevolveWire(z => 1 + 0.25 * z, -1.5, 1.5, 8, 16), a = Fam(cone.A), b = Fam(cone.B), d = Fam(cone.Asymptotic), o = Fam(cone.Other), before = Fam(coneStart.Chains(true).Concat(coneStart.Chains(false)).Select(ch => ch.Select(i => coneStart.Nodes[i]).ToArray())) };
+
+        var saddleMesh = AnalyticShapes.Grid((x, y) => new Vec3d(x, y, x * y), -2.4, 2.4, -2.4, 2.4, 120, 120).ToTriangulated();
+        double ss = 0.2 / Math.Sqrt(2);
+        var saddleStart = AggWeb.QuadNet.FromLattice((i, j) => { double x = (i + j - 14) * ss, y = (i - j) * ss; return new Vec3d(x, y, x * y); }, 15, 15);
+        var saddle = AggWeb.Optimize(saddleMesh, saddleStart, new AggWeb.Options { Iterations = 60 });
+        scenes["aggSaddle"] = new { wire = GridWire(saddleMesh, 120, 120, 10), a = Fam(saddle.A), b = Fam(saddle.B), d = Fam(saddle.Asymptotic), o = Fam(saddle.Other), before = Fam(saddleStart.Chains(true).Concat(saddleStart.Chains(false)).Select(ch => ch.Select(i => saddleStart.Nodes[i]).ToArray())) };
+
+        numbers["aggWeb"] = new
+        {
+            nodes = cylNet.Nodes.Count, regular = cylNet.RegularNodes, quads = cylNet.Quads.Count, chains = cylNet.DiagonalChains.Count, conflicts = cylNet.LabelConflicts,
+            exact = Quality(exactQ), exactAxisDeg = AxisDeg(cylNet.DiagonalPolylines(rul)), circles = AggWeb.Measure(cylNet, 1 - rul).AsymptoticError,
+            scatterStart = Quality(scat.Initial), scatter = Quality(scat.Final), scatterAxisDeg = AxisDeg(scat.Asymptotic), scatterMoved = scat.MaxMove, scatterRadiusErr = scat.Nodes.Max(p => Math.Abs(Math.Sqrt(p.X * p.X + p.Y * p.Y) - 1)),
+            coneStart = Quality(cone.Initial), cone = Quality(cone.Final), coneGenMean = genSum / Math.Max(1, genCnt), coneGenWorst = genWorst, coneMoved = cone.MaxMove,
+            saddleStart = Quality(saddle.Initial), saddle = Quality(saddle.Final), saddleMoved = saddle.MaxMove,
+            ms = swAgg.ElapsedMilliseconds,
+        };
+    }
+
     // Hyperboloid x² + y² − z² = 1, z in [−1, 1]: K = −1/(1 + 2z²)², asymptotic curves are the straight rulings
     var hyp = TestMeshes.CreateHyperboloid(1.0, 1.0, 1.0, seg, rows);
     var pcH = PrincipalCurvature.Compute(hyp);

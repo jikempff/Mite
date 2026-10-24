@@ -66,7 +66,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 30 components", IconsLoad());
+        Check("Icons load for all 31 components", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -150,6 +150,31 @@ internal static class Tests
             new Mite.Grasshopper.Components.AsymptoticWebComponent(),
             c => SetInputs(c, (0, saddle.DuplicateMesh()), (2, 0.25), (4, true)),
             c => Expect(CurveCount(c, 2) >= 3, $"geodesic diagonals: {CurveCount(c, 2)}"));
+
+        // AGG Web: the exact cylinder web (helices at ±50°, the rulings as diagonals) on a
+        // cylinder mesh must come out as it went in — both errors near zero
+        TestComponent("AGG Web (cylinder web)",
+            new Mite.Grasshopper.Components.AggWebComponent(),
+            c =>
+            {
+                var cylNet = Mite.Core.Gridshells.AggWeb.QuadNet.Cylinder(1.0, 50, 0.15, 10, 8);
+                Rhino.Geometry.Curve[] Laths(bool familyA) => cylNet.Chains(familyA)
+                    .Select(ch => (Rhino.Geometry.Curve)new Rhino.Geometry.PolylineCurve(ch.Select(i => new Rhino.Geometry.Point3d(cylNet.Nodes[i].X, cylNet.Nodes[i].Y, cylNet.Nodes[i].Z))))
+                    .ToArray();
+                var cyl = Rhino.Geometry.Mesh.CreateFromCylinder(
+                    new Rhino.Geometry.Cylinder(new Rhino.Geometry.Circle(new Rhino.Geometry.Plane(new Rhino.Geometry.Point3d(0, 0, -1.5), Rhino.Geometry.Vector3d.ZAxis), 1.0), 3.0), 24, 128);
+                SetInputs(c, (0, cyl), (3, -1), (4, 20));
+                SetCurveList(c, 1, Laths(true));
+                SetCurveList(c, 2, Laths(false));
+            },
+            c =>
+            {
+                var ge = Numbers(c, 7); var asy = Numbers(c, 8);
+                return Expect(CurveCount(c, 0) == 8 && CurveCount(c, 1) == 10 && CurveCount(c, 2) >= 10 && Points(c, 4).Count == 80,
+                        $"8 + 10 laths, ≥ 10 asymptotic diagonals, 80 nodes: got {CurveCount(c, 0)} + {CurveCount(c, 1)}, {CurveCount(c, 2)}, {Points(c, 4).Count}")
+                    && Expect(ge.Count == 1 && ge[0] < 0.05 && asy.Count == 1 && asy[0] < 0.05,
+                        $"geodesic {(ge.Count > 0 ? ge[0] : -1):G3}°, asymptotic {(asy.Count > 0 ? asy[0] : -1):G3}° (cylinder caps included in the mesh)");
+            });
 
         TestComponent("Geodesic Net",
             new Mite.Grasshopper.Components.GeodesicNetComponent(),
@@ -556,9 +581,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 30)
+        if (comps.Count != 31)
         {
-            Console.WriteLine($"      expected 30 components, found {comps.Count}");
+            Console.WriteLine($"      expected 31 components, found {comps.Count}");
             return false;
         }
 
