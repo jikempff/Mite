@@ -54,7 +54,7 @@ COMP_ORDER = [
 ]
 COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Test Shape",
               "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
-              "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
+              "Asymptotic Net", "Geodesic Net", "AGG Web", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
               "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
               "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Flat Kit", "Net Topology",
               "Net Kinetics",

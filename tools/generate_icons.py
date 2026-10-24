@@ -365,6 +365,26 @@ def icon_asymptotic_web():
     finish(img, "AsymptoticWeb")
 
 
+def icon_agg_web():
+    """AGG web: a rhombic lattice of two geodesic families (thin, bowed) with
+    one family of straight asymptotic diagonals (bold), nodes where all three meet."""
+    img, d = canvas()
+    patch(img)
+    # geodesic families: u + v = c and u − v = c, slightly bowed
+    for c in (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75):
+        uvline(d, lambda t, c=c: (t, c - t + 0.05 * math.sin(t * math.pi)), "surface", 0.8)
+    for c in (-0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75):
+        uvline(d, lambda t, c=c: (t, t + c - 0.05 * math.sin(t * math.pi)), "surface", 0.8)
+    # asymptotic diagonals: the straight u = const lines through the nodes
+    for u in (0.25, 0.5, 0.75):
+        uvline(d, lambda t, u=u: (u, t), "surface", 1.3, n=2)
+    for u in (0.25, 0.5, 0.75):
+        for v in (0.25, 0.5, 0.75):
+            x, y = uv(u, v)
+            dot(d, x, y, 1.1, "surface")
+    finish(img, "AggWeb")
+
+
 def icon_geodesic_net():
     img, d = canvas()
     patch(img)
@@ -680,7 +700,7 @@ def icon_net_trim():
 ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics,
 ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics, icon_test_shape,
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
-       icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path, icon_net_trim,
+       icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path, icon_net_trim, icon_agg_web,
        icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,
        icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics, icon_flat_kit, icon_mite_net, icon_mite_net_param, icon_lath_strip,
        icon_lath_analysis, icon_gridshell_analysis, icon_net_distributions, icon_mesh_isocurves,

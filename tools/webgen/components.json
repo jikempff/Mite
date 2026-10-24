@@ -4883,5 +4883,178 @@
     "default": null
    }
   ]
+ },
+ {
+  "file": "AggWebComponent.cs",
+  "name": "AGG Web",
+  "nick": "AggWeb",
+  "desc": "Asymptotic–geodesic–geodesic web (Schling, Wang, Hoyer & Pottmann 2022): takes a quad net of two lath families (Geodesic Net, Asymptotic Web, or your own curves crossing once per node) and moves its nodes so that both families are geodesic — equal opposite angles at every node, Sauer's condition — and one family of node diagonals is asymptotic (its edges in the tangent plane the laths define), while staying close to the surface. Two families of flat slats on the surface and one of upright slats. Exact on a developable surface with the rulings as diagonals (the cylinder web of the paper); elsewhere the surface moves a little and the report says how much.",
+  "tab": "Gridshells",
+  "icon": "AggWeb",
+  "guid": "5D8A2F17-6B3E-4C90-8F2A-1E7B9C3D4A62",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Reference surface mesh the web stays close to",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "A",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Laths of the first family (each crossing every B lath at most once)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "B",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Laths of the second family",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Family",
+    "nick": "F",
+    "type": "Integer",
+    "desc": "Which diagonal family becomes asymptotic: −1 = the one lying nearer the surface's tangent planes at the start, 0 or 1",
+    "access": "item",
+    "default": "-1"
+   },
+   {
+    "name": "Iterations",
+    "nick": "It",
+    "type": "Integer",
+    "desc": "Gauss–Newton iterations (the last third without fairness)",
+    "access": "item",
+    "default": "40"
+   },
+   {
+    "name": "Proximity",
+    "nick": "Px",
+    "type": "Number",
+    "desc": "Weight of staying on the reference surface (0 lets the web float)",
+    "access": "item",
+    "default": "0.3"
+   },
+   {
+    "name": "Fairness",
+    "nick": "Fa",
+    "type": "Number",
+    "desc": "Fairness weight along the three families (second differences)",
+    "access": "item",
+    "default": "0.02"
+   },
+   {
+    "name": "Tolerance",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Largest gap accepted as a crossing (0 = 5 % of the sampling step)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord length for sampling the input curves (0 = bounding box / 500)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "A",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Geodesic laths of the first family, node to node (flat slats)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "B",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Geodesic laths of the second family (flat slats)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Diagonals",
+    "nick": "D",
+    "type": "Curve",
+    "desc": "Asymptotic node diagonals (upright slats)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Other",
+    "nick": "O",
+    "type": "Curve",
+    "desc": "The other diagonal family (not built)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Nodes",
+    "nick": "N",
+    "type": "Point",
+    "desc": "Web nodes",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Normals",
+    "nick": "Nm",
+    "type": "Vector",
+    "desc": "Web normal at each node (the laths' common principal normal)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Quads",
+    "nick": "Q",
+    "type": "Mesh",
+    "desc": "The web as a quad mesh on its nodes",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Geodesic",
+    "nick": "Ge",
+    "type": "Number",
+    "desc": "Largest difference of opposite angles at a node, degrees (0 = exact G-net)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Asymptotic",
+    "nick": "As",
+    "type": "Number",
+    "desc": "Largest angle between an asymptotic diagonal edge and the web's tangent plane, degrees",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Deviation",
+    "nick": "Dv",
+    "type": "Number",
+    "desc": "Largest node distance from the reference surface",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Node counts, the family chosen, errors before and after, how far the surface moved",
+    "access": "item",
+    "default": null
+   }
+  ]
  }
 ]
