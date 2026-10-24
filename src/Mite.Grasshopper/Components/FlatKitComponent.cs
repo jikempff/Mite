@@ -25,7 +25,8 @@ public class FlatKitComponent : MiteComponent
             "Every lath becomes one straight strip with its joints at their spacing — the length the scissor joints keep through the whole motion — " +
             "so the strips fit the flat grid and the curved one alike. Crossings of upright laths are halving slots (A from the outer edge, B from the inner edge, " +
             "as wide as the other strip at the smallest angle the joint reaches), crossings of flat strips pin holes, and a node of three or more laths " +
-            "(the flat point of a 3-fold Enneper web) a hub. Outputs the flat assembly (joints numbered, laths labelled), the strips laid out on sheets, " +
+            "(the flat point of a 3-fold Enneper web) a hub: a common pin hole, or with HubPlates a laser-cut plate with a radial slot per strip (one plate, " +
+            "or two bolted as a sandwich). Outputs the flat assembly (joints numbered, laths labelled), the strips laid out on sheets, " +
             "the deployment states, a cut list, and — with Write — SVG (red cut, blue engrave), DXF and CSV files in millimetres.",
             "Fabrication", "FlatKit") { }
 
@@ -54,6 +55,10 @@ public class FlatKitComponent : MiteComponent
         pManager.AddTextParameter("Folder", "F", "Folder for the files (strips-NN.svg, strips.dxf, assembly.svg/.dxf, deployment.svg, cutlist.csv, README.txt)", GH_ParamAccess.item);
         pManager[16].Optional = true;
         pManager.AddBooleanParameter("Write", "Wr", "Write the files to Folder", GH_ParamAccess.item, false);
+        pManager.AddIntegerParameter("HubPlates", "Hb", "Hub of a node where three or more laths end (the flat point of a 3-fold Enneper web): 0 = a common pin hole on every strip, " +
+            "1 = one laser-cut hub plate flush with the inner edge (a radial slot per strip, the strips notched over a key length so the plate locks them), " +
+            "2 = two plates, one at each edge, bolted through the centre. Upright strips only", GH_ParamAccess.item, 0);
+        pManager.AddNumberParameter("HubRadius", "Hr", "Hub plate radius (model units; 0 = automatic: 0.45 of the way to the first joints, at least the inner disc plus one strip width)", GH_ParamAccess.item, 0.0);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -72,6 +77,7 @@ public class FlatKitComponent : MiteComponent
         pManager.AddTextParameter("CutList", "CL", "Cut list (CSV, mm): strip, family, length, width, joints", GH_ParamAccess.item);
         pManager.AddTextParameter("Report", "R", "Summary", GH_ParamAccess.item);
         pManager.AddTextParameter("Files", "Fi", "Files written", GH_ParamAccess.list);
+        pManager.AddCurveParameter("HubPlate", "Hp", "Hub plate outlines (and bolt hole) in place on the flat assembly, model units — one per hub", GH_ParamAccess.list);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -87,6 +93,8 @@ public class FlatKitComponent : MiteComponent
         DA.GetData(5, ref width); DA.GetData(6, ref thickness); DA.GetData(7, ref upright); DA.GetData(8, ref joint);
         DA.GetData(9, ref hole); DA.GetData(10, ref clearance); DA.GetData(11, ref sheetW); DA.GetData(12, ref sheetH);
         DA.GetData(13, ref stiffness); DA.GetData(14, ref steps); DA.GetData(15, ref sampling); DA.GetData(16, ref folder); DA.GetData(17, ref write);
+        int hubPlates = 0; double hubRadius = 0;
+        DA.GetData(18, ref hubPlates); DA.GetData(19, ref hubRadius);
         if (width <= 0 || thickness <= 0) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width and Thickness must be positive."); return; }
 
         if (sampling <= 0)
@@ -119,6 +127,7 @@ public class FlatKitComponent : MiteComponent
             kit = FlatKit.Build(net, motion, a, nz, new FlatKit.Options
             {
                 Width = width, Thickness = thickness, Upright = upright, Joint = (FlatKit.JointKind)Math.Max(0, Math.Min(2, joint)), HoleDiameter = hole, Clearance = clearance,
+                HubPlates = Math.Max(0, Math.Min(2, hubPlates)), HubRadius = Math.Max(0, hubRadius),
             });
         }
         catch (ArgumentException ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); return; }
@@ -199,11 +208,32 @@ public class FlatKitComponent : MiteComponent
         if (tooLong > 0) AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{tooLong} strips are longer than the {sheetW:0} mm sheet: they are on their own drawing — cut on a longer bed or split them with Lath Segment.");
         if (kit.Flatness > 0.01 * kit.Net.Scale) AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"The pressed net is not flat ({kit.Flatness:G3} out of plane): raise Steps or lower Stiffness.");
 
-        var slots = kit.Strips.SelectMany(s => s.Marks).Where(m => m.Kind == FlatKit.MarkKind.SlotOuter || m.Kind == FlatKit.MarkKind.SlotInner).ToList();
+        // hub plates in place on the flat assembly
+        var plateCurves = new List<Curve>();
+        foreach (var p in kit.Plates)
+        {
+            plateCurves.Add(new PolylineCurve(p.Outline().Select(q => W(p.U + q.X, p.V + q.Y)).Append(W(p.U + p.Outline()[0].X, p.V + p.Outline()[0].Y))));
+            if (p.Bolt > 0) plateCurves.Add(new ArcCurve(new Circle(new Plane(W(p.U, p.V), MeshConvert.ToRhinoVector(kit.AxisU), MeshConvert.ToRhinoVector(kit.AxisV)), 0.5 * p.Bolt)));
+        }
+        if (hubPlates > 0 && !upright && kit.Joints.Any(j => j.Hub))
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "Hub plates need upright strips: flat strips converging on one point overlap, so the hub keeps its common pin hole.");
+        if (kit.PlatelessHubs.Count > 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Hub{(kit.PlatelessHubs.Count == 1 ? "" : "s")} {string.Join(", ", kit.PlatelessHubs.Select(j => "j" + j))}: a lath passes through the hub instead of ending there, so no plate can hold it — the common pin hole is kept.");
+        foreach (var p in kit.Plates.Where(p => p.Cramped))
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Hub plate j{p.Joint} is cramped: its slots are {(p.Radius - p.InnerRadius) * toMm:0.#} mm long for strips {width * toMm:0.#} mm wide, or it reaches the first joints ({p.FreeRadius * toMm:0.#} mm away). Raise the Spacing of the web or narrow the strips.");
+        foreach (var p in kit.Plates.Where(p => p.AngleDrift > 0.5))
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Hub j{p.Joint}: the rays turn by {p.AngleDrift:0.##}° relative to each other while deploying (nothing in the mechanism holds a singular node's angles); a rigid plate will strain them. A symmetric web (Asymptotic Web with Symmetry) keeps them within 1e-5°.");
+        foreach (var p in kit.Plates.Where(p => p.StripWeb(width) < 0.5 * width))
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Hub plate j{p.Joint}: the notches leave only {p.StripWeb(width) * toMm:0.#} mm of the {width * toMm:0.#} mm strip between the plates.");
+
+        var slots = kit.Strips.SelectMany(s => s.Marks).Where(m => (m.Kind == FlatKit.MarkKind.SlotOuter || m.Kind == FlatKit.MarkKind.SlotInner) && m.Label != "hub").ToList();
         var sb = new StringBuilder();
         sb.AppendLine($"Flat Kit: {kit.Strips.Count} strips ({kit.Net.CountA} A + {kit.Strips.Count - kit.Net.CountA} B), {kit.Joints.Count} joints ({kit.Joints.Count(j => j.Hub)} hubs), {kit.TotalLength * toMm / 1000:0.##} m of {width * toMm:0.#} × {thickness * toMm:0.#} mm strip");
         sb.AppendLine($"Flat to {kit.Flatness * toMm:0.###} mm, joint spacing kept to {kit.Drift:P2}; longest strip {kit.Strips.Max(s => s.Length) * toMm:0} mm");
         if (slots.Count > 0) sb.AppendLine($"Halving slots {slots.Min(m => m.Size) * toMm:0.##}–{slots.Max(m => m.Size) * toMm:0.##} mm wide (joints turn down to {kit.Joints.Min(j => j.MinAngle):0}°)");
+        foreach (var p in kit.Plates)
+            sb.AppendLine($"Hub j{p.Joint}: {(p.Count == 2 ? "two plates bolted (Ø" + (p.Bolt * toMm).ToString("0.#") + " mm)" : "one plate")} Ø {2 * p.Radius * toMm:0.#} × {p.Thickness * toMm:0.#} mm, {p.Rays.Count} slots {p.SlotWidth * toMm:0.##} mm wide from the rim to {p.InnerRadius * toMm:0.#} mm; " +
+                $"strips end {p.EndRadius * toMm:0.#} mm from the centre, notched {p.NotchDepth * toMm:0.##} × {(p.Key + clearance) * toMm:0.#} mm; rays at {360.0 / p.Rays.Count:0.#}° ± {p.AngleDeviation:0.###}°, angles move {p.AngleDrift:0.####}° through the deployment");
         sb.Append($"{sheets.Count(s => s.Title.StartsWith("sheet"))} sheets of {sheetW:0} × {sheetH:0} mm{(tooLong > 0 ? $" + {tooLong} long strips" : "")}; {kit.Deployment.Count} deployment states");
 
         DA.SetDataList(0, flatA); DA.SetDataList(1, flatB);
@@ -212,5 +242,6 @@ public class FlatKitComponent : MiteComponent
         DA.SetDataList(6, stripCurves); DA.SetDataList(7, stripText); DA.SetDataList(8, stripTextPts);
         DA.SetDataTree(9, deployA); DA.SetDataTree(10, deployB);
         DA.SetData(11, KitExport.CutList(kit, eo)); DA.SetData(12, sb.ToString()); DA.SetDataList(13, files);
+        DA.SetDataList(14, plateCurves);
     }
 }

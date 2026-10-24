@@ -48,6 +48,18 @@ public static class FlatKit
         public double HoleDiameter { get; set; }
         /// <summary>Fit clearance added to slot widths and depths.</summary>
         public double Clearance { get; set; }
+        /// <summary>
+        /// Hub plates at nodes of three or more laths (see <see cref="HubPlate"/>): 0 none (a common
+        /// pin hole on every strip, as before), 1 one plate flush with the inner edge, 2 a bolted sandwich
+        /// of two plates. Upright strips only.
+        /// </summary>
+        public int HubPlates { get; set; }
+        /// <summary>Hub plate radius (0 = automatic: 0.45 of the way to the first joints, at least r_in + Width).</summary>
+        public double HubRadius { get; set; }
+        /// <summary>Hub plate thickness (0 = the strip thickness: the same sheet).</summary>
+        public double HubThickness { get; set; }
+        /// <summary>Bolt hole through the hub plates (0 = automatic: the pin hole diameter for two plates, none for one).</summary>
+        public double HubBolt { get; set; }
     }
 
     public readonly struct Mark
@@ -78,7 +90,10 @@ public static class FlatKit
         /// <summary>Cut length including the end extensions.</summary>
         public double Length;
         public double Width;
-        /// <summary>Material added before the first and after the last lath point so end joints are not cut open.</summary>
+        /// <summary>
+        /// Material added before the first and after the last lath point so end joints are not cut open;
+        /// negative at a hub end, where the strip stops <see cref="HubPlate.EndRadius"/> short of the hub node.
+        /// </summary>
         public double ExtendStart, ExtendEnd;
         public List<Mark> Marks = new List<Mark>();
     }
@@ -101,6 +116,10 @@ public static class FlatKit
         public ScissorNet.Result Motion = null!;
         public List<Strip> Strips = new List<Strip>();
         public List<Joint> Joints = new List<Joint>();
+        /// <summary>Hub plates (one entry per hub, empty unless <see cref="Options.HubPlates"/> &gt; 0 and the strips are upright).</summary>
+        public List<HubPlate> Plates = new List<HubPlate>();
+        /// <summary>Hubs that got no plate although one was asked for (a lath passes through the hub instead of ending there).</summary>
+        public List<int> PlatelessHubs = new List<int>();
         /// <summary>Flat lath polylines in the assembly plane (u, v), family A first.</summary>
         public List<(double U, double V)[]> Flat = new List<(double, double)[]>();
         public string[] LathLabels = Array.Empty<string>();
@@ -173,6 +192,16 @@ public static class FlatKit
             r.Joints.Add(j); jointId[v] = j.Id;
         }
 
+        // hub plates: the rays of a singular node end on a laser-cut plate instead of a common pin
+        var plateAt = new Dictionary<int, HubPlate>();
+        if (o.HubPlates > 0 && o.Upright)
+            foreach (var j in r.Joints.Where(j => j.Hub))
+            {
+                var plate = HubPlate.Build(net, motion, j.Node, j.Id, Uv, r.LathLabels, o);
+                if (plate == null) r.PlatelessHubs.Add(j.Id);
+                else { r.Plates.Add(plate); plateAt[j.Node] = plate; }
+            }
+
         bool slots = o.Joint == JointKind.Slot || (o.Joint == JointKind.Auto && o.Upright);
         double hole = o.HoleDiameter > 0 ? o.HoleDiameter : 0.25 * o.Width;
         double depth = 0.5 * o.Width + 0.5 * o.Clearance;
@@ -182,12 +211,18 @@ public static class FlatKit
             var strip = new Strip { Label = r.LathLabels[l], Lath = l, FamilyA = l < nA, Width = o.Width };
             double s = 0;
             var raw = new List<(double at, MarkKind kind, double size, double depth, string label, int joint)>();
+            HubPlate? plateStart = null, plateEnd = null;
             for (int i = 0; i < lath.Length; i++)
             {
                 if (i > 0) s += net.RestArcs[l][i - 1];
                 int v = lath[i];
                 if (!jointId.TryGetValue(v, out int id)) continue;
                 var others = net.NodeLaths[v].Where(x => x != l).ToArray();
+                if (others.Length >= 2 && plateAt.TryGetValue(v, out var plate) && (i == 0 || i == lath.Length - 1))
+                {
+                    if (i == 0) plateStart = plate; else plateEnd = plate;
+                    continue;
+                }
                 if (others.Length >= 2) { raw.Add((s, MarkKind.Hub, hole, 0, "hub", id)); continue; }
                 string lbl = r.LathLabels[others[0]];
                 if (slots)
@@ -209,8 +244,19 @@ public static class FlatKit
                 e1 = Math.Max(e1, need - (len - m.at));
             }
             strip.ExtendStart = Math.Max(0, e0); strip.ExtendEnd = Math.Max(0, e1);
+            // a hub end stops r_end short of the hub node and is notched over the key length for the plate(s)
+            if (plateStart != null) strip.ExtendStart = -plateStart.EndRadius;
+            if (plateEnd != null) strip.ExtendEnd = -plateEnd.EndRadius;
             strip.Length = len + strip.ExtendStart + strip.ExtendEnd;
             foreach (var m in raw) strip.Marks.Add(new Mark(m.at + strip.ExtendStart, m.kind, m.size, m.depth, m.label, m.joint));
+            void Notch(HubPlate p, double at)
+            {
+                strip.Marks.Add(new Mark(at, MarkKind.SlotInner, p.Key + o.Clearance, p.NotchDepth, "hub", p.Joint));
+                if (p.Count == 2) strip.Marks.Add(new Mark(at, MarkKind.SlotOuter, p.Key + o.Clearance, p.NotchDepth, "hub", p.Joint));
+            }
+            if (plateStart != null) Notch(plateStart, 0.5 * (plateStart.Key + o.Clearance));
+            if (plateEnd != null) Notch(plateEnd, strip.Length - 0.5 * (plateEnd.Key + o.Clearance));
+            strip.Marks.Sort((x, y) => x.At.CompareTo(y.At));
             r.Strips.Add(strip);
         }
 

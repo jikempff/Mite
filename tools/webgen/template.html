@@ -79,6 +79,7 @@ h4{margin:0 0 6px;font:600 11px/1 var(--mono);letter-spacing:.08em;text-transfor
 .demo.tall canvas{aspect-ratio:1/1}
 .demo[data-kind="sparkline"] canvas,.demo[data-kind="plot1d"] canvas{aspect-ratio:16/5}
 .demo[data-kind="plot2d"] canvas{aspect-ratio:16/6}
+.demo[data-kind="plotKit"] canvas{aspect-ratio:16/7}
 .demo-ctl{position:absolute;top:8px;left:8px;display:flex;flex-wrap:wrap;gap:6px 10px;max-width:calc(100% - 16px);font:12px var(--sans);background:color-mix(in srgb,var(--surface) 85%,transparent);padding:4px 8px;border-radius:5px;z-index:2}
 .demo-ctl label{display:flex;gap:4px;align-items:center;cursor:pointer}
 .demo-ctl input{margin:0;accent-color:var(--acc)}
@@ -309,6 +310,34 @@ function plot1d(canvas, el){ const s = SC.segment; const ctx = canvas.getContext
     ctx.fillStyle = css('--warn'); s.joints.forEach(j => { ctx.beginPath(); ctx.arc(X(j), y0 - 6, 3, 0, 6.283); ctx.fill(); ctx.globalAlpha = 0.15; ctx.fillRect(X(j - s.margin), y0 - 10, X(j + s.margin) - X(j - s.margin), yb - y0 + 10); ctx.globalAlpha = 1; }); }
   legend(el.dataset.id, [[css('--acc'), 'pieces (overlapping by the splice)'], [css('--ink'), 'cuts'], [css('--warn'), 'joints on this lath ± margin']]);
   new ResizeObserver(draw).observe(canvas); draw(); }
+function plotKit(canvas, el){ const h = SC.hubPlate; const ctx = canvas.getContext('2d');
+  // left: plan of the hub at the same scale as the right: one hub strip's end in elevation (mm)
+  function poly(pts, P, close){ ctx.beginPath(); pts.forEach((p,k) => { const q = P(p); k ? ctx.lineTo(q[0],q[1]) : ctx.moveTo(q[0],q[1]); }); if (close) ctx.closePath(); ctx.stroke(); }
+  function draw(){ const dpr = devicePixelRatio || 1, w = canvas.clientWidth, hh = canvas.clientHeight; if (!w) return; canvas.width = w*dpr; canvas.height = hh*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,hh);
+    const pad = 22, half = w * 0.5; const win = 1.65 * h.radius; const s = Math.min((half - 2*pad) / (2*win), (hh - 2*pad) / (2*win));
+    const cx = pad + half/2 - pad/2, cy = hh/2; const P = p => [cx + p[0]*s, cy - p[1]*s];
+    ctx.lineWidth = 1; ctx.font = '10px ' + css('--mono');
+    // strip footprints (plan), notch zone dashed, first joints as dots
+    h.foot.forEach(f => { ctx.strokeStyle = css('--fam-b'); ctx.globalAlpha = 0.9; poly(f.rect, P, true); ctx.globalAlpha = 1;
+      ctx.setLineDash([2,2]); ctx.strokeStyle = css('--warn'); ctx.lineWidth = 2.5; poly(f.key, P, false); ctx.setLineDash([]); ctx.lineWidth = 1;
+      const q = P(f.first); ctx.fillStyle = css('--muted'); ctx.beginPath(); ctx.arc(q[0], q[1], 2.5, 0, 6.283); ctx.fill();
+      const l = P([f.rect[2][0]*1.02, f.rect[2][1]*1.02]); ctx.fillStyle = css('--fam-b'); ctx.fillText(f.label, l[0], l[1]); });
+    // plate: outline, inner disc (dashed), bolt
+    ctx.strokeStyle = css('--acc'); ctx.lineWidth = 1.8; poly(h.outline, P, true); ctx.lineWidth = 1;
+    ctx.setLineDash([3,3]); ctx.strokeStyle = css('--faint'); ctx.beginPath(); ctx.arc(cx, cy, h.inner*s, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
+    if (h.bolt > 0) { ctx.strokeStyle = css('--acc'); ctx.beginPath(); ctx.arc(cx, cy, h.bolt*s, 0, 6.283); ctx.stroke(); }
+    ctx.fillStyle = css('--faint'); ctx.fillText('plan, 1 : 1 — Ø ' + (2*h.radius).toFixed(1) + ' mm, 6 slots', pad, 14);
+    // elevation of one hub strip: its last window mm, outer edge up
+    const st = h.strip; const win2 = st.window; const x0 = st.hubEnd === 0 ? 0 : st.length - win2; const s2 = Math.min((half - 2*pad) / win2, (hh - 2*pad) / (3 * st.width));
+    const ex = half + pad, ey = hh/2 + st.width*s2/2; const Q = p => [ex + (p[0] - x0)*s2, ey - p[1]*s2];
+    const pts = st.outline.filter(p => p[0] >= x0 - 1e-9 && p[0] <= x0 + win2 + 1e-9);
+    // draw the outline segments inside the window only
+    ctx.strokeStyle = css('--fam-b'); ctx.lineWidth = 1.6; ctx.beginPath();
+    const o = st.outline; for (let i = 0; i < o.length; i++) { const a = o[i], b = o[(i+1)%o.length]; const ina = a[0] >= x0-1e-9 && a[0] <= x0+win2+1e-9, inb = b[0] >= x0-1e-9 && b[0] <= x0+win2+1e-9; if (!ina && !inb) continue; const ca = ina ? a : [Math.min(Math.max(a[0], x0), x0+win2), a[1]], cb = inb ? b : [Math.min(Math.max(b[0], x0), x0+win2), b[1]]; const qa = Q(ca), qb = Q(cb); ctx.moveTo(qa[0], qa[1]); ctx.lineTo(qb[0], qb[1]); } ctx.stroke(); ctx.lineWidth = 1;
+    st.marks.filter(m => m.at >= x0 && m.at <= x0 + win2).forEach(m => { const q = Q([m.at, m.kind === 'SlotOuter' ? st.width - m.depth - 1 : m.kind === 'SlotInner' ? m.depth + 1 : st.width/2]); ctx.fillStyle = m.label === 'hub' ? css('--warn') : css('--muted'); ctx.fillText(m.label === 'hub' ? 'notch ' + m.depth.toFixed(1) + ' × ' + m.size.toFixed(1) : 'slot ' + m.label, q[0] + m.size*s2/2 + 3, q[1] + 3); });
+    ctx.fillStyle = css('--faint'); ctx.fillText('strip ' + st.label + ' at its hub end, elevation — ' + st.width.toFixed(0) + ' mm wide, notched on both edges', ex, 14); }
+  legend(el.dataset.id, [[css('--acc'), 'hub plate (cut)'], [css('--fam-b'), 'strips: footprints in plan, ' + h.strip.label + ' in elevation'], [css('--warn'), 'key: the notch the plate disc enters'], [css('--muted'), 'first joint on each ray']]);
+  new ResizeObserver(draw).observe(canvas); draw(); }
 function sparkline(canvas, el){ const u = SC.lathUtil.util; const ctx = canvas.getContext('2d');
   function draw(){ const dpr = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight; if (!w) return; canvas.width = w*dpr; canvas.height = h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
     const pad = 28, top = 14, bot = 18; const mx = Math.max(1.5, ...u); const X = i => pad + (w - 2*pad) * i / (u.length - 1), Y = v => h - bot - (h - top - bot) * v / mx;
@@ -321,7 +350,7 @@ function sparkline(canvas, el){ const u = SC.lathUtil.util; const ctx = canvas.g
 
 const viewers = [];
 document.querySelectorAll('.demo').forEach(el => { const canvas = el.querySelector('canvas'); const kind = el.dataset.kind;
-  if (kind === 'plot2d') return plot2d(canvas, el); if (kind === 'plot1d') return plot1d(canvas, el); if (kind === 'sparkline') return sparkline(canvas, el);
+  if (kind === 'plot2d') return plot2d(canvas, el); if (kind === 'plot1d') return plot1d(canvas, el); if (kind === 'plotKit') return plotKit(canvas, el); if (kind === 'sparkline') return sparkline(canvas, el);
   const b = builders[el.dataset.demo]; if (!b) return; const v = Viewer(canvas, () => b(el)); viewers.push(v); el.querySelectorAll('.demo-ctl input').forEach(r => { r.addEventListener('change', () => v.rebuild()); if (r.type === 'range') r.addEventListener('input', () => v.rebuild()); }); });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => viewers.forEach(v => v.rebuild()));
 new MutationObserver(() => viewers.forEach(v => v.rebuild())).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

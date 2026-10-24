@@ -121,6 +121,9 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   const kit = await page.evaluate(() => window.__mite.kit);
   check(kit && !kit.error && kit.strips > 20 && kit.hubs === 1 && kit.sheets >= 1 && kit.zip.length > 1000 && kit.assemblySvg.startsWith('<svg'), `kit built (${kit?.error || `${kit?.strips} strips, ${kit?.joints} joints, ${kit?.hubs} hub, ${kit?.sheets} sheets`})`);
   check(kit && kit.flatness < 1e-3 && kit.slotMin > 0, `kit is flat with slots (${kit?.flatness?.toExponential(1)}, ${kit?.slotMin})`);
+  // the hub's six rays end on two bolted plates (the Kit block's default): a plate per hub, rays at angles that do not move while deploying
+  check(kit && kit.plates === 1 && kit.plateDiameter > 0 && kit.plateAngleDrift < 1 && kit.platelessHubs === 0 && kit.zip.length > 1000,
+    `kit hub plate (${kit?.plates} plate set, Ø ${kit?.plateDiameter?.toFixed(4)} model units, rays move ${kit?.plateAngleDrift?.toExponential(1)}°${kit?.plateCramped ? ', cramped' : ''})`);
 
   const broken = await page.$$eval('img', (imgs) => imgs.filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.getAttribute('src')));
   check(broken.length === 0, `all icons load (${broken.join(', ') || 'none broken'})`);

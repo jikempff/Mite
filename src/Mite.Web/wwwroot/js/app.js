@@ -725,7 +725,7 @@ async function runKit() {
   // 1 : 1 — the Laths section; a model — its own strip and sheet, in mm of the model
   const width = scale === 1 ? o.width : +$('kwidth').value / toMm, thickness = scale === 1 ? o.thickness : +$('kthick').value / toMm;
   const opts = { width, thickness, upright: o.upright, joint: +$('kjoint').value, hole: 0, clearance: +$('kclear').value / toMm,
-    toMm, sheetWidth: +$('ksheetw').value, sheetHeight: +$('ksheeth').value, stiffness: 0.3, steps: 8 };
+    toMm, sheetWidth: +$('ksheetw').value, sheetHeight: +$('ksheeth').value, stiffness: 0.3, steps: 8, hub: +$('khub').value, hubRadius: 0 };
   const gen = S.gen;
   await withBusy('pressing the net flat and cutting the strips…', async () => {
     const r = await K('kit', opts);
@@ -737,6 +737,8 @@ async function runKit() {
     $('kit-stats').innerHTML = `1 : ${scale} · <b>${r.strips}</b> strips · <b>${r.joints}</b> joints${r.hubs ? ` (${r.hubs} hub)` : ''} · <b>${fmt(r.totalLength * mm / 1000, 1)} m</b> of ${fmt(width * mm, 1)} × ${fmt(thickness * mm, 1)} mm · longest <b>${fmt(r.longestStrip * mm, 0)} mm</b>\n` +
       `<b>${r.sheets}</b> sheet${r.sheets === 1 ? '' : 's'} of ${opts.sheetWidth} × ${opts.sheetHeight} mm` + (r.tooLong ? ` + <span class="bad">${r.tooLong} strips longer than the sheet</span>` : '') +
       (r.slotMax > 0 ? ` · slots <b>${fmt(r.slotMin * mm, 1)}–${fmt(r.slotMax * mm, 1)} mm</b> (joints down to ${fmt(r.minAngle, 0)}°)` : '') +
+      (r.plates ? ` · hub plate${r.plates > 1 ? 's' : ''} <b>Ø ${fmt(r.plateDiameter * mm, 0)} mm</b>, rays move ${fmt(r.plateAngleDrift, 3)}° while deploying${r.plateCramped ? ' <span class="bad">(cramped: raise the spacing or narrow the strips)</span>' : ''}` : '') +
+      (r.platelessHubs ? ` · <span class="bad">${r.platelessHubs} hub${r.platelessHubs > 1 ? 's' : ''} with a lath passing through: pin hole kept</span>` : '') +
       `\nflat to <b>${fmt(r.flatness * mm, 2)} mm</b> · joint spacing kept to <b>${(r.drift * 100).toFixed(2)} %</b> · ${r.ms} ms`;
     $('kit-assembly').src = svgUrl(r.assemblySvg);
     $('kit-deploy').src = svgUrl(r.deploymentSvg);
@@ -789,7 +791,7 @@ function updateRecipe() {
     const f = frameOptions();
     lines.push(`Gridshell Analysis: Supports = ${f.supports === 'border' ? 'lath ends on the border' : f.supports === 'lowest' ? `lath ends in the lowest ${$('band').value} %` : `${S.picked.length} picked points`}, SupportType = ${f.supportType}, JointStiffness = ${f.jointStiffness < 0 ? -1 : f.jointStiffness} N·m/rad, Density = ${f.density}, AreaLoad = ${f.areaLoad} N/m², Load = (0,0,−${f.lineLoad}) N/m`);
   }
-  if (S.kit) lines.push(`Flat Kit: A, B from the net, P = the seed, scale 1 : ${$('kscale').value} (W, T in model units), Upright = ${$('upright').checked}, Joint = ${$('kjoint').value}, SheetWidth = ${$('ksheetw').value}, SheetHeight = ${$('ksheeth').value} → Folder + Write for the SVG / DXF / CSV`);
+  if (S.kit) lines.push(`Flat Kit: A, B from the net, P = the seed, scale 1 : ${$('kscale').value} (W, T in model units), Upright = ${$('upright').checked}, Joint = ${$('kjoint').value}, HubPlates = ${$('khub').value}, SheetWidth = ${$('ksheetw').value}, SheetHeight = ${$('ksheeth').value} → Folder + Write for the SVG / DXF / CSV`);
   if (S.kin) lines.push(`Net Kinetics: drive ${S.drive}, amplitude ${$('kamp').value}, Stiffness = ${$('kstiff').value}, Steps = ${$('ksteps').value}`);
   $('recipe').textContent = lines.join('\n');
 }

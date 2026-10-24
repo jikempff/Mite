@@ -502,6 +502,27 @@ internal static class Tests
             c => Expect(CurveCount(c, 0) == 3 && CurveCount(c, 1) == 3 && Points(c, 2).Count == 9 && CurveCount(c, 6) == 6,
                 $"3 + 3 flat laths / 9 joints / 6 strip outlines, got {CurveCount(c, 0)} + {CurveCount(c, 1)} / {Points(c, 2).Count} / {CurveCount(c, 6)}"));
 
+        // Flat Kit (hub plates): six rays at 60° end at one hub, each crossed once at radius 1; two bolted plates
+        // → 12 strips, 7 joints (1 hub), 2 hub-plate curves in place (outline + bolt), and the strip outlines plus
+        // 2 plate outlines and 2 bolt holes on the sheets
+        TestComponent("Flat Kit (hub plates)",
+            new Mite.Grasshopper.Components.FlatKitComponent(),
+            c =>
+            {
+                var rays = new System.Collections.Generic.List<Rhino.Geometry.Curve>(); var bars = new System.Collections.Generic.List<Rhino.Geometry.Curve>();
+                for (int k = 0; k < 6; k++)
+                {
+                    double a = Math.PI * k / 3, ca = Math.Cos(a), sa = Math.Sin(a);
+                    rays.Add(new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(2 * ca, 2 * sa, 0)));
+                    bars.Add(new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(ca + 0.5 * sa, sa - 0.5 * ca, 0), new Rhino.Geometry.Point3d(ca - 0.5 * sa, sa + 0.5 * ca, 0)));
+                }
+                SetCurveList(c, 0, rays.ToArray());
+                SetCurveList(c, 1, bars.ToArray());
+                SetInputs(c, (5, 0.05), (6, 0.005), (18, 2));
+            },
+            c => Expect(CurveCount(c, 0) == 6 && CurveCount(c, 1) == 6 && Points(c, 2).Count == 7 && CurveCount(c, 14) == 2 && CurveCount(c, 6) == 16,
+                $"6 + 6 laths / 7 joints / 2 hub-plate curves / 16 cut outlines, got {CurveCount(c, 0)} + {CurveCount(c, 1)} / {Points(c, 2).Count} / {CurveCount(c, 14)} / {CurveCount(c, 6)}"));
+
         Console.WriteLine();
         Console.WriteLine($"=== {_passed} passed, {_failed} failed ===");
         return _failed == 0 ? 0 : 1;

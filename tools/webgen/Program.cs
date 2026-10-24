@@ -560,6 +560,76 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     scenes["kinCat"] = new { wire = Edges(cat, 4), states = catScenes };
 }
 
+// ---------- Flat Kit: the hub plate of the 3-fold Enneper web ----------
+{
+    // the kit of the 3-fold Enneper web (as FlatKitTests / HubPlateTests): 20 × 2 strips on a 2-unit web, 0.2 clearance,
+    // the six rays of the flat point on a bolted sandwich of two hub plates
+    var mesh = AnalyticShapes.Build("enneper3", 3, 0.9, 0, 48).ToTriangulated();
+    var pc = PrincipalCurvature.Compute(mesh, 2);
+    var web = AsymptoticWeb.Build(mesh, pc, -1, new AsymptoticWeb.Options());
+    var proj = new MeshProjection(mesh);
+    var t = Stopwatch.StartNew();
+    var (net, motion, anchor) = FlatKit.Press(web.A, web.B, web.Seed, new Vec3d(0, 0, 1), q => proj.ClosestPoint(q, proj.NearestVertexGlobal(q)).SmoothNormal);
+    var o = new FlatKit.Options { Width = 0.02, Thickness = 0.002, Upright = true, Clearance = 0.0002, HubPlates = 2 };
+    var kit = FlatKit.Build(net, motion, anchor, new Vec3d(0, 0, 1), o);
+    var plain = FlatKit.Build(net, motion, anchor, new Vec3d(0, 0, 1), new FlatKit.Options { Width = 0.02, Thickness = 0.002, Upright = true, Clearance = 0.0002 });
+    t.Stop();
+    var plate = kit.Plates[0];
+    var eo = new KitExport.Options { ToMm = 1000, SheetWidth = 2500, SheetHeight = 1250 };   // a 1 : 1 kit of the 2-unit web in metres: 2.5 × 1.25 m sheets
+    var sheets = KitExport.StripSheets(kit, eo);
+    var plateSheet = sheets.Last();
+    var outlines = plateSheet.Shapes.OfType<KitExport.Poly>().Where(x => x.Layer == KitExport.Layer.Cut && x.Closed).ToList();
+    double exactArea = (plate.ExactArea() + 0.25 * Math.PI * plate.Bolt * plate.Bolt) * 1e6;
+    var hubStrips = kit.Strips.Where(x => x.Marks.Any(m => m.Label == "hub")).ToList();
+    var rays = plate.Rays.OrderBy(r => r.Angle).ToList();
+    double gapMin = double.MaxValue, gapMax = 0;
+    for (int k = 0; k < rays.Count; k++) { double g = (k == rays.Count - 1 ? rays[0].Angle + 2 * Math.PI : rays[k + 1].Angle) - rays[k].Angle; gapMin = Math.Min(gapMin, g); gapMax = Math.Max(gapMax, g); }
+    // the clash check at the strip ends: centre lines ≥ t + c apart
+    double endGap = 2 * plate.EndRadius * Math.Sin(0.5 * gapMin);
+    // the notch / outline check: every hub strip's outline removes exactly its slots and notches
+    double worstStripArea = 0;
+    foreach (var st in hubStrips)
+    {
+        double area = Math.Abs(HubPlate.Area(KitExport.StripOutline(st, 1000.0))) * 1e-6;
+        double expect = st.Length * st.Width - st.Marks.Where(m => m.Kind != FlatKit.MarkKind.Hole).Sum(m => m.Size * m.Depth);
+        worstStripArea = Math.Max(worstStripArea, Math.Abs(area - expect));
+    }
+    var one = hubStrips[0]; var oneRay = rays.First(r => r.Lath == one.Lath);
+    numbers["hubPlate"] = new
+    {
+        strips = kit.Strips.Count, joints = kit.Joints.Count, hubs = kit.Joints.Count(j => j.Hub), rays = plate.Rays.Count,
+        spacing = R3(web.Spacing), firstJoint = R3(plate.Rays.Min(r => r.FirstJoint)),
+        gapMinDeg = Math.Round(gapMin * 180 / Math.PI, 5), gapMaxDeg = Math.Round(gapMax * 180 / Math.PI, 5), angleDeviation = plate.AngleDeviation, angleDrift = plate.AngleDrift, states = motion.States.Count,
+        width = o.Width, thickness = o.Thickness, clearance = o.Clearance,
+        slotWidth = plate.SlotWidth, endRadius = plate.EndRadius, key = plate.Key, notchDepth = plate.NotchDepth, innerRadius = plate.InnerRadius, radius = plate.Radius, freeRadius = plate.FreeRadius,
+        bolt = plate.Bolt, bridge = plate.MinBridge, cramped = plate.Cramped, plates = plate.Count, stripWeb = plate.StripWeb(o.Width),
+        endGap = endGap, clashLimit = o.Thickness + o.Clearance,
+        outlines = outlines.Count, outlineArea = outlines.Count > 0 ? HubPlate.Area(outlines[0].Points) : 0, exactArea, areaError = outlines.Count > 0 ? Math.Abs(HubPlate.Area(outlines[0].Points) - exactArea) / exactArea : 1,
+        hubStrips = hubStrips.Count, notches = hubStrips.Sum(x => x.Marks.Count(m => m.Label == "hub")), pinHoles = kit.Strips.Sum(x => x.Marks.Count(m => m.Kind == FlatKit.MarkKind.Hub)),
+        plainPinHoles = plain.Strips.Sum(x => x.Marks.Count(m => m.Kind == FlatKit.MarkKind.Hub)),
+        trim = hubStrips.Max(x => Math.Min(x.ExtendStart, x.ExtendEnd)), worstStripArea,
+        untouched = kit.Strips.Where(x => !hubStrips.Contains(x)).All(x => Math.Abs(x.Length - plain.Strips[kit.Strips.IndexOf(x)].Length) < 1e-12),
+        sheets = sheets.Count(d => d.Title.StartsWith("sheet")), plateSheet = plateSheet.Title, ms = t.ElapsedMilliseconds,
+    };
+    // scene: plan of the hub (mm) — plate outline, bolt, strip footprints to 1.6 R with their notch zones, the first joints; and one strip's elevation at its hub end
+    double mm = 1000;
+    var foot = new List<object>();
+    foreach (var r in rays)
+    {
+        double ca = Math.Cos(r.Angle), sa = Math.Sin(r.Angle), h = 0.5 * o.Thickness * mm;
+        double r0 = plate.EndRadius * mm, r1 = 1.6 * plate.Radius * mm, rk = (plate.EndRadius + plate.Key + o.Clearance) * mm;
+        foot.Add(new { label = r.Label, rect = new[] { new[] { r0 * ca + h * sa, r0 * sa - h * ca }, new[] { r1 * ca + h * sa, r1 * sa - h * ca }, new[] { r1 * ca - h * sa, r1 * sa + h * ca }, new[] { r0 * ca - h * sa, r0 * sa + h * ca } }, key = new[] { new[] { r0 * ca, r0 * sa }, new[] { rk * ca, rk * sa } }, first = new[] { r.FirstJoint * mm * ca, r.FirstJoint * mm * sa } });
+    }
+    var elev = KitExport.StripOutline(one, mm);
+    double hubEnd = oneRay.AtStart ? 0 : one.Length * mm;
+    scenes["hubPlate"] = new
+    {
+        outline = plate.Outline().Select(q => new[] { q.X * mm, q.Y * mm }).ToArray(), bolt = plate.Bolt * mm * 0.5, radius = plate.Radius * mm, inner = plate.InnerRadius * mm, foot,
+        strip = new { label = one.Label, outline = elev.Select(q => new[] { q.X, q.Y }).ToArray(), hubEnd, length = one.Length * mm, width = one.Width * mm, window = Math.Max(2.2 * plate.Radius, 1.12 * oneRay.FirstJoint) * mm,
+            marks = one.Marks.Select(m => new { at = m.At * mm, size = m.Size * mm, depth = m.Depth * mm, kind = m.Kind.ToString(), label = m.Label }).ToArray() },
+    };
+}
+
 // ---------- Form finding on a 24x24 grid ----------
 {
     int n = 24;

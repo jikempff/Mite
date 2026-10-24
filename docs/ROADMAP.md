@@ -35,9 +35,9 @@ where they overlap
    dimensions.
 6. The kit to build it (done 1.3.1: Flat Kit — flat assembly 1 : 1, strips
    with slots / holes / hub on laser sheets, deployment sequence, cut list,
-   SVG / DXF / CSV); next: a physical prototype of the 3-fold Enneper to
-   check slot play and the deployment against the model, hub plate design,
-   supports, and the G laths in the kit.
+   SVG / DXF / CSV; done 2026-10-24: the hub plate, section H); next: a
+   physical prototype of the 3-fold Enneper to check slot play and the
+   deployment against the model, supports, and the G laths in the kit.
 4. One lath section for every curve (done in the web app 1.3.0; per-family
    profiles in Grasshopper still open).
 5. Black, white and neon for everything visual (web app done 1.3.0; bench,
@@ -642,6 +642,77 @@ Open
 - [ ] Global family assignment across flat points for the older Asymptotic
       Net layouts (the web already handles them by rays).
 
+## H. Fabrication kit (José's priority 6)
+
+- [x] Hub plate — 2026-10-24 (session 1, UX / fabrication), `Fabrication/HubPlate`,
+      `FlatKit.Options.HubPlates` (0 pin hole as before, 1 one plate flush with
+      the inner edge, 2 a bolted sandwich), `HubRadius`, `HubThickness`,
+      `HubBolt`; Flat Kit inputs `HubPlates` / `HubRadius` and output `HubPlate`
+      appended; a hub choice in the web app's Kit block (two plates by default
+      there, pin hole by default in Grasshopper). Literature: Schling, Hitrec &
+      Barthel 2017 (singularities of valence ≠ 4; the steel prototype's double
+      slots with a bolt and star washers at every node — the slots fix angle and
+      position, the bolt the stacking), Schling, Wang, Hoyer & Pottmann 2022
+      (singular vertices of valence ≥ 6 at flat points), Schling & Schikore 2022
+      (singularities constrain the motion), Cichocka 2024 IASS (slot width for
+      a 90° → 75° rotation with the kerf included: 0.84 mm design for 0.69 mm
+      plywood), Fab Academy press-fit notes (parametric notches, measured
+      kerf, chamfers, test cuts), SendCutSend tolerance notes (bridges ≥ 1×
+      the thickness, slots ≥ 1.5× their width from features). None of the
+      asymptotic-gridshell prototypes in the literature has a singular node
+      (the pavilions avoid them, the kinetic umbrella and canopy are
+      singularity-free grids), so the plate is designed from the slot-joint
+      practice above and checked against the kinematics: the scissor model
+      keeps the Enneper hub's angles to 6e-6° through the press (rays at 60°
+      ± 5e-7° in the flat state), so a rigid plate is consistent with the
+      motion — at a singular node the mechanism does not turn the rays.
+      Rules (header of HubPlate.cs): slot s = t + c, strips end at
+      s / (2 sin(α_min/2)) or a bridge past the bolt, key max(1.5 s, 2 t_p,
+      w/10), r_in = r_end + key or the bridge rule, R = 0.45 of the first-joint
+      distance ≥ r_in + w, cramped otherwise. Tests (`HubPlateTests`, 9): the
+      Enneper hub (6 rays, radii in closed form, simple star outline with the
+      exact area to 2e-5, strips trimmed and notched, the other 48 strips
+      bit-identical, flat strips and `HubPlates` 0 unchanged), an irregular
+      planar star (55 / 70 / 55 / 60 / 60 / 60°: the plate follows the measured
+      rays, deviation 10° reported), the exports (plate sheet, cut-list rows,
+      README, DXF, valid SVG). Bench: Flat Kit card (new on the bench; the
+      component had none) with the hub in plan and a strip end in elevation,
+      four self-tests (79 PASS).
+      Findings: (1) a 1 : 1 kit of the 2-unit Enneper web with 20 × 2 mm strips
+      gets Ø 103 mm plates with the slots 43 mm long; with the 1.3.1 test
+      proportions (strips as wide as the joint spacing) no plate fits and the
+      component says so; (2) the key length, not the clash radius, sets the
+      inner disc (4.5 → 8.5 mm): six slots 2.2 mm wide leave 6 mm bridges at
+      that radius, well above the 2 mm sheet; (3) `StripOutline` had to drop
+      repeated corners once a notch reaches a strip end; (4) the mesh decides
+      how exactly the rays sit at 60°: the n-fold Enneper chart at resolution
+      40 (the web app's mesh) is not 3-fold symmetric (40 / 3), the traced rays
+      leave 60° by 1.0–2.0° (1.45° on the app's coarse web, 1.05° at the 0.115
+      spacing) and then the press turns them by 0.04–0.4° relative to each other
+      — nothing in the scissor model holds a singular node's angles (six laths
+      pinned at one node, no bending term across it); at resolution 48 (48 / 3)
+      the rays are at 60° ± 1e-7° and move 6e-6°. The plate follows the
+      measured flat rays either way, the component reports both numbers and
+      warns above 0.5° of drift, the web app shows the drift (0.40° on its
+      coarse web).
+      Open: (a) a lath passing *through* a hub (three through-laths instead of
+      six rays) gets no plate — it needs a three-way halving (each strip
+      notched a third) or the plate split in two half-discs; (b) kerf as an
+      input (today the clearance stands in for it: Cichocka's slots came out
+      0.32–0.35 mm wider than drawn on plywood, ≈ 0.17 mm of kerf per side);
+      (c) 45° lead-in chamfers on the slot mouths (Fab Academy) in the strip and plate outlines; (d) the plates on
+      the assembly drawing and in the web app's assembly SVG (today only on
+      the plate sheet and the `HubPlate` output); (e) nest the plates among
+      the strips once the 2026-10-20 nesting lands; (f) flat strips at a hub:
+      a stacked hub with spacers, one strip per layer; (g) washers / a central
+      spacer ring between the two plates so the bolt does not crush the
+      strips' web; (h) the physical prototype: cut the Enneper kit with two
+      plates and measure the hub's stiffness against the pin-hole version;
+      (i) a hub-angle constraint in `ScissorNet` (keep the ray angles of a
+      singular node, as a rigid plate does) so the model and the kit agree on
+      a coarse or unsymmetric web; (j) a mesh resolution divisible by the
+      symmetry order for the n-fold Enneper in the web app (40 → 48).
+
 ## F. Food4Rhino release assets
 
 - [x] Bench screenshots (2026-09-25, delivered as `food4rhino/`): page
@@ -659,6 +730,10 @@ Open
 
 ## Done
 
+- [x] 2026-10-24 (session 1, UX / fabrication, H): hub plates for the Flat Kit —
+      `HubPlate` in the core, `HubPlates` / `HubRadius` inputs and `HubPlate`
+      output appended to Flat Kit, the hub choice in the web app, nine exact
+      tests, the Flat Kit bench card with four self-tests (79 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

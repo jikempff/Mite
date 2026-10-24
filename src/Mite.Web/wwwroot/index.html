@@ -222,6 +222,7 @@
         <div class="row slider"><label for="kwidth">strip <span class="unit">mm</span></label><input id="kwidth" type="range" min="4" max="120" step="1" value="20"><output for="kwidth">20</output></div>
         <div class="row slider"><label for="kthick">sheet <span class="unit">mm</span></label><input id="kthick" type="range" min="0.5" max="12" step="0.5" value="3"><output for="kthick">3</output></div>
       </div>
+      <div class="row"><label for="khub" title="Where three or more laths end at one node (the flat point of a 3-fold Enneper web): a common pin hole, or a laser-cut plate with a radial slot per strip">hub</label><select id="khub"><option value="0">pin hole on every strip</option><option value="1">one hub plate (inner edge)</option><option value="2" selected>two hub plates, bolted</option></select></div>
       <div class="row"><label for="kjoint">joints</label><select id="kjoint"><option value="0" title="slots for upright laths, pins for flat ones">automatic</option><option value="1" title="the strips slot into each other and turn about the normal">halving slots</option><option value="2">pin holes</option></select></div>
       <div class="grid2">
         <div class="row slider"><label for="ksheetw">laser bed <span class="unit">mm</span></label><input id="ksheetw" type="number" min="100" max="5000" step="10" value="1000"><span class="unit">×</span><input id="ksheeth" type="number" min="100" max="5000" step="10" value="600"></div>

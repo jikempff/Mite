@@ -72,7 +72,12 @@ public static class KitExport
             pts.Add((x + h, W)); pts.Add((x + h, W - d)); pts.Add((x - h, W - d)); pts.Add((x - h, W));
         }
         pts.Add((0, W));
-        return pts;
+        // a notch that reaches a strip end (hub plates) repeats the corner: keep every point once
+        var clean = new List<(double, double)>(pts.Count);
+        foreach (var q in pts)
+            if (clean.Count == 0 || Math.Abs(clean[clean.Count - 1].Item1 - q.Item1) > 1e-9 || Math.Abs(clean[clean.Count - 1].Item2 - q.Item2) > 1e-9) clean.Add(q);
+        if (clean.Count > 1 && Math.Abs(clean[0].Item1 - clean[clean.Count - 1].Item1) < 1e-9 && Math.Abs(clean[0].Item2 - clean[clean.Count - 1].Item2) < 1e-9) clean.RemoveAt(clean.Count - 1);
+        return clean;
     }
 
     /// <summary>
@@ -157,7 +162,72 @@ public static class KitExport
         int k = 0;
         int nSheets = sheets.Count(d => d.Title.Length == 0);
         foreach (var d in sheets) if (d.Title.Length == 0) { k++; d.Title = $"sheet {k} of {nSheets} — {d.Width:0} × {d.Height:0} mm"; }
+        var plates = PlateSheet(kit, o);
+        if (plates != null) sheets.Add(plates);
         return sheets;
+    }
+
+    // ------------------------------------------------------------------ hub plates
+
+    /// <summary>The outline of a hub plate in its own frame (mm, centre at the origin): see <see cref="HubPlate.Outline"/>.</summary>
+    public static List<(double X, double Y)> PlateOutline(HubPlate p, double mm) =>
+        p.Outline().Select(q => (q.X * mm, q.Y * mm)).ToList();
+
+    /// <summary>
+    /// Draws one hub plate centred at (cx, cy): the star outline and the bolt hole
+    /// on the cut layer, the hub number and the plate's place in the sandwich in the
+    /// middle, and at every slot the label of the strip that goes into it.
+    /// </summary>
+    public static void DrawPlate(Drawing d, HubPlate p, int index, double mm, double cx, double cy)
+    {
+        double R = p.Radius * mm;
+        d.Line(Layer.Cut, PlateOutline(p, mm).Select(q => (cx + q.X, cy + q.Y)), closed: true);
+        if (p.Bolt > 0) d.Hole(Layer.Cut, cx, cy, 0.5 * p.Bolt * mm);
+        // the plate's name in the sector between slots nearest the bottom, in two short lines clear of the slots
+        double th = Math.Max(1.5, Math.Min(5, 0.07 * R));
+        string where = p.Count == 2 ? (index == 0 ? "inner" : "outer") : "plate";
+        var angles = p.Rays.Select(r => r.Angle).OrderBy(a => a).ToList();
+        double best = -Math.PI / 2, bestDist = double.MaxValue;
+        for (int k = 0; k < angles.Count; k++)
+        {
+            double a = angles[k], b = k + 1 < angles.Count ? angles[k + 1] : angles[0] + 2 * Math.PI, mid = 0.5 * (a + b);
+            double dist = Math.Abs(Math.Atan2(Math.Sin(mid + Math.PI / 2), Math.Cos(mid + Math.PI / 2)));
+            if (dist < bestDist) { bestDist = dist; best = mid; }
+        }
+        double lx = cx + 0.6 * R * Math.Cos(best), ly = cy + 0.6 * R * Math.Sin(best);
+        d.Label(Layer.Engrave, lx, ly + 0.25 * th, th, $"hub j{p.Joint}");
+        d.Label(Layer.Engrave, lx, ly - 1.0 * th, th, where);
+        // strip labels beside the slots, on the counter-clockwise side, half way along the slot
+        double lh = Math.Max(1.2, Math.Min(5, 0.09 * R)), rl = 0.5 * (p.InnerRadius + p.Radius) * mm;
+        foreach (var r in p.Rays)
+        {
+            double off = 0.5 * p.SlotWidth * mm + 0.4 * lh;
+            double x = cx + rl * Math.Cos(r.Angle) - off * Math.Sin(r.Angle), y = cy + rl * Math.Sin(r.Angle) + off * Math.Cos(r.Angle) - 0.35 * lh;
+            d.Label(Layer.Engrave, x, y, lh, r.Label);
+        }
+    }
+
+    /// <summary>All hub plates of the kit on one drawing (two per hub for a sandwich), or null when the kit has none.</summary>
+    public static Drawing? PlateSheet(FlatKit.Result kit, Options? options = null)
+    {
+        if (kit.Plates.Count == 0) return null;
+        var o = options ?? new Options();
+        double mm = o.ToMm, G = o.Gap;
+        var items = kit.Plates.SelectMany(p => Enumerable.Range(0, p.Count).Select(i => (p, i))).ToList();
+        double x = G, y = G, rowH = 0, width = o.SheetWidth, used = 0;
+        var d = new Drawing();
+        foreach (var (p, i) in items)
+        {
+            double D = 2 * p.Radius * mm;
+            if (x > G && x + D + G > width) { y += rowH + G; x = G; rowH = 0; }
+            DrawPlate(d, p, i, mm, x + 0.5 * D, y + 0.5 * D);
+            x += D + G; rowH = Math.Max(rowH, D); used = Math.Max(used, x);
+        }
+        // the drawing is as wide as the plates need (one row) or the sheet (several rows)
+        d.Width = y > G ? Math.Max(width, items.Max(it => 2 * it.p.Radius * mm) + 2 * G) : used; d.Height = Math.Max(y + rowH + G, 40);
+        int hubs = kit.Plates.Count;
+        d.Title = $"hub plate{(items.Count == 1 ? "" : "s")} — {items.Count} for {hubs} hub{(hubs == 1 ? "" : "s")}, Ø {F(kit.Plates.Min(p => 2 * p.Radius * mm))}{(hubs > 1 ? "–" + F(kit.Plates.Max(p => 2 * p.Radius * mm)) : "")} mm, {F(kit.Plates[0].Thickness * mm)} mm sheet";
+        return d;
     }
 
     // ------------------------------------------------------------------ assembly
@@ -243,6 +313,15 @@ public static class KitExport
             sb.Append(string.Join(" ", s.Marks.Select(m => $"{F(m.At * o.ToMm)}:{m.Kind switch { FlatKit.MarkKind.SlotOuter => "slot-out", FlatKit.MarkKind.SlotInner => "slot-in", FlatKit.MarkKind.Hub => "hub", _ => "hole" }}:{m.Label}:j{m.Joint}")));
             sb.Append('\n');
         }
+        // hub plates: one row each — label, "plate", diameter and thickness, inner radius and slot width, then the rays (angle:strip)
+        foreach (var p in kit.Plates)
+            for (int i = 0; i < p.Count; i++)
+            {
+                sb.Append($"hub-j{p.Joint}-{(p.Count == 2 ? (i == 0 ? "inner" : "outer") : "plate")},plate,{F(2 * p.Radius * o.ToMm)},{F(p.Thickness * o.ToMm)},{F(p.InnerRadius * o.ToMm)},{F(p.SlotWidth * o.ToMm)},");
+                sb.Append($"bolt:{F(p.Bolt * o.ToMm)} ");
+                sb.Append(string.Join(" ", p.Rays.Select(r => $"{F(r.Angle * 180 / Math.PI)}deg:{r.Label}")));
+                sb.Append('\n');
+            }
         return sb.ToString();
     }
 
@@ -284,7 +363,7 @@ public static class KitExport
     private static string Readme(FlatKit.Result kit, List<Drawing> sheets, Options o)
     {
         int hubs = kit.Joints.Count(j => j.Hub);
-        var slots = kit.Strips.SelectMany(s => s.Marks).Where(m => m.Kind == FlatKit.MarkKind.SlotOuter || m.Kind == FlatKit.MarkKind.SlotInner).ToList();
+        var slots = kit.Strips.SelectMany(s => s.Marks).Where(m => (m.Kind == FlatKit.MarkKind.SlotOuter || m.Kind == FlatKit.MarkKind.SlotInner) && m.Label != "hub").ToList();
         var sb = new StringBuilder();
         sb.AppendLine("Mite flat kit — cut, assemble flat, deploy");
         sb.AppendLine();
@@ -292,7 +371,7 @@ public static class KitExport
         sb.AppendLine($"Units: millimetres. Sheets {F(o.SheetWidth)} x {F(o.SheetHeight)} mm. Red = cut, blue = engrave.");
         sb.AppendLine();
         sb.AppendLine("Files");
-        sb.AppendLine("  strips-NN.svg / strips.dxf   every strip with its slots or holes, labelled; strips longer than the sheet are on the last drawing");
+        sb.AppendLine("  strips-NN.svg / strips.dxf   every strip with its slots or holes, labelled; strips longer than the sheet are on their own drawing" + (kit.Plates.Count > 0 ? ", the hub plates on the last one" : ""));
         sb.AppendLine("  assembly.svg / assembly.dxf  the flat grid at 1:1, joints numbered, laths labelled");
         sb.AppendLine("  deployment.svg               the grid from flat to curved");
         sb.AppendLine("  cutlist.csv                  lengths and joint positions of every strip");
@@ -304,12 +383,23 @@ public static class KitExport
             sb.AppendLine($"  Slots are {F(slots.Min(m => m.Size) * o.ToMm)}-{F(slots.Max(m => m.Size) * o.ToMm)} mm wide: the other strip's thickness at the smallest angle that joint reaches while deploying (down to {kit.Joints.Min(j => j.MinAngle):0}°), so the scissors can turn.");
         }
         else sb.AppendLine("  Crossings are pin holes on the centre line: one pin per joint, free to turn.");
-        if (hubs > 0) sb.AppendLine("  The hub (where three or more strips meet, the flat point) takes one common pin or a plate through the holes marked 'hub'.");
+        if (hubs > 0 && kit.Plates.Count == 0) sb.AppendLine("  The hub (where three or more strips meet, the flat point) takes one common pin or a plate through the holes marked 'hub'.");
+        foreach (var p in kit.Plates)
+        {
+            sb.AppendLine($"  Hub j{p.Joint}: {p.Rays.Count} strips ({string.Join(", ", p.Rays.Select(r => r.Label))}) end {F(p.EndRadius * o.ToMm)} mm short of the centre on {(p.Count == 2 ? "a sandwich of two identical hub plates" : "one hub plate")}, Ø {F(2 * p.Radius * o.ToMm)} × {F(p.Thickness * o.ToMm)} mm, with {p.Rays.Count} radial slots {F(p.SlotWidth * o.ToMm)} mm wide from the rim to {F(p.InnerRadius * o.ToMm)} mm.");
+            sb.AppendLine($"    Each of those strips is notched {F(p.NotchDepth * o.ToMm)} mm deep over its last {F((p.Key + kit.Strips.SelectMany(x => x.Marks).Where(m => m.Label == "hub").Select(m => m.Size - p.Key).DefaultIfEmpty(0).First()) * o.ToMm)} mm{(p.Count == 2 ? " on both edges" : " on the inner edge")} (marked 'hub'): drop the strip into its slot (labelled with the strip) and the plate's disc enters the notch, which locks the strip radially.");
+            sb.AppendLine(p.Count == 2
+                ? $"    Fit the inner plate first, the strips on it, then the outer plate from above; bolt the two through the centre hole (Ø {F(p.Bolt * o.ToMm)} mm) — the bolt is what keeps the strips from lifting out."
+                : "    One plate holds angle and position; glue or pin the strips to it so they cannot lift out.");
+            sb.AppendLine($"    The rays sit at {F(360.0 / p.Rays.Count)}° ± {p.AngleDeviation:0.0#}° in the flat state and their angles change by at most {p.AngleDrift:0.0#}° through the deployment: the plate is rigid.{(p.Cramped ? " The plate had to be cut back to clear the first joints (slots shorter than a strip width): raise the spacing or narrow the strips." : "")}");
+        }
         sb.AppendLine();
         sb.AppendLine("Sequence");
         sb.AppendLine("  1. Cut and engrave the strips. Each slot or hole is labelled with the strip it joins.");
         sb.AppendLine("  2. Lay the assembly drawing on the table (print at 100 %; check the 100 mm bar).");
-        sb.AppendLine("  3. Place the A strips on it, outer edge up, then slot the B strips over them joint by joint; pin the hub.");
+        sb.AppendLine(kit.Plates.Count > 0
+            ? "  3. Lay the inner hub plate at the hub mark, place the A strips on the drawing, outer edge up, their hub ends in the plate's slots, then slot the B strips over them joint by joint; add the outer plate and bolt the hub."
+            : "  3. Place the A strips on it, outer edge up, then slot the B strips over them joint by joint; pin the hub.");
         sb.AppendLine("  4. Deploy: hold the hub and push it up (or lower the ends) — every strip end slides; follow deployment.svg.");
         sb.AppendLine("  5. Fix the ends to their supports in the curved state.");
         sb.AppendLine();

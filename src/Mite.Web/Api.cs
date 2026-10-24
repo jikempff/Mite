@@ -298,10 +298,19 @@ public class KitOptions
     public double SheetHeight { get; set; } = 400;
     public double Stiffness { get; set; } = 0.3;
     public int Steps { get; set; } = 8;
+    /// <summary>Hub plates at singular nodes: 0 pin holes, 1 one plate, 2 two plates bolted (upright strips only); radius 0 = automatic.</summary>
+    public int Hub { get; set; }
+    public double HubRadius { get; set; }
 }
 
 public class KitPayload
 {
+    /// <summary>Hub plates built, their diameter (model units), the strips' angle drift through the deployment (degrees) and whether a plate is cramped.</summary>
+    public int Plates { get; set; }
+    public double PlateDiameter { get; set; }
+    public double PlateAngleDrift { get; set; }
+    public bool PlateCramped { get; set; }
+    public int PlatelessHubs { get; set; }
     public int Strips { get; set; }
     public int Joints { get; set; }
     public int Hubs { get; set; }
@@ -1039,8 +1048,10 @@ public static partial class MiteApi
             var kit = FlatKit.Build(net, motion, anchor, nrm, new FlatKit.Options
             {
                 Width = o.Width, Thickness = o.Thickness, Upright = o.Upright, Joint = (FlatKit.JointKind)Math.Max(0, Math.Min(2, o.Joint)),
-                HoleDiameter = o.Hole, Clearance = o.Clearance,
+                HoleDiameter = o.Hole, Clearance = o.Clearance, HubPlates = Math.Max(0, Math.Min(2, o.Hub)), HubRadius = Math.Max(0, o.HubRadius),
             });
+            p.Plates = kit.Plates.Count; p.PlatelessHubs = kit.PlatelessHubs.Count;
+            if (kit.Plates.Count > 0) { p.PlateDiameter = 2 * kit.Plates.Max(x => x.Radius); p.PlateAngleDrift = kit.Plates.Max(x => x.AngleDrift); p.PlateCramped = kit.Plates.Any(x => x.Cramped); }
             var eo = new KitExport.Options { ToMm = o.ToMm > 0 ? o.ToMm : 1000, SheetWidth = o.SheetWidth > 0 ? o.SheetWidth : 600, SheetHeight = o.SheetHeight > 0 ? o.SheetHeight : 400 };
             var sheets = KitExport.StripSheets(kit, eo);
             var assembly = KitExport.Assembly(kit, o.Upright ? o.Thickness : o.Width, eo);
@@ -1053,7 +1064,7 @@ public static partial class MiteApi
             p.Sheets = sheets.Count(d => d.Title.StartsWith("sheet")); p.TooLong = kit.Strips.Count(s => s.Length * eo.ToMm + 2 * eo.Gap > eo.SheetWidth);
             p.TotalLength = kit.TotalLength; p.LongestStrip = kit.Strips.Max(s => s.Length);
             p.Flatness = kit.Flatness; p.Drift = kit.Drift; p.MinAngle = kit.Joints.Select(j => j.MinAngle).DefaultIfEmpty(90).Min();
-            var slots = kit.Strips.SelectMany(s => s.Marks).Where(m => m.Kind == FlatKit.MarkKind.SlotOuter || m.Kind == FlatKit.MarkKind.SlotInner).Select(m => m.Size).ToList();
+            var slots = kit.Strips.SelectMany(s => s.Marks).Where(m => (m.Kind == FlatKit.MarkKind.SlotOuter || m.Kind == FlatKit.MarkKind.SlotInner) && m.Label != "hub").Select(m => m.Size).ToList();
             p.SlotMin = slots.DefaultIfEmpty(0).Min(); p.SlotMax = slots.DefaultIfEmpty(0).Max();
         }
         catch (Exception ex) { p.Error = ex.Message; }
