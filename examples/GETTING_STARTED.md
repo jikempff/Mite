@@ -356,6 +356,14 @@ curves of an **Asymptotic Net**, then drive it:
   joints (never under a slot, where the doubled thickness would not pass);
   `Sp` = 0 picks three strip widths or what the joint pitch allows, `Sp` < 0
   keeps such strips whole on a drawing of their own, for a longer bed.
+  in model units; the files are in millimetres. `Hb` HubPlates (appended) puts
+  a laser-cut plate at the hub where the six rays of a flat point end: 1 one
+  plate flush with the inner edge, 2 two plates bolted through the centre; the
+  rays stop short of the centre, get a notch for the plate, and the plate — a
+  disc with a radial slot per strip, every slot labelled — comes on its own
+  drawing and as the `Hp` output in place on the flat assembly. `Hr` sets its
+  radius (0 = automatic). The report says how far the hub's angles move while
+  deploying (a rigid plate needs that small: 6e-6° on the Enneper web).
 - `Fl` Flatten = True presses the net flat: the first `F` joint (or the one
   nearest the centre) is held and every lath end slides onto the plane through
   it (normal `Sn`). On an **Asymptotic Web** of the 3-fold Enneper, with `F` on

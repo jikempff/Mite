@@ -56,7 +56,7 @@ COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Cu
               "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
               "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path",
               "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
-              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology",
+              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Flat Kit", "Net Topology",
               "Net Kinetics",
               "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 byname = {c["name"]: c for c in comps}
@@ -68,7 +68,7 @@ def slug(s): return s.lower().replace(" ", "-")
 def fmt_default(p):
     d = p.get("default")
     if d is None: return "—"
-    d = d.replace("Vector3d.XAxis", "1,0,0").replace("Vector3d.Zero", "0,0,0").replace("new Vector3d(0, 0, -1000)", "0,0,−1000")
+    d = d.replace("Vector3d.XAxis", "1,0,0").replace("Vector3d.ZAxis", "0,0,1").replace("Vector3d.Zero", "0,0,0").replace("new Vector3d(0, 0, -1000)", "0,0,−1000")
     d = d.replace("Math.PI / 2", "90°").replace('"L"', "L")
     return d
 
@@ -119,7 +119,7 @@ for tab in TAB_ORDER:
         demo = note.get("demo")
         demo_html = ""
         if demo:
-            kind = "palette" if demo == "palette" else "hist" if note.get("hist") else "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sheet" if note.get("sheet") else "sparkline" if demo == "lathUtil" else "3d"
+            kind = "palette" if demo == "palette" else "hist" if note.get("hist") else "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sheet" if note.get("sheet") else "sparkline" if demo == "lathUtil" else "3d", kind = "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "plotKit" if note.get("plotKit") else "sparkline" if demo == "lathUtil" else "3d",
             controls = ""
             if note.get("before_after"):
                 controls = '<div class="demo-ctl"><label><input type="radio" name="ba-' + slug(n) + '" value="before"> input</label><label><input type="radio" name="ba-' + slug(n) + '" value="after" checked> result</label><label><input type="radio" name="ba-' + slug(n) + '" value="both"> both</label></div>'

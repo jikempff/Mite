@@ -229,6 +229,9 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   await page.click('#kcolour [data-kc=state]');
   const plot = await page.evaluate(() => ({ p: window.__mite.kinPlot, cap: document.getElementById('kin-caption').textContent }));
   check(plot.p?.elastic && plot.p.uMax >= 1.2 && /strain energy/.test(plot.cap), `energy diagram drawn (utilization axis 0 … ${plot.p?.uMax?.toFixed(2)}, Π up to ${plot.p?.eMax?.toFixed(1)} J)`);
+  // the hub's six rays end on two bolted plates (the Kit block's default): a plate per hub, rays at angles that do not move while deploying
+  check(kit && kit.plates === 1 && kit.plateDiameter > 0 && kit.plateAngleDrift < 1 && kit.platelessHubs === 0 && kit.zip.length > 1000,
+    `kit hub plate (${kit?.plates} plate set, Ø ${kit?.plateDiameter?.toFixed(4)} model units, rays move ${kit?.plateAngleDrift?.toExponential(1)}°${kit?.plateCramped ? ', cramped' : ''})`);
 
   const broken = await page.$$eval('img', (imgs) => imgs.filter((i) => !i.complete || i.naturalWidth === 0).map((i) => i.getAttribute('src')));
   check(broken.length === 0, `all icons load (${broken.join(', ') || 'none broken'})`);
