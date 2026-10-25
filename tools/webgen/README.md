@@ -16,7 +16,11 @@ python3 build.py           # assembles site/index.html from template.html + note
   (extracted from the component sources; regenerate when parameters change).
 - `notes.py` — per component: which demo to show, "what to expect" bullets,
   and self-test checks as JavaScript expressions over `N` (numbers) and `SC` (scenes).
-- `template.html` / `build.py` — page shell and assembly.
+- `template.html` / `build.py` — page shell and assembly. `build.py` also
+  measures the component icons (`icons.json`, written by
+  `tools/generate_icons.py` together with `tools/icon_palette.json`) and puts
+  the icon sheet with its three self-tests — size and border, palette,
+  legibility on a light capsule and a dark menu — above the cards.
 
 `site/index.html` is self-contained (≈1 MB) and is published as a Claude
 artifact; open it locally in any browser as well.
