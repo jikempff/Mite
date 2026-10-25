@@ -479,6 +479,112 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     }
 }
 
+// ---------- Holes: annulus typologies (inner borders, loops around the hole, straight geodesic laths at contacts) ----------
+{
+    double rin = 0.4, rout = 1.2, kk = 0.5;
+    var ann = AnalyticShapes.Build("annulus", rin, rout, kk, 48);
+    var projA = new MeshProjection(ann);
+    double Rho(Vec3d p) => Math.Sqrt(p.X * p.X + p.Y * p.Y);
+    (int inner, int outer, int onCurve, int floating, int inHole) HoleEnds(List<Vec3d[]> all)
+    {
+        int inner = 0, outer = 0, onC = 0, fl = 0, inHole = 0;
+        foreach (var l in all)
+        {
+            foreach (var q in l) if (Rho(q) < rin - 2e-3) inHole++;
+            if ((l[0] - l[^1]).LengthSquared < 1e-24) continue;
+            foreach (var q in new[] { l[0], l[^1] })
+            {
+                double r = Rho(q);
+                if (Math.Abs(r - rin) < 3e-3) { inner++; continue; }
+                if (Math.Abs(r - rout) < 3e-3) { outer++; continue; }
+                double best = 1e9;
+                foreach (var m in all) { if (ReferenceEquals(m, l)) continue; for (int i = 0; i + 1 < m.Length; i++) { var ab = m[i + 1] - m[i]; double tt = Math.Max(0, Math.Min(1, Vec3d.Dot(q - m[i], ab) / Math.Max(ab.LengthSquared, 1e-30))); best = Math.Min(best, (m[i] + tt * ab - q).Length); } }
+                if (best < 1e-6) onC++; else fl++;
+            }
+        }
+        return (inner, outer, onC, fl, inHole);
+    }
+    // in-surface turning of the laths: max and mean discrete geodesic curvature × spacing (a geodesic lath has none)
+    (double max, double mean) Turning(MeshData mesh, List<Vec3d[]> curves, double spacing)
+    {
+        var pj = new MeshProjection(mesh); double mx = 0, sum = 0; int cnt = 0;
+        foreach (var c in curves)
+        {
+            int hint = pj.NearestVertexGlobal(c[0]);
+            for (int i = 1; i + 1 < c.Length; i++)
+            {
+                var h = pj.ClosestPoint(c[i], hint); hint = h.NearestVertex; var nrm = h.SmoothNormal;
+                Vec3d e0 = c[i] - c[i - 1], e1 = c[i + 1] - c[i];
+                e0 -= Vec3d.Dot(e0, nrm) * nrm; e1 -= Vec3d.Dot(e1, nrm) * nrm;
+                double l0 = e0.Length, l1 = e1.Length; if (l0 < 1e-12 || l1 < 1e-12) continue;
+                double kg = Math.Acos(Math.Max(-1, Math.Min(1, Vec3d.Dot(e0, e1) / (l0 * l1)))) / (0.5 * (l0 + l1)) * spacing;
+                mx = Math.Max(mx, kg); sum += kg; cnt++;
+            }
+        }
+        return (mx, cnt > 0 ? sum / cnt : 0);
+    }
+    // asymptotic web on the annular saddle z = k (x² − y²): every curve a straight line x ± y = c, ending on either rim
+    {
+        var pc = PrincipalCurvature.Compute(ann, 2);
+        var field = AsymptoticCurves.ComputeDirections(pc, ann, 15.0);
+        var A = EvenlySpacedNet.TraceField(ann, field.Family1, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.15, Layout = NetLayout.WebBorder }, field.Family2);
+        var B = EvenlySpacedNet.TraceField(ann, field.Family2, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.15, Layout = NetLayout.WebBorder }, field.Family1);
+        var all = A.Concat(B).ToList();
+        var he = HoleEnds(all);
+        double bow = all.Max(ChordDev), dirErr = 0;
+        foreach (var c in all) { var d = c[^1] - c[0]; dirErr = Math.Max(dirErr, Math.Abs(Math.Atan2(Math.Abs(d.Y), Math.Abs(d.X)) * 180 / Math.PI - 45)); }
+        // coverage: usable vertices farther than 0.75 spacing from every curve
+        int unc = 0, usable = 0;
+        for (int i = 0; i < ann.VertexCount; i++) { if (!field.Exists[i]) continue; usable++; double best = 1e9; foreach (var m in all) foreach (var q in m) best = Math.Min(best, (q - ann.Vertices[i]).Length); if (best > 0.75 * 0.15) unc++; }
+        scenes["asymAnn"] = new { wire = Edges(ann, 5), a = A.Select(l => Line(l, 3)).ToArray(), b = B.Select(l => Line(l, 3)).ToArray() };
+        numbers["asymAnn"] = new { a = A.Count, b = B.Count, innerEnds = he.inner, outerEnds = he.outer, tEnds = he.onCurve, floatingEnds = he.floating, inHole = he.inHole, bow = R3(bow), dirErrDeg = R3(dirErr), uncovered = R3(100.0 * unc / Math.Max(1, usable)), loops = EvenlySpacedNet.BoundaryLoops(ann).Count };
+    }
+    // geodesics from the outer rim on the annular saddle: radial laths converge towards the hole and
+    // end on their neighbours — straight, as a board does, not bent onto them
+    {
+        int seed = Enumerable.Range(0, ann.VertexCount).OrderBy(i => (ann.Vertices[i] - new Vec3d(rout, 0, kk * rout * rout)).LengthSquared).First();
+        var opts = new EvenlySpacedNet.Options { Spacing = 0.15, FromBorder = true };
+        var g = EvenlySpacedNet.TraceGeodesics(ann, seed, new Vec3d(-1, 0, 0), opts);
+        var he = HoleEnds(g);
+        var tu = Turning(ann, g, 0.15);
+        scenes["annGeo"] = new { wire = Edges(ann, 5), curves = g.Select(l => Line(l, 2)).ToArray() };
+        numbers["annGeo"] = new { count = g.Count, innerEnds = he.inner, outerEnds = he.outer, tEnds = he.onCurve, floatingEnds = he.floating, inHole = he.inHole, maxTurn = R3(tu.max), meanTurn = R3(tu.mean) };
+        // the same on a flat annulus (geodesics are straight lines: bow is the whole error) and on a dome from its rim
+        var flat = AnalyticShapes.Parametric((u, v) => new Vec3d(v * Math.Cos(u), v * Math.Sin(u), 0), 0, 2 * Math.PI, rin, rout, 64, 16, true, false, false, false);
+        int seedF = Enumerable.Range(0, flat.VertexCount).OrderBy(i => (flat.Vertices[i] - new Vec3d(1.0, 0, 0)).LengthSquared).First();
+        var gf = EvenlySpacedNet.TraceGeodesics(flat, seedF, new Vec3d(0, 1, 0), new EvenlySpacedNet.Options { Spacing = 0.15, FromBorder = true });
+        var hef = HoleEnds(gf);
+        var dome = AnalyticShapes.Build("dome", 0, 0, 0, 48);
+        double sd = dome.BoundingBoxDiagonal() / 25.0;
+        var gd = EvenlySpacedNet.TraceGeodesics(dome, dome.VertexCount / 2, new Vec3d(1, 0, 0), new EvenlySpacedNet.Options { Spacing = sd, FromBorder = true });
+        var ed = Ends(gd, new MeshProjection(dome));
+        var tud = Turning(dome, gd, sd);
+        numbers["geoStraight"] = new { flatCount = gf.Count, flatBow = gf.Max(ChordDev), flatTEnds = hef.onCurve, flatFloating = hef.floating, flatBowBefore = 0.0147, domeCount = gd.Count, domeMaxTurn = R3(tud.max), domeMeanTurn = R3(tud.mean), domeMaxTurnBefore = 0.296, domeMeanTurnBefore = 0.0134, domeTEnds = ed.onCurve, domeFloating = ed.floating };
+    }
+    // exact shortest paths around the hole on a flat annulus: the taut string around the inscribed polygon
+    {
+        int nA = 40;
+        var flat = AnalyticShapes.Parametric((u, v) => new Vec3d(v * Math.Cos(u), v * Math.Sin(u), 0), 0, 2 * Math.PI, rin, 1.5, nA, 12, true, false, false, false);
+        var poly = Enumerable.Range(0, nA).Select(i => (rin * Math.Cos(2 * Math.PI * i / nA), rin * Math.Sin(2 * Math.PI * i / nA))).ToList();
+        var rnd = new Random(5);
+        var from = new List<Vec3d>(); var to = new List<Vec3d>(); var exact = new List<double>();
+        for (int k = 0; k < 40; k++)
+        {
+            double r1 = rin + (1.5 - rin) * (0.05 + 0.9 * rnd.NextDouble()), r2 = rin + (1.5 - rin) * (0.05 + 0.9 * rnd.NextDouble());
+            double t1 = 2 * Math.PI * rnd.NextDouble(), t2 = t1 + Math.PI * (0.6 + 0.4 * rnd.NextDouble()) * (rnd.Next(2) == 0 ? 1 : -1);
+            var pp = new Vec3d(r1 * Math.Cos(t1), r1 * Math.Sin(t1), 0); var qq = new Vec3d(r2 * Math.Cos(t2), r2 * Math.Sin(t2), 0);
+            from.Add(pp); to.Add(qq); exact.Add(TestMeshes.PlanarDistanceAroundPolygon((pp.X, pp.Y), (qq.X, qq.Y), poly));
+        }
+        var res = FlipGeodesic.Compute(flat, from, to, out _)!;
+        double maxErr = 0; int around = 0;
+        for (int k = 0; k < from.Count; k++) { maxErr = Math.Max(maxErr, Math.Abs(res[k]!.Length - exact[k])); if (exact[k] > (from[k] - to[k]).Length + 1e-12) around++; }
+        var demo = res[Enumerable.Range(0, from.Count).OrderByDescending(k => exact[k] - (from[k] - to[k]).Length).First()]!;
+        int kd = Enumerable.Range(0, from.Count).OrderByDescending(k => exact[k] - (from[k] - to[k]).Length).First();
+        scenes["geoPathAnnulus"] = new { wire = Edges(flat, 3), flip = Line(demo.Points), ends = new[] { P(from[kd]), P(to[kd]) } };
+        numbers["geoPathAnnulus"] = new { pairs = from.Count, around, maxErr, converged = res.Count(r => r!.Converged), demoLen = demo.Length, demoExact = exact[kd], demoStraight = R3((from[kd] - to[kd]).Length) };
+    }
+}
+
 // ---------- Net Kinetics: scissor-jointed asymptotic nets as mechanisms ----------
 {
     // 1. Exact: the doubly ruled hyperboloid grid of Schikore et al. 2020 (16 rods per family, 7 joints each),

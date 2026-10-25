@@ -134,8 +134,33 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       Open: the streamline / geodesic-net tracers near the apex (they still
       use the hinted projection at every step), and the cone as a bench
       shape on the curvature cards.
-- [ ] Annulus / disk with holes: inner boundaries, loops around holes,
-      curves ending on inner borders.
+- [x] Annulus / disk with holes — 2026-10-25 (session 2), `AnnulusTests` (15):
+      the annular saddle z = k (x² − y²) (asymptotic curves = the lines
+      x ± y = c, cut by the hole), a saddle with three holes
+      (`TestMeshes.CreatePerforated`: grid vertices inside a hole dropped,
+      the kept neighbours snapped onto the circle, 4 border loops), the
+      paraboloid annulus z = ρ²/2 (curvature lines = parallels and
+      meridians) and a flat annulus (geodesics = straight lines; the shortest
+      path round the hole = the taut string round the inscribed 40-gon,
+      `PlanarDistanceAroundPolygon`, the shorter hull arc). Measured: every
+      asymptotic curve (fill and both webs) ends on the hole's rim or the
+      outer rim, none enters a hole, 0 % uncovered, bow ≤ 0.011 on the
+      48-gon rim mesh (the facet sagitta ~0.003 plus the 0.23° direction
+      error), 0.0037 on the 60 × 60 grid; the web seeds on every border loop
+      as designed. Max-curvature lines close round the hole as single loops;
+      min-curvature lines run rim to rim with length within 4e-5 of
+      ∫√(1+ρ²) dρ and wander < 0.06° in azimuth. Isocurves round the hole are
+      single closed loops (length within the 96-gon chord factor). FlipOut
+      round the hole: 40 random pairs, 33 round the hole, max |L − exact|
+      4e-14, a border wedge having infinite angle. Found and fixed (D below):
+      geodesic laths converging towards the hole were bent sideways onto
+      their neighbours (bow 0.0147 on the flat annulus). Open: the closed
+      parallels are 0.5–0.9 % short of 2πρ with a radial drift of 0.03–0.04
+      per loop — not the tracer (step 0.01 gives the same) but the direction
+      field: Rusinkiewicz D1 on the 96 × 24 paraboloid mesh is tilted 0.25°
+      on average (1.06° worst) off the parallel in the interior, a chirality
+      of the one-way diagonals; the normal-cycle estimator of the 10-05
+      bundle should be measured on this case.
 - [ ] Trimmed staircase quad mesh (already in ContinuityTests) and a
       Catmull–Clark-subdivided cube (Weaverbird-like: quads, extraordinary
       vertices of valence 3, dense border rows).
@@ -331,6 +356,45 @@ remains the self-test review page.
       free-form surfaces — optimized grids for timber rib shells); Pottmann
       et al. 2010 (Geodesic patterns) — geodesic strip patterns with
       constant width, breakpoints/segmentation.
+      Partly done 2026-10-25 (session 2): geodesic laths end straight at
+      contacts. Read: Pottmann et al. 2010 §2 (the strip width obeys
+      w″ + Kw = 0, constant only where K = 0, so geodesic strips converge
+      wherever K > 0 — and on the flat annulus the radial laths converge
+      linearly), §3 "extension to broken geodesics" (a pattern of geodesic
+      arcs meeting at breakpoints, inserted where the width leaves
+      W ± 5–7.5 %; the arcs themselves are never bent); Weinand & Pirazzi
+      2006 (WCTE Portland): boards along geodesics stay straight and are
+      "subjected only to bending about their weak axis and to torsion".
+      Mite's geodesic families (`TraceGeodesics`, all layouts) pulled a lath
+      that stopped beside a neighbour sideways onto it and blended the shift
+      over the last two spacings (`SnapEnds` / `BlendEnd`, shared with the
+      asymptotic nets): a smooth in-surface bend — strong-axis bending of a
+      flat lath, 7° of turn on a flat annulus (bow 0.0147 at Spacing 0.15),
+      in-surface turning up to 0.30 × Spacing on a dome seeded from its rim.
+      Now `EndGeodesicAtNeighbours`: the geodesic is traced in full; from the
+      seed outwards the first point within the merge radius (within 30° of
+      the neighbour for webs, any approach for the fill) is the contact; if
+      the straight continuation crosses that neighbour within two spacings
+      the lath ends exactly at the crossing (segment–segment test against the
+      stored polylines, the neighbour's own point, so Net Topology sees the
+      T-junction), else at the contact with a free end (Pottmann's
+      breakpoint: the strip has narrowed to the lath width). Numbers: flat
+      annulus bow 0.0147 → 3e-15 (rim seeds) and 7e-5 (web); dome from the
+      rim max turning 0.296 → 0.090 × Spacing, mean 0.0134 → 0.0028, 24 / 24
+      T-junctions on the neighbour; dome web 0.238 → 0.030; catenoid web
+      0.255 → 0.047. The remaining 0.05–0.09 × Spacing maxima are the first
+      segment after a border seed and the border exit (a 0.5–1° turn,
+      pre-existing). Open: (a) the same for the asymptotic nets — the blend
+      turns an asymptotic curve by up to 7° off its direction, kn = k1 sin 14°
+      on a minimal surface, which an upright lath cannot take either; the
+      asymptotic fill relies on the T-junction geometry, so the cut must keep
+      the end on the neighbour (a short straight continuation along the
+      asymptotic direction) — measure first with `AnnulusTests.GeodesicQuality`
+      on the catenoid; (b) Pottmann's width-driven breakpoints proper: end a
+      geodesic where the strip width leaves [W − ε₁, W + ε₂] and start the
+      next arc bisecting the angle, instead of only where laths touch;
+      (c) constant-width geodesic strips (Pottmann §4 level sets, §5 the
+      piecewise-geodesic vector field) for Lath Strip.
 - [x] Straightest geodesics and shortest paths: Polthier & Schmies 1998
       (Straightest geodesics on polyhedral surfaces); Crane, Weischedel &
       Wardetzky 2013 (Geodesics in heat); Sharp & Crane 2020 (You can find
@@ -659,6 +723,11 @@ Open
 
 ## Done
 
+- [x] 2026-10-25 (session 2, A/D): holes as a test typology (annular saddle,
+      three-hole saddle, paraboloid annulus, flat annulus; `AnnulusTests`, 15)
+      and geodesic laths that end straight on their neighbours instead of
+      being bent onto them (Pirazzi & Weinand 2006, Pottmann et al. 2010);
+      bench `saddle · hole` / `flat annulus` shapes, 79 self-tests.
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

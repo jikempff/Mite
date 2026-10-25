@@ -565,4 +565,149 @@ public static class TestMeshes
 
         return new MeshData(verts, faces.ToArray());
     }
+
+    /// <summary>
+    /// A height field over the rectangle [x0, x1] × [y0, y1] with circular holes: the grid
+    /// vertices inside a hole and the faces using them are dropped, and every kept vertex next to
+    /// a dropped one is pulled radially onto the hole's circle in the parameter plane (and re-lifted
+    /// with f), so each hole border is a polygon inscribed in its circle. Faces whose three vertices
+    /// all lie on one circle (a chord triangle inside the hole) are dropped too. Returns the hole
+    /// border loops as vertex index lists in <paramref name="holeLoops"/> (one per hole, ordered
+    /// counter-clockwise in the parameter plane).
+    /// </summary>
+    public static MeshData CreatePerforated(Func<double, double, Vec3d> f, double x0, double x1, double y0, double y1,
+        int nx, int ny, (double cx, double cy, double r)[] holes, out List<int>[] holeLoops)
+    {
+        int cols = nx + 1, rows = ny + 1;
+        var xy = new (double x, double y)[cols * rows];
+        var inside = new int[cols * rows]; // hole index + 1, or 0
+        for (int j = 0; j < rows; j++)
+            for (int i = 0; i < cols; i++)
+            {
+                double x = x0 + (x1 - x0) * i / nx, y = y0 + (y1 - y0) * j / ny;
+                int v = j * cols + i;
+                xy[v] = (x, y);
+                for (int h = 0; h < holes.Length; h++)
+                {
+                    double dx = x - holes[h].cx, dy = y - holes[h].cy;
+                    if (dx * dx + dy * dy < holes[h].r * holes[h].r) { inside[v] = h + 1; break; }
+                }
+            }
+        // kept vertices adjacent (in the grid, including diagonals) to a dropped one snap to that hole's circle
+        var snapTo = new int[cols * rows];
+        for (int j = 0; j < rows; j++)
+            for (int i = 0; i < cols; i++)
+            {
+                int v = j * cols + i;
+                if (inside[v] != 0) continue;
+                int best = 0; double bestD = double.MaxValue;
+                for (int dj = -1; dj <= 1; dj++)
+                    for (int di = -1; di <= 1; di++)
+                    {
+                        int ii = i + di, jj = j + dj;
+                        if (ii < 0 || jj < 0 || ii >= cols || jj >= rows) continue;
+                        int w = jj * cols + ii;
+                        if (inside[w] == 0) continue;
+                        var hh = holes[inside[w] - 1];
+                        double d = Math.Abs(Math.Sqrt((xy[v].x - hh.cx) * (xy[v].x - hh.cx) + (xy[v].y - hh.cy) * (xy[v].y - hh.cy)) - hh.r);
+                        if (d < bestD) { bestD = d; best = inside[w]; }
+                    }
+                snapTo[v] = best;
+            }
+        var pos = new Vec3d[cols * rows];
+        for (int v = 0; v < pos.Length; v++)
+        {
+            double x = xy[v].x, y = xy[v].y;
+            if (snapTo[v] != 0)
+            {
+                var hh = holes[snapTo[v] - 1];
+                double dx = x - hh.cx, dy = y - hh.cy, d = Math.Sqrt(dx * dx + dy * dy);
+                x = hh.cx + dx / d * hh.r; y = hh.cy + dy / d * hh.r;
+            }
+            pos[v] = f(x, y);
+        }
+        var faces = new List<int[]>();
+        void Tri(int a, int b, int c)
+        {
+            if (inside[a] != 0 || inside[b] != 0 || inside[c] != 0) return;
+            if (snapTo[a] != 0 && snapTo[a] == snapTo[b] && snapTo[b] == snapTo[c]) return; // chord triangle inside the hole
+            faces.Add(new[] { a, b, c });
+        }
+        for (int j = 0; j < ny; j++)
+            for (int i = 0; i < nx; i++)
+            {
+                int a = j * cols + i, b = a + 1, c = b + cols, d = a + cols;
+                if (((i + j) & 1) == 0) { Tri(a, b, c); Tri(a, c, d); }
+                else { Tri(a, b, d); Tri(b, c, d); }
+            }
+        // compact
+        var map = new int[pos.Length];
+        for (int v = 0; v < map.Length; v++) map[v] = -1;
+        var verts = new List<Vec3d>();
+        foreach (var fc in faces)
+            for (int k = 0; k < 3; k++)
+                if (map[fc[k]] < 0) { map[fc[k]] = verts.Count; verts.Add(pos[fc[k]]); }
+        foreach (var fc in faces) for (int k = 0; k < 3; k++) fc[k] = map[fc[k]];
+        var mesh = new MeshData(verts.ToArray(), faces.ToArray());
+
+        // hole loops: boundary loops whose vertices all lie on one hole's circle
+        holeLoops = new List<int>[holes.Length];
+        var loops = Mite.Core.Gridshells.EvenlySpacedNet.BoundaryLoops(mesh);
+        var snappedOrig = new int[verts.Count];
+        for (int v = 0; v < pos.Length; v++) if (map[v] >= 0) snappedOrig[map[v]] = snapTo[v];
+        foreach (var loop in loops)
+        {
+            int h = snappedOrig[loop[0]];
+            if (h == 0 || loop.Any(v => snappedOrig[v] != h)) continue;
+            holeLoops[h - 1] = loop;
+        }
+        return mesh;
+    }
+
+    /// <summary>
+    /// Shortest path in the plane from p to q around a convex polygon (counter-clockwise vertex
+    /// list) that the segment pq crosses: the shorter of the two arcs of the convex hull of
+    /// {p, q} ∪ polygon between p and q (Lee &amp; Preparata 1984, shortest paths around a convex
+    /// obstacle). Returns the straight distance when the segment misses the polygon.
+    /// </summary>
+    public static double PlanarDistanceAroundPolygon((double x, double y) p, (double x, double y) q, IList<(double x, double y)> polygon)
+    {
+        // does pq cross the polygon? (proper crossing of any polygon edge, or an endpoint inside)
+        bool crosses = false;
+        int n = polygon.Count;
+        for (int i = 0; i < n && !crosses; i++)
+        {
+            var a = polygon[i]; var b = polygon[(i + 1) % n];
+            double d1 = Cross(p, q, a), d2 = Cross(p, q, b), d3 = Cross(a, b, p), d4 = Cross(a, b, q);
+            if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) crosses = true;
+        }
+        if (!crosses) return Math.Sqrt((p.x - q.x) * (p.x - q.x) + (p.y - q.y) * (p.y - q.y));
+        var pts = new List<(double x, double y)>(polygon) { p, q };
+        var hull = ConvexHull(pts);
+        int ip = hull.FindIndex(v => v.x == p.x && v.y == p.y), iq = hull.FindIndex(v => v.x == q.x && v.y == q.y);
+        if (ip < 0 || iq < 0) throw new InvalidOperationException("p or q inside the polygon");
+        double arc1 = 0, arc2 = 0; int m = hull.Count;
+        for (int i = ip; i != iq; i = (i + 1) % m) arc1 += Dist(hull[i], hull[(i + 1) % m]);
+        for (int i = iq; i != ip; i = (i + 1) % m) arc2 += Dist(hull[i], hull[(i + 1) % m]);
+        return Math.Min(arc1, arc2);
+    }
+
+    private static double Cross((double x, double y) o, (double x, double y) a, (double x, double y) b) =>
+        (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    private static double Dist((double x, double y) a, (double x, double y) b) =>
+        Math.Sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+
+    /// <summary>Andrew's monotone chain; counter-clockwise, no collinear points.</summary>
+    private static List<(double x, double y)> ConvexHull(List<(double x, double y)> pts)
+    {
+        var s = pts.Distinct().OrderBy(v => v.x).ThenBy(v => v.y).ToList();
+        if (s.Count < 3) return s;
+        var lower = new List<(double x, double y)>();
+        foreach (var v in s) { while (lower.Count >= 2 && Cross(lower[^2], lower[^1], v) <= 0) lower.RemoveAt(lower.Count - 1); lower.Add(v); }
+        var upper = new List<(double x, double y)>();
+        for (int i = s.Count - 1; i >= 0; i--) { var v = s[i]; while (upper.Count >= 2 && Cross(upper[^2], upper[^1], v) <= 0) upper.RemoveAt(upper.Count - 1); upper.Add(v); }
+        lower.RemoveAt(lower.Count - 1); upper.RemoveAt(upper.Count - 1);
+        lower.AddRange(upper);
+        return lower;
+    }
 }
