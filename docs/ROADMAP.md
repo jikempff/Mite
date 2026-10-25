@@ -53,6 +53,10 @@ where they overlap
 5. Black, white and neon for everything visual (web app done 1.3.0; one
    palette in the core for Grasshopper, the app and the bench 2026-10-03, see
    C; icons and Food4Rhino images still in the old palette).
+5. Black, white and neon for everything visual (web app done 1.3.0; icons
+   done 2026-10-25, see B; bench and Food4Rhino images still in the old
+   palette — the bench's 3D viewers and legends, the icon sheet on the bench
+   is already in the new palette).
 
 Priorities set by José (2026-09-25), in order
 1. Kinetic / adaptive asymptotic gridshells (E): simulate the folding of a
@@ -345,9 +349,58 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       +1/+1 blur-2 drop shadow). Families: curvature amber, form finding
       orange-red, gridshells amber patch with dark-red curves, analysis
       green, fabrication timber brown, util greys; tab icon = the K mark of
-      kempffsele.me on an amber tile. Open: review at 100% in Rhino (dark
-      and light canvas), then tune the two or three that read weakly
-      (Principal Curvature arrows, Gridshell Analysis arch).
+      kempffsele.me on an amber tile.
+- [x] Component icons in the Mite palette (black, white and neon; José's
+      priority 5 of 2026-09-27) — 2026-10-25 (session 1, B). Same generator,
+      same helper API (`FAM` keeps the old family names `surface`, `mesh`,
+      `math`, `param`, `timber` as aliases of `white`, `g`, `y`, `grey`, `a`,
+      so icon functions added by other bundles still draw), every icon
+      function restyled: blue (#2a3cff) and red (#ff1f4f) are the lath
+      families A and B, green (#00d86b) a geodesic family or a form-found
+      mesh, yellow (#d9ff00) an analysis, white a surface or a cut sheet,
+      grey the util patches, black (#0a0a0a) the marks only (arrows, nodes,
+      cut lines, text). Lath Preview carries the app's utilization ramp and
+      Mesh Colour Map its diverging map. Rules followed (Rutten's own, McNeel
+      "Grasshopper Icons" guide and discourse 74786): 24 px with the 2 px
+      border (drawings now live in the 20 px area — the amber set reached the
+      border with alpha up to 254), region outlines in a dark shade of the
+      fill (half luminance; never full black, which Rutten "no longer
+      recommends"), subtle lighting from the upper left across each region's
+      own box (blue regions lit harder: blue is dark, 0.11 luminance), the
+      drop shadow +1/+1, blur 2 px, 32 %, lines 1.2–2 px (Material: 2 dp,
+      1.5 dp for detail). Downsampled by area averaging (box) instead of
+      Lanczos: no ringing, so every pixel is a true blend of what was drawn.
+      Measured (`IconTests`, also on the bench): all 31 icons 24 px, border
+      alpha ≤ 31 (shadow only); every opaque pixel within 12 RGB of a
+      palette colour, shade or two-colour blend except 88 of 3811 (crossings
+      of a blue and a red line on white); the silhouette band (within 3 px
+      of the outline) contrasts 3 : 1 (WCAG 2.1 SC 1.4.11) on a light capsule
+      (#d2d2d2) for ≥ 25 % of its pixels (weakest Dynamic Relaxation) and on
+      a dark menu (#2d2d2d) for ≥ 23 % (weakest Net Joints); the amber set
+      read 36 % / 0 % at the weakest (the tab icon and Dynamic Relaxation
+      vanished on dark). Findings:
+      - No flat colour contrasts 3 : 1 with both canvases: #d2d2d2 and
+        #2d2d2d are 8.9 : 1 apart, so a colour at 3 : 1 to one is at most
+        2.97 : 1 to the other. Legibility on both therefore needs two-tone
+        shapes: white regions with a dark rim, lit faces on dark fills, black
+        marks on a 1 px white halo, neon lines on the bare canvas on a dark
+        rim. The amber set got this for free from its mid-luminance fills
+        with dark-red rims; black/white/neon has to construct it.
+      - Lanczos downsampling overshoots next to black-on-red edges (a pixel
+        #fc002f that is no blend of anything drawn); the box filter has no
+        such pixel and reads the same at 24 px.
+      - The capsule colours are assumptions: Grasshopper's light capsule is
+        a lighter grey than #d2d2d2 (which only helps the rims) and the dark
+        ribbon / menus of Rhino 8 dark mode are near #2d2d2d; the real
+        canvas was not available here (Linux).
+      Open: review at 100 % in Rhino on both canvases (the amber set was
+      never reviewed either); after the 1.4.0 merge rerun the generator so
+      the six icons added by other bundles (Mite Net, Lath Strip, Net
+      Distributions, Net Trim, Test Shape, AGG Web) are restyled — they draw
+      through the aliased family names and come out white/green/yellow/blue
+      without a hand pass; retake the Food4Rhino icon sheet from the bench;
+      the bench's viewers (teal / plum families, legends) are the 1.4.0
+      palette bundle's.
 - [x] Profile selection for all curves — 2026-09-25: Lath Sweep gained
       `Shape` (0 rectangle, 1 round bar, 2 custom closed planar Section) and
       `Section`, appended after Sampling; `LathProfile.Round/Custom`, any
@@ -1965,6 +2018,10 @@ Open
       Web component, the exact cylinder web as a test typology, 16 tests
       (eight with closed-form truth, seven Jacobian checks), bench card with
       four shapes and four self-tests (79 PASS).
+- [x] 2026-10-25 (session 1, B): component icons in the Mite palette —
+      black, white and neon — with `IconTests` (palette, border, legibility
+      on a light capsule and a dark menu) and the icon sheet with three
+      self-tests on the bench (78 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

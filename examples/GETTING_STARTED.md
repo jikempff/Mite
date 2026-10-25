@@ -2,7 +2,10 @@
 
 Install via Rhino's `_PackageManager` (search **mite**), then find the **Mite**
 tab in Grasshopper. All components take a plain Rhino mesh — no plugins or
-special data types required.
+special data types required. The icons use the same colours as the web app
+and the bench: blue and red are the two lath families, green a geodesic
+family or a form-found mesh, yellow an analysis, white a surface or a cut
+sheet, black the marks — and they read on Rhino's light and dark canvases.
 
 ## 1. See curvature (2 minutes)
 

@@ -44,6 +44,15 @@ main{padding-top:18px;min-width:0}
 .intro{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin-bottom:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 24px}
 .intro h4{margin:0 0 4px;font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--acc-ink)}
 .intro p{margin:0;color:var(--muted)}
+.iconsheet{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin-bottom:22px}
+.iconsheet h4{margin:0 0 4px;font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--acc-ink)}
+.iconsheet p{margin:0 0 10px;color:var(--muted)}
+.iconsheet .strip{display:flex;flex-wrap:wrap;gap:4px;padding:6px;border-radius:6px;margin-bottom:6px}
+.iconsheet .strip.light{background:#d2d2d2}
+.iconsheet .strip.dark{background:#2d2d2d}
+.iconsheet .strip img{display:block;image-rendering:auto}
+.iconsheet .strip.big img{width:48px;height:48px;image-rendering:pixelated}
+.iconsheet .checks{margin-top:10px}
 .tab-h{margin:30px 0 12px}
 .tab-h h2{font:500 22px/1.1 var(--disp);margin:0 0 4px;text-wrap:balance}
 .tab-h p{margin:0;color:var(--muted)}
@@ -148,6 +157,7 @@ textarea{width:100%;font:13px/1.45 var(--sans);color:var(--ink);background:var(-
       <div><h4>Live views</h4><p>Curves and meshes in the viewers are the library's real output for those shapes, not illustrations. Drag to orbit, scroll to zoom. Family A is neon blue, family B neon red: the web app's colours, from Mite.Core's palette.</p></div>
       <div><h4>Your review</h4><p>Ticks and notes stay in this browser only. "Copy review summary" puts them on the clipboard as text you can paste into the chat.</p></div>
     </div>
+    /*__ICONS__*/
     /*__CARDS__*/
     <pre id="summary" hidden></pre>
   </main>

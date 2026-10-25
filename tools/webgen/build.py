@@ -194,6 +194,108 @@ for tab in TAB_ORDER:
 </article>''')
     cards.append("</section>")
 
+# ---- the component icons: the sheet on both canvases and the measurements behind its self-tests
+# (the same rules as tests/Mite.Tests/IconTests.cs: 24 px, the 2 px border, every opaque pixel a palette
+# colour, a shade or a blend of two, and a fifth of the silhouette band at 3 : 1 on a light capsule and on a dark menu)
+def icon_metrics():
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    import os
+    pal = json.load(open(os.path.join("..", "icon_palette.json")))
+    allowed = [tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in pal["allowed"]]
+
+    def lum(c):
+        def ch(v):
+            v = v / 255
+            return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+        return 0.2126 * ch(c[0]) + 0.7152 * ch(c[1]) + 0.0722 * ch(c[2])
+
+    def contrast(a, b):
+        la, lb = sorted((lum(a), lum(b)), reverse=True)
+        return (la + 0.05) / (lb + 0.05)
+
+    def segdist(p, a, b):
+        ab = [b[i] - a[i] for i in range(3)]
+        L2 = sum(x * x for x in ab)
+        t = 0 if L2 == 0 else max(0.0, min(1.0, sum((p[i] - a[i]) * ab[i] for i in range(3)) / L2))
+        return sum((p[i] - a[i] - ab[i] * t) ** 2 for i in range(3)) ** 0.5
+
+    res_dir = os.path.join("..", "..", "src", "Mite.Grasshopper", "Resources")
+    out = dict(count=0, notSquare=0, border=0, blend=0.0, offPalette=0, opaque=0, light=1.0, dark=1.0, worstLight="", worstDark="")
+    for name in sorted(os.listdir(res_dir)):
+        if not name.endswith(".png"):
+            continue
+        im = Image.open(os.path.join(res_dir, name)).convert("RGBA")
+        out["count"] += 1
+        if im.size != (24, 24):
+            out["notSquare"] += 1
+            continue
+        px = im.load()
+        cov = [[px[x, y][3] >= 128 for x in range(24)] for y in range(24)]
+        band = okL = okD = 0
+        for y in range(24):
+            for x in range(24):
+                r, g, b, a = px[x, y]
+                if (x < 2 or y < 2 or x >= 22 or y >= 22):
+                    out["border"] = max(out["border"], a)
+                if a >= 250:
+                    out["opaque"] += 1
+                    d = min(segdist((r, g, b), p, q) for p in allowed for q in allowed)
+                    if d > 12:
+                        out["offPalette"] += 1
+                    out["blend"] = max(out["blend"], d)
+                if not cov[y][x]:
+                    continue
+                if not any(not cov[yy][xx] for yy in range(max(0, y - 3), min(24, y + 4)) for xx in range(max(0, x - 3), min(24, x + 4))):
+                    continue
+                band += 1
+                for bg, key in (((0xD2,) * 3, "L"), ((0x2D,) * 3, "D")):
+                    c = tuple(int(v * a / 255 + bgv * (1 - a / 255)) for v, bgv in zip((r, g, b), bg))
+                    if contrast(c, bg) >= 3:
+                        if key == "L":
+                            okL += 1
+                        else:
+                            okD += 1
+        if band:
+            if okL / band < out["light"]:
+                out["light"], out["worstLight"] = okL / band, name[:-4]
+            if okD / band < out["dark"]:
+                out["dark"], out["worstDark"] = okD / band, name[:-4]
+    out["blend"] = round(out["blend"], 1)
+    out["light"] = round(out["light"], 3)
+    out["dark"] = round(out["dark"], 3)
+    out["palette"] = pal["palette"]
+    return out
+
+icon_numbers = icon_metrics()
+if icon_numbers:
+    numbers["icons"] = icon_numbers
+ICON_ORDER = [byname[n]["icon"] for n in COMP_ORDER] + sorted(k for k in icons if k != "Mite_Tab" and k not in {byname[n]["icon"] for n in COMP_ORDER}) + ["Mite_Tab"]
+icon_sheet = "".join(f'<img src="{icons[k]}" alt="{esc(k)}" title="{esc(k)}" width="24" height="24">' for k in ICON_ORDER if k in icons)
+ICON_CHECKS = [
+    ("Every icon is 24 × 24 px and keeps the 2 px border (only the drop shadow enters it)",
+     "[N.icons.notSquare===0&&N.icons.border<=64, N.icons.count+' icons, border alpha at most '+N.icons.border+' of 255']"),
+    ("Black, white and neon only: every opaque pixel is a palette colour, a shade of one or an anti-aliased blend of two (crossings excepted)",
+     "[N.icons.offPalette<=0.3*N.icons.opaque, N.icons.offPalette+' of '+N.icons.opaque+' opaque pixels are three-colour crossings; the rest within 12 (RGB) of a palette blend']"),
+    ("Legible on a light capsule (#d2d2d2) and on a dark menu (#2d2d2d): a fifth of every icon's silhouette band contrasts 3 : 1 (WCAG 1.4.11)",
+     "[N.icons.light>=0.2&&N.icons.dark>=0.2, 'weakest on light: '+N.icons.worstLight+' '+N.icons.light+'; on dark: '+N.icons.worstDark+' '+N.icons.dark]"),
+]
+icon_checks_html = '<ul class="checks">' + "".join(
+    f'<li data-check="{esc(js)}"><span class="chip">…</span><b>{esc(label)}</b><span class="ct"></span></li>' for label, js in ICON_CHECKS) + '</ul>' if icon_numbers else \
+    '<p class="nocheck">Icon metrics need Pillow (pip install pillow) at build time.</p>'
+icons_html = f'''
+<section class="iconsheet" id="icons">
+  <h4>Component icons · black, white and neon</h4>
+  <p>The Grasshopper icons in the Mite palette (tools/generate_icons.py): blue and red are the two lath families, green a geodesic family or a form-found mesh, yellow an analysis, white a surface or a cut sheet, black the marks. Shown on a light component capsule and on a dark menu, at 1 : 1 and 2 : 1.</p>
+  <div class="strip light">{icon_sheet}</div>
+  <div class="strip dark">{icon_sheet}</div>
+  <div class="strip light big">{icon_sheet}</div>
+  <div class="strip dark big">{icon_sheet}</div>
+  {icon_checks_html}
+</section>'''
+
 page = open("template.html").read()
 # favicon: the K mark of kempffsele.me (tools/webgen/favicon.svg), inlined so the single-file page keeps it
 import base64, os
@@ -203,6 +305,7 @@ if os.path.exists("favicon.svg"):
 from palette_css import palette_vars
 page = page.replace("/*__PALETTE_LIGHT__*/", palette_vars(numbers["palette"], "light")).replace("/*__PALETTE_DARK__*/", palette_vars(numbers["palette"], "dark"))
 page = page.replace("/*__NAV__*/", "".join(nav)).replace("/*__CARDS__*/", "".join(cards))
+page = page.replace("/*__NAV__*/", "".join(nav)).replace("/*__CARDS__*/", "".join(cards)).replace("/*__ICONS__*/", icons_html)
 page = page.replace("/*__SCENES__*/", json.dumps(scenes, separators=(",", ":"))).replace("/*__NUMBERS__*/", json.dumps(numbers)).replace("/*__ORDER__*/", json.dumps([slug(n) for n in COMP_ORDER]))
 page = page.replace('<span id="total">28</span>', f'<span id="total">{len(COMP_ORDER)}</span>')
 # review tools (find / filter, keyboard, GitHub issue draft) live in their own files and are
