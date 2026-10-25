@@ -139,6 +139,12 @@ geodesics start at the angle that keeps the strip to their neighbour closest
 to constant width (Jacobi field), so families stay even on domes and saddles.
 `Bd` (FromBorder) grows the family from the border edge nearest the seed
 instead — with `Ba` (BorderAngle) that gives the helix layout of a vault.
+Where geodesics converge (a dome, radial laths towards an opening) a lath that
+meets a neighbour of its family ends on it straight, as a board does: it is cut
+at the crossing, never bent sideways onto the neighbour; if it does not reach
+the neighbour within two spacings it ends free at the contact. Holes in the
+mesh are borders like any other: laths end on an opening's rim and the webs
+seed on every rim.
 **Geodesic Path** gives the single shortest lath between two points. With
 `Me` (Method) 1, the default, it is the exact geodesic of the mesh: a polyline
 straight across every face and edge, through every edge crossing (set `S` to

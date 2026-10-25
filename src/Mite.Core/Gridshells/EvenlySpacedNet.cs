@@ -1,3 +1,20 @@
+// Evenly spaced curve families, webs and geodesic patterns.
+//
+// Sources for the geodesic layouts:
+//   Jobard & Lefer 1997, "Creating evenly-spaced streamlines of arbitrary density" — the seed /
+//     stop-distance scheme of the fill layout.
+//   Pottmann, Huang, Deng, Schiftner, Kilian, Guibas & Wallner 2010, "Geodesic patterns", ACM TOG
+//     29(4) — §2: the width of a strip between neighbouring geodesics obeys the Jacobi equation
+//     w″ + K w = 0 (constant only where K = 0, so strips converge wherever K > 0); §3: evolution of
+//     a geodesic 1-pattern and "broken geodesics", patterns of geodesic arcs meeting at breakpoints
+//     where the width leaves W ± ε — the arcs themselves are never bent (JacobiStartAngle,
+//     EndGeodesicAtNeighbours).
+//   Weinand & Pirazzi 2006, "Geodesic lines on free-form surfaces — optimized grids for timber rib
+//     shells", WCTE Portland — boards along geodesics stay straight and are "subjected only to
+//     bending about their weak axis and to torsion": a geodesic lath has no in-surface curvature,
+//     which is why a lath that meets a neighbour is cut, not bent onto it.
+//   Schling, Hitrec & Barthel 2017; Schling 2018 (Repetitive Structures) — the web layout of
+//     asymptotic gridshells (curves started from a guide curve or the border, run to the edge).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -528,13 +545,16 @@ public static partial class EvenlySpacedNet
         Resolve(options, proj, out double spacing, out double step, out int maxSteps);
         var registry = new PointRegistry(spacing);
         double dtest = StopDistance(options, spacing);
-        Func<Vec3d, bool> stop = p => registry.HasPointWithin(p, dtest);
 
+        // Geodesic laths are straight boards (Pirazzi & Weinand 2006; Pottmann
+        // et al. 2010): a lath is traced in full and cut where it runs into a
+        // neighbour of its own family — straight, never bent sideways onto it
+        // (see EndGeodesicAtNeighbours). The Jobard–Lefer stop is applied to the
+        // finished trace, so the cut sits where the trace used to stop.
         Vec3d[] TraceFrom(Vec3d pos, int hint, Vec3d dir)
         {
-            var line = GeodesicCurves.TraceBothFrom(proj, pos, hint, dir,
-                step, maxSteps, stop, out bool startNear, out bool endNear);
-            line = SnapEnds(proj, registry, line, startNear, endNear, spacing);
+            var line = GeodesicCurves.TraceBothFrom(proj, pos, hint, dir, step, maxSteps, null, out _, out _);
+            line = EndGeodesicAtNeighbours(proj, registry, line, pos, dtest, spacing, false);
             return line.Length > 1 ? CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses) : line;
         }
 
@@ -604,7 +624,7 @@ public static partial class EvenlySpacedNet
                 var line = options.Layout == NetLayout.WebCross || guided
                     ? GeodesicCurves.TraceBothFrom(proj, pos, hint, dir, step, maxSteps, null, out _, out _)
                     : GeodesicCurves.TraceOneFrom(proj, pos, hint, dir, step, maxSteps, null, out _, out _).ToArray();
-                line = CutAtContact(proj, registry, line, pos, options.MergeFactor * spacing, spacing);
+                line = EndGeodesicAtNeighbours(proj, registry, line, pos, options.MergeFactor * spacing, spacing, true);
                 if (line.Length < 3 || ArcLength(line) < minLen) continue;
                 line = CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses);
                 results.Add(line);
@@ -633,7 +653,7 @@ public static partial class EvenlySpacedNet
                         Vec3d d = n0.LengthSquared > 1e-20 ? GeodesicCurves.Transport(t, n0.Normalized(), n) : t - Vec3d.Dot(t, n) * n;
                         if (d.LengthSquared < 1e-20) return 0;
                         var line = GeodesicCurves.TraceBothFrom(proj, hit.Point, v, d.Normalized(), step, maxSteps, null, out _, out _);
-                        line = CutAtContact(proj, registry, line, hit.Point, options.MergeFactor * spacing, spacing);
+                        line = EndGeodesicAtNeighbours(proj, registry, line, hit.Point, options.MergeFactor * spacing, spacing, true);
                         if (line.Length < 3 || ArcLength(line) < minLen) return 0;
                         line = CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses);
                         results.Add(line);
@@ -650,8 +670,8 @@ public static partial class EvenlySpacedNet
             foreach (var (pos, hint, dir) in border)
             {
                 if (results.Count >= options.MaxCurves) break;
-                var half = GeodesicCurves.TraceOneFrom(proj, pos, hint, dir, step, maxSteps, stop, out _, out bool endNear);
-                var line = SnapEnds(proj, registry, half.ToArray(), false, endNear, spacing);
+                var half = GeodesicCurves.TraceOneFrom(proj, pos, hint, dir, step, maxSteps, null, out _, out _);
+                var line = EndGeodesicAtNeighbours(proj, registry, half.ToArray(), pos, dtest, spacing, false);
                 if (line.Length < 3 || ArcLength(line) < 2.0 * spacing) continue;
                 line = CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses);
                 results.Add(line);
@@ -1071,6 +1091,103 @@ public static partial class EvenlySpacedNet
         var cut = new Vec3d[hi - lo + 1];
         Array.Copy(line, lo, cut, 0, cut.Length);
         return SnapEnds(proj, registry, cut, lo > 0, hi < n - 1, spacing);
+    }
+
+    /// <summary>
+    /// Cuts a geodesic where it runs into a lath of its own family and keeps
+    /// it straight. A geodesic lath is a straight board that bends only about
+    /// its weak axis and twists (Pirazzi &amp; Weinand 2006, "Geodesic lines on
+    /// free-form surfaces — optimized grids for timber rib shells"); a
+    /// geodesic pattern is made of geodesic arcs that meet at breakpoints, never
+    /// of bent arcs (Pottmann et al. 2010, "Geodesic patterns", §3). Pulling a
+    /// stopped end sideways onto the neighbour (<see cref="SnapEnds"/>) gives
+    /// the lath in-surface curvature over its last two spacings (7° on a flat
+    /// annulus), which is exactly what the geodesic layout exists to avoid. So,
+    /// from the seed outwards, the first point within <paramref name="radius"/>
+    /// of an existing curve (running within 30° of it when
+    /// <paramref name="tangentOnly"/>, any approach otherwise) marks the
+    /// contact; if the geodesic, continued straight, crosses that neighbour
+    /// within two spacings, the lath ends exactly at the crossing (a straight
+    /// T-junction); otherwise it ends at the contact with a free end — the
+    /// strip width has reached the lath width, Pottmann's breakpoint. Closed
+    /// loops are returned untouched.
+    /// </summary>
+    private static Vec3d[] EndGeodesicAtNeighbours(MeshProjection proj, PointRegistry registry, Vec3d[] line, Vec3d seed,
+        double radius, double spacing, bool tangentOnly)
+    {
+        if (line.Length < 3 || radius <= 0) return line;
+        if ((line[0] - line[line.Length - 1]).LengthSquared < 1e-24) return line;
+        int n = line.Length, s0 = 0; double bd = double.MaxValue;
+        for (int i = 0; i < n; i++) { double d = (line[i] - seed).LengthSquared; if (d < bd) { bd = d; s0 = i; } }
+        double cos30 = Math.Cos(Math.PI / 6);
+        bool Touches(int i, int j)
+        {
+            if (!registry.TryClosestOnCurves(line[i], radius, out _, out Vec3d t)) return false;
+            if (!tangentOnly) return true;
+            Vec3d own = line[Math.Min(Math.Max(i, j), n - 1)] - line[Math.Max(Math.Min(i, j), 0)];
+            if (own.LengthSquared < 1e-24 || t.LengthSquared < 1e-24) return true;
+            return Math.Abs(Vec3d.Dot(own.Normalized(), t.Normalized())) > cos30;
+        }
+        int hi = n - 1, lo = 0;
+        bool cutHi = false, cutLo = false;
+        for (int i = s0; i < n; i++) if (Touches(i, i + 1)) { hi = i; cutHi = true; break; }
+        for (int i = s0; i >= 0; i--) if (Touches(i, i - 1)) { lo = i; cutLo = true; break; }
+        if (!cutHi && !cutLo) return line;
+
+        var pts = new List<Vec3d>();
+        if (cutLo && CrossesNeighbour(registry, line, lo, -1, 2.0 * spacing, out int kLo, out Vec3d xLo))
+        {
+            // straight on, backwards, to the crossing: the lath ends there
+            lo = kLo; pts.Add(xLo);
+            // a crossing right next to a trace point replaces it: a segment
+            // much shorter than the step would turn the snap's residual into a kink
+            if (lo + 1 < hi && (line[lo + 1] - xLo).Length < 0.25 * (line[lo + 2] - line[lo + 1]).Length) lo++;
+        }
+        else if (cutLo) pts.Add(line[lo]);
+        for (int i = (cutLo ? lo + 1 : lo); i < hi; i++) pts.Add(line[i]);
+        if (cutHi && CrossesNeighbour(registry, line, hi, +1, 2.0 * spacing, out int kHi, out Vec3d xHi))
+        {
+            int last = kHi - 1;
+            if (last > hi && (xHi - line[last]).Length < 0.25 * (line[last] - line[last - 1]).Length) last--;
+            for (int i = hi; i <= last; i++) pts.Add(line[i]);
+            pts.Add(xHi);
+        }
+        else pts.Add(line[hi]);
+        return pts.Count >= 2 ? pts.ToArray() : line;
+    }
+
+    /// <summary>
+    /// Walks <paramref name="line"/> from <paramref name="from"/> in the given
+    /// direction for at most <paramref name="maxArc"/> and reports the first
+    /// segment that crosses an existing curve (segment–segment distance within
+    /// a tenth of the step: both polylines lie on the facets). The scan starts
+    /// one point before the contact, since a steep approach can cross the
+    /// neighbour within the step that brings it inside the radius. The
+    /// crossing is the neighbour's own point, so the T-junction has no gap;
+    /// <paramref name="k"/> is the index of the trace point beyond it.
+    /// </summary>
+    private static bool CrossesNeighbour(PointRegistry registry, Vec3d[] line, int from, int sign,
+        double maxArc, out int k, out Vec3d crossing)
+    {
+        k = from; crossing = line[from];
+        int n = line.Length;
+        double arc = 0;
+        int i0 = from - sign;
+        if (i0 < 0 || i0 >= n) i0 = from;
+        for (int i = i0 + sign; i >= 0 && i < n; i += sign)
+        {
+            Vec3d a = line[i - sign], b = line[i];
+            double step = (b - a).Length;
+            if ((i - from) * sign > 0) arc += step;
+            if (arc > maxArc) return false;
+            if (step < 1e-15) continue;
+            if (registry.TryCrossing(a, b, 0.1 * step, out Vec3d x))
+            {
+                k = i; crossing = x;
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void BlendEnd(MeshProjection proj, List<Vec3d> pts, Vec3d target, double blendLength, bool fromEnd)
@@ -1534,10 +1651,15 @@ public static partial class EvenlySpacedNet
             TryClosestOnCurves(p, radius, out closest, out _);
 
         /// <summary>As above, also returning the direction of the segment the closest point lies on.</summary>
-        public bool TryClosestOnCurves(Vec3d p, double radius, out Vec3d closest, out Vec3d tangent)
+        public bool TryClosestOnCurves(Vec3d p, double radius, out Vec3d closest, out Vec3d tangent) =>
+            TryClosestOnCurves(p, radius, out closest, out tangent, out _);
+
+        /// <summary>As above, also returning which stored line the closest point lies on.</summary>
+        public bool TryClosestOnCurves(Vec3d p, double radius, out Vec3d closest, out Vec3d tangent, out int lineIndex)
         {
             closest = p;
             tangent = Vec3d.Zero;
+            lineIndex = -1;
             int range = (int)Math.Ceiling(radius / _cell);
             double best = radius * radius;
             bool found = false;
@@ -1558,11 +1680,51 @@ public static partial class EvenlySpacedNet
                             {
                                 Vec3d q = ClosestOnSegment(p, line[i], line[i + 1]);
                                 double d2 = (q - p).LengthSquared;
-                                if (d2 < best) { best = d2; closest = q; tangent = line[i + 1] - line[i]; found = true; }
+                                if (d2 < best) { best = d2; closest = q; tangent = line[i + 1] - line[i]; lineIndex = e.line; found = true; }
                             }
                         }
                     }
             return found;
+        }
+
+        /// <summary>
+        /// Crossing of the segment a–b with a stored polyline: the stored
+        /// segment nearest to a–b (closest points within tol, both inside the
+        /// segments; a true crossing has a gap near zero, a near miss of the
+        /// neighbouring segment up to tol, so the smallest gap wins). Returns
+        /// the point on the stored polyline.
+        /// </summary>
+        public bool TryCrossing(Vec3d a, Vec3d b, double tol, out Vec3d onCurve)
+        {
+            onCurve = b;
+            double reach = (b - a).Length + tol;
+            int range = (int)Math.Ceiling(reach / _cell);
+            var (kx, ky, kz) = Key(a);
+            double bestD = double.MaxValue;
+            var seen = new HashSet<(int, int)>();
+            for (int dx = -range; dx <= range; dx++)
+                for (int dy = -range; dy <= range; dy++)
+                    for (int dz = -range; dz <= range; dz++)
+                    {
+                        if (!_cells.TryGetValue((kx + dx, ky + dy, kz + dz), out var list)) continue;
+                        foreach (var e in list)
+                        {
+                            var line = _lines[e.line];
+                            int lo = Math.Max(0, e.idx - 16), hi = Math.Min(line.Length - 1, e.idx + 16);
+                            for (int i = lo; i < hi; i++)
+                            {
+                                if (!seen.Add((e.line, i))) continue;
+                                double d = SegmentQueries.SegmentSegment(a, b, line[i], line[i + 1], out double s, out double t, out _, out Vec3d c2);
+                                if (d > tol || s <= 0 || s >= 1) continue;
+                                // inside the stored segment; at its ends (a vertex of the
+                                // polyline, or its free end passed closely) only when it is a
+                                // crossing to rounding
+                                if ((t <= 0 || t >= 1) && d > 0.01 * tol) continue;
+                                if (d < bestD) { bestD = d; onCurve = c2; }
+                            }
+                        }
+                    }
+            return bestD < double.MaxValue;
         }
 
         private static Vec3d ClosestOnSegment(Vec3d p, Vec3d a, Vec3d b)
