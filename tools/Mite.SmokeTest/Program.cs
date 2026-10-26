@@ -296,7 +296,10 @@ internal static class Tests
                 double expected = 1000.0 * System.Math.Pow(3.0, 4) / (8.0 * 11e9 * I);
                 double err = System.Math.Abs(maxDisp - expected) / expected;
                 return Expect(CurveCount(c, 0) == 3, "3 deformed laths")
-                    && Expect(err < 0.05, $"deflection {maxDisp:F3} vs analytic {expected:F3} ({err:P1})");
+                    && Expect(err < 0.05, $"deflection {maxDisp:F3} vs analytic {expected:F3} ({err:P1})")
+                    // cantilevers under a transverse load carry no axial force: no Euler buckling factor
+                    && Expect(Numbers(c, 11).Count == 0 && Numbers(c, 12).Count == 0 && CurveCount(c, 13) == 0,
+                        "no buckling factor without compression");
             });
 
         TestComponent("Lath Unroll",

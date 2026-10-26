@@ -137,6 +137,19 @@ N/m², `Lp`/`F` point loads. The `Rp` report must show the reactions equal to th
 load (equilibrium error ≈ 1e-12); laths that no support reaches are listed and
 left out instead of making the frame singular.
 
+The same component reports **buckling**: `λ` is the load factor at which the
+loaded net buckles elastically (Euler buckling from the axial forces of the
+solve), `λs` the factors of the first `Bk` modes and `Bm` the first mode shape
+drawn on the laths (5 % of the net's size, times `Sc`). Read `λ` together with
+`Um`: a net with `Um` 0.3 and `λ` 0.8 fails by buckling, not by stress. Below 1
+the component warns, below 3 it remarks — gridshells are usually designed for a
+linear factor of 3 or more before imperfections and large deflections are
+considered, and the factor ignores lateral–torsional effects of upright strips.
+The report line also prints the Sturm check ("none missed below λ"): the solver
+proves no lower mode was skipped. Set `Bk` to 0 while iterating a dense design;
+the eigenvalue solve takes several times the static solve on nets with
+thousands of nodes.
+
 Sanity values: on an asymptotic lath `Kn` should sit near 0 (it is measured from
 the surface normal, so mesh facets do not spike it) and `Tg` near √−K of the
 surface — on a hyperboloid throat with K = −1 an upright 100 × 10 mm timber lath
