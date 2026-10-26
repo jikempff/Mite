@@ -518,6 +518,10 @@ var sw = Stopwatch.StartNew();
     var t2 = Stopwatch.StartNew();
     var fr = FrameAnalysis.Compute(saddle, laths, xs.Select(x => x.Point).ToList(), sup, new LathProfile(0.08, 0.012, true), new Vec3d(0, 0, -1000));
     t2.Stop();
+    // linear buckling of the same net (two modes), timed separately
+    var t3 = Stopwatch.StartNew();
+    var frB = FrameAnalysis.Compute(saddle, laths, xs.Select(x => x.Point).ToList(), sup, new LathProfile(0.08, 0.012, true), new Vec3d(0, 0, -1000), new FrameAnalysis.Options { BucklingModes = 2 });
+    t3.Stop();
     var defl = new List<double[][]>();
     var nodeOf = new Dictionary<(int, int), int>();
     for (int n = 0; n < fr.NodeMap.Length; n++) foreach (var (c, i) in fr.NodeMap[n]) nodeOf.TryAdd((c, i), n);
@@ -553,6 +557,37 @@ var sw = Stopwatch.StartNew();
             momentError0 = w0.MomentEquilibriumError, momentError1 = w1.MomentEquilibriumError, forceError1 = w1.EquilibriumError,
             lTorque = lf.Torsion[0], lTorqueExact = T, lTwist = phi, lMomentError = lf.MomentEquilibriumError, lReactionTorque = Math.Abs(lf.ReactionMoments[lf.SupportNodes[0]].X),
         };
+    }
+    // first buckling mode of the net, drawn at 5 % of the net's size
+    var modeLines = new List<double[][]>();
+    if (frB.BucklingModes.Length > 0)
+    {
+        var mode = frB.BucklingModes[0];
+        var (bmn, bmx) = saddle.BoundingBox();
+        double amp = 0.05 * (bmx - bmn).Length;
+        for (int c = 0; c < laths.Count; c++) { var l = new List<double[]>(); for (int i = 0; i < laths[c].Length; i++) { var d = nodeOf.TryGetValue((c, i), out int n) ? mode[n] : Vec3d.Zero; l.Add(P(laths[c][i] + amp * d)); } modeLines.Add(l.ToArray()); }
+    }
+    scenes["frameMode"] = new { original = laths.Select(l => Line(l)).ToArray(), mode = modeLines.ToArray(), supports = sup.Select(P).ToArray() };
+    numbers["frameBuckling"] = new { factors = frB.BucklingFactors.Select(f => R3(f)).ToArray(), missed = frB.BucklingMissed, iterations = frB.BucklingIterations, converged = frB.BucklingConverged, ms = t3.ElapsedMilliseconds - t2.ElapsedMilliseconds, minAxial = R3(frB.AxialForce.Min()), compressed = frB.AxialForce.Count(a => a < 0), elements = frB.AxialForce.Length };
+    // Euler checks with closed forms: fixed-free column P_cr = π²EI/(4L²) (Timoshenko & Gere §2.2), a round bar's double
+    // eigenvalue, and a fixed-base portal frame against the exact beam-column stability functions (Chen & Lui 1987 ch. 5)
+    {
+        double E = 11e9, L = 3.0, w = 0.1, th = 0.01;
+        var flat = TestMeshes.CreateQuadGrid(10, 10, 1.0).ToTriangulated();
+        FrameAnalysis.Result Column(int n, LathProfile prof, int modes) { var lath = new Vec3d[n + 1]; for (int i = 0; i <= n; i++) lath[i] = new Vec3d(L * i / n, 5, 0.01); return FrameAnalysis.Compute(flat, new[] { lath }, null, new[] { new Vec3d(0, 5, 0.01) }, prof, Vec3d.Zero, new FrameAnalysis.Options { E = E, BucklingModes = modes, BucklingTolerance = 1e-10, PointLoads = new List<(Vec3d, Vec3d)> { (new Vec3d(L, 5, 0.01), new Vec3d(-1.0, 0, 0)) } }); }
+        double Imin = w * th * th * th / 12, exact = Math.PI * Math.PI * E * Imin / (4 * L * L);
+        var errs = new[] { 2, 4, 8, 16 }.Select(n => Column(n, new LathProfile(w, th, false), 1).BucklingFactors[0] / exact - 1).ToArray();
+        double d = 0.02, Ir = Math.PI * Math.Pow(d, 4) / 64, exactR = Math.PI * Math.PI * E * Ir / (4 * L * L);
+        var rb = Column(8, LathProfile.Round(d), 2);
+        // portal: columns along x (h = 3) at y = 2 and y = 5, beam along y at x = 3; bases fixed; P = 1 on each column top
+        double h = 3.0, lb = 3.0, EI = E * Imin;
+        double Det(double Pc) { double phi = h * Math.Sqrt(Pc / EI), Phi = 2 - 2 * Math.Cos(phi) - phi * Math.Sin(phi); double f1 = phi * phi * phi * Math.Sin(phi) / (12 * Phi), f2 = phi * phi * (1 - Math.Cos(phi)) / (6 * Phi), f3 = phi * (Math.Sin(phi) - phi * Math.Cos(phi)) / (4 * Phi); double kvv = 24 * f1 * EI / (h * h * h), kvt = -6 * f2 * EI / (h * h), ktt = 4 * f3 * EI / h + 4 * EI / lb, k12 = 2 * EI / lb; return kvv * (ktt * ktt - k12 * k12) - kvt * (kvt * ktt - k12 * kvt) + kvt * (kvt * k12 - ktt * kvt); }
+        double pe = Math.PI * Math.PI * EI / (h * h), step = pe / 2000, a = step, b = a; for (int i = 0; i < 20000; i++) { b = a + step; double fb = Det(b); if (fb <= 0 || double.IsNaN(fb)) break; a = b; } for (int i = 0; i < 200; i++) { double m = 0.5 * (a + b); if (Det(m) > 0) a = m; else b = m; }
+        double exactPortal = 0.5 * (a + b);
+        Vec3d[] Seg(Vec3d p0, Vec3d p1, int n) { var pts = new Vec3d[n + 1]; for (int i = 0; i <= n; i++) pts[i] = p0 + (double)i / n * (p1 - p0); return pts; }
+        var portalLaths = new List<Vec3d[]> { Seg(new Vec3d(0, 2, 0.01), new Vec3d(h, 2, 0.01), 8), Seg(new Vec3d(0, 2 + lb, 0.01), new Vec3d(h, 2 + lb, 0.01), 8), Seg(new Vec3d(h, 2, 0.01), new Vec3d(h, 2 + lb, 0.01), 8) };
+        var portal = FrameAnalysis.Compute(flat, portalLaths, null, new[] { new Vec3d(0, 2, 0.01), new Vec3d(0, 2 + lb, 0.01) }, new LathProfile(w, th, true), Vec3d.Zero, new FrameAnalysis.Options { E = E, BucklingModes = 1, BucklingTolerance = 1e-10, PointLoads = new List<(Vec3d, Vec3d)> { (new Vec3d(h, 2, 0.01), new Vec3d(-1, 0, 0)), (new Vec3d(h, 2 + lb, 0.01), new Vec3d(-1, 0, 0)) } });
+        numbers["buckling"] = new { cantileverErr = errs, cantileverExact = exact, roundFactors = rb.BucklingFactors, roundExact = exactR, roundMissed = rb.BucklingMissed, portalExact = exactPortal, portalFactor = portal.BucklingFactors.Length > 0 ? portal.BucklingFactors[0] : 0, portalExactDimless = exactPortal * h * h / EI, portalMissed = portal.BucklingMissed };
     }
 }
 

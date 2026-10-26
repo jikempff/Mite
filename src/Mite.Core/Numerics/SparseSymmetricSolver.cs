@@ -31,6 +31,16 @@ public sealed class SparseSymmetricSolver
     public long EnvelopeSize => _env.LongLength;
 
     /// <summary>
+    /// Number of negative pivots of the LDLᵀ factorization (0 for a positive
+    /// definite matrix). By Sylvester's law of inertia this is the number of
+    /// negative eigenvalues of the matrix, which makes a factorization of
+    /// K − μ B a Sturm sequence check for the generalized eigenproblem
+    /// K φ = λ B φ with K positive definite: the count equals the number of
+    /// eigenvalues λ in (0, μ).
+    /// </summary>
+    public int NegativePivotCount { get; }
+
+    /// <summary>
     /// Builder for symmetric matrices; only the upper triangle (row ≤ col)
     /// needs to be added, but adding both halves is tolerated (the lower one
     /// is ignored). Repeated (row, col) entries accumulate.
@@ -94,10 +104,10 @@ public sealed class SparseSymmetricSolver
     }
 
     private SparseSymmetricSolver(int n, int[] perm, int[] invPerm, int[] colStart, int[] first,
-        double[] env, double[] diag, double minPivotRatio)
+        double[] env, double[] diag, double minPivotRatio, int negativePivots = 0)
     {
         _n = n; _perm = perm; _invPerm = invPerm; _colStart = colStart; _first = first;
-        _env = env; _diag = diag; MinPivotRatio = minPivotRatio;
+        _env = env; _diag = diag; MinPivotRatio = minPivotRatio; NegativePivotCount = negativePivots;
     }
 
     /// <summary>
@@ -164,6 +174,7 @@ public sealed class SparseSymmetricSolver
         }
         if (maxDiag <= 0) return null;
         double minPivot = minPivotRatio * maxDiag;
+        int negativePivots = 0;
 
         // Column-wise LDL^T on the envelope. For column j the stored entries
         // are rows first[j]..j-1. Two passes per column:
@@ -197,10 +208,11 @@ public sealed class SparseSymmetricSolver
             }
 
             if (double.IsNaN(dj) || (allowIndefinite ? Math.Abs(dj) < minPivot : dj < minPivot)) return null;
+            if (dj < 0) negativePivots++;
             diag[j] = dj;
         }
 
-        return new SparseSymmetricSolver(n, perm, invPerm, colStart, first, env, diag, minPivotRatio);
+        return new SparseSymmetricSolver(n, perm, invPerm, colStart, first, env, diag, minPivotRatio, negativePivots);
     }
 
     /// <summary>Solves A x = b (b is not modified).</summary>

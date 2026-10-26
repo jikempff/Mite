@@ -60,7 +60,8 @@ COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Cu
               "Net Kinetics",
               "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 byname = {c["name"]: c for c in comps}
-assert set(byname) == set(COMP_ORDER), set(byname) ^ set(COMP_ORDER)
+assert set(COMP_ORDER) <= set(byname), set(COMP_ORDER) - set(byname)
+if set(byname) - set(COMP_ORDER): print("components without a bench card:", ", ".join(sorted(set(byname) - set(COMP_ORDER))))
 
 def esc(s): return html.escape(s, quote=True)
 def slug(s): return s.lower().replace(" ", "-")

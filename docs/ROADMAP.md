@@ -28,6 +28,11 @@ where they overlap
    semi-rigid), loads (done: self-weight, area, point), joint eccentricity
    (done 2026-11-02: laths in layers on rigid end offsets, see D); next:
    buckling, the AAG erection sequence.
+   semi-rigid), loads (done: self-weight, area, point), linear buckling (done
+   2026-10-26, session 2: load factor, modes, Sturm check — see D); next: joint
+   eccentricity, the AAG erection sequence, buckling in the web app's
+   structure block, lateral–torsional terms for upright strips, a geometrically
+   nonlinear (arc-length) check of the first mode's imperfection sensitivity.
 3. The kinetic behaviour of any web in the browser (done for scissor / lift /
    spread drives, 1.3.0; the flat state as the assembly state — press flat,
    the 3-fold Enneper web into a hexagon — 1.3.1; the deployment from the flat
@@ -1290,6 +1295,50 @@ remains the self-test review page.
       Chern, Ben-Chen & Vaxman 2019 (full text), Burago, Ivanov & Malev 2007
       (arXiv math/0506580, theorems 1–3); Masson 2017 and Douthe et al. 2006
       only through secondary sources (HAL blocks automated access).
+- [x] Linear buckling of the lath frame — 2026-10-26 (session 2),
+      `FrameAnalysis.Options.BucklingModes`, `Numerics/SubspaceEigen`,
+      `SparseSymmetricSolver.NegativePivotCount`; Gridshell Analysis `Buckling`
+      input and `BucklingFactor` / `Factors` / `Mode` outputs appended.
+      Literature: McGuire, Gallagher & Ziemian 2000 (Matrix Structural
+      Analysis, 2nd ed., eq. 9.19: the 12 × 12 consistent geometric stiffness
+      with the axial P/L and the Wagner I_p/A torsion term; the Bucknell PDF
+      is behind a Cloudflare gate — cited from the edition, verified against
+      Gavin 2012, Geometric stiffness effects in 2D and 3D frames, Duke CEE
+      421L, whose Timoshenko form reduces to it at Φ = 0), Przemieniecki 1968
+      ch. 15, Bathe & Wilson 1973 / Bathe 1996 §11.6 (subspace iteration,
+      Sturm sequence check, K_G φ = κ K φ for indefinite K_G), Timoshenko &
+      Gere 1961 §2.2 (Euler loads), Chen & Lui 1987 ch. 5 (exact beam-column
+      stiffness in compression, used for the portal reference).
+      Measured: fixed–free column π²EI/4L² from above, error 5.1e-4 / 3.3e-5 /
+      2.1e-6 / 1.3e-7 with 2 / 4 / 8 / 16 elements (ratios 15.6, 15.9, 16.0 —
+      the O(h⁴) of the cubic element); mode 1 − cos(πx/2L) to 3e-12; round bar
+      double eigenvalue equal to 1e-14 relative, 2e-6 off the closed form at 8
+      elements; fixed-base portal (h = l, equal EI) P h²/EI = 7.37915 from the
+      stability-function determinant, FE 3.1e-3 / 2.1e-4 / 8.5e-6 with 2 / 4 /
+      8 elements per member; two-arch grid: rigid λ 0.091 / 0.109 / 0.136,
+      scissor-hinged 0.023 / 0.045 / 0.081 (1 kN/m, 80 × 20 mm upright, R = 5);
+      bench saddle net (54 laths, 3013 nodes, 1 kN/m, 80 × 12 mm): λ₁ = 32.65,
+      λ₂ = 32.65 (a near-double pair from the saddle's symmetry), none missed.
+      Findings: (1) the Sturm check must be made just below λ₁, not just above
+      the last factor — the saddle's λ₂ sits 0.003 % above λ₁, so a "count
+      ≤ λ_last·1.001" test flagged a missing mode that was only the twin; and
+      its margin must exceed the convergence error: Rayleigh–Ritz estimates
+      converge from above by ~3× the last change at ratio 0.75, so a margin of
+      1 × tolerance counted λ₁ itself as "missed" on the saddle net (it is
+      20 × tolerance now);
+      (2) convergence is set by the spectrum, not the solver: the saddle net
+      needs 42–60 iterations (ratio |λ₁/λ_{q+1}| ≈ 0.75) and more vectors
+      (q = 17, 25) cut the count but not the time; the static deflection as a
+      start vector saves ~15 %; compressed-row products instead of the Builder
+      dictionaries 12 → 8.5 s; what is left is the envelope solve (~20 ms each
+      on 18 k DOF) — a Lanczos or a fill-reducing ordering is the next step;
+      (3) members in tension make −K_g indefinite and give negative factors
+      (reversed load); they are filtered, and with nothing in compression the
+      solve is skipped. Open: bending-moment terms of the geometric stiffness
+      (lateral–torsional buckling of upright laths, the realistic failure of
+      deep thin strips — Trahair 1993), the web app's structure block (payload
+      field + stats line, off by default for speed), imperfection sensitivity
+      by a nonlinear (arc-length) solve with the first mode as the shape.
 - [ ] Form finding: Schek 1974 (Force density method); Barnes 1999
 - [x] Form finding: Schek 1974 (Force density method); Barnes 1999
       (Form finding and analysis of tension structures by dynamic
@@ -2143,6 +2192,11 @@ Open
       in the core, `Curvature` output on Chebyshev Net; the chord-length axis
       fix; 8 exact tests (plane, sphere, cylinder, saddle with convergence),
       3 bench self-tests (78 PASS), 9 web-smoke checks (37 PASS).
+- [x] 2026-10-26 (session 2, D / José's priority 2): linear buckling in
+      Gridshell Analysis — consistent geometric stiffness, subspace iteration,
+      Sturm check, mode shapes; eight exact tests (Euler column, round bar,
+      orientation, portal vs stability functions, arch grid), four bench
+      self-tests (79 PASS), `extract_components.py` for the bench parameters.
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

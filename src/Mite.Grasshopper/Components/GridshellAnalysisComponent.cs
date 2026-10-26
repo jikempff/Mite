@@ -18,7 +18,8 @@ public class GridshellAnalysisComponent : MiteComponent
             "Linear static analysis of a lath network as a 3D beam frame. Laths become " +
             "Euler-Bernoulli beams with the strip section, coupled at net crossings (rigid, " +
             "scissor hinge or semi-rigid about the surface normal); supports are fixed or pinned points; " +
-            "loads per metre of lath, self-weight, area load and point loads. Geometry is converted from the document units to " +
+            "loads per metre of lath, self-weight, area load and point loads; linear (Euler) buckling of the loaded net: " +
+            "the load factor at which the first mode buckles and its shape. Geometry is converted from the document units to " +
             "metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. " +
             "A first-order sanity check, not a full FE package.",
             "Analysis", "GridshellAnalysis") { }
@@ -55,6 +56,7 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager[21].Optional = true;
         RegisterNetInput(pManager, "With a Net, empty Joints couple every contact of the net and empty Supports hold every lath end on the border; " +
             "the frame takes family A's profile unless W / T / U / Shape / Section are wired"); // 23
+        pManager.AddIntegerParameter("Buckling", "Bk", "Number of linear buckling modes to compute from the axial forces of the solve (0 = none, default 1). λ × the applied loads is the Euler critical load of the net; below ~3 the design is governed by stability", GH_ParamAccess.item, 1);
         pManager[0].Optional = true;
         pManager[1].Optional = true;
         pManager[2].Optional = true;
@@ -75,6 +77,9 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddVectorParameter("Reactions", "R", "Reaction force in N at each support node", GH_ParamAccess.list);
         pManager.AddTextParameter("Report", "Rp", "Totals: applied load, reactions, equilibrium error, joints, supports", GH_ParamAccess.item);
         pManager.AddVectorParameter("ReactionMoments", "Rm", "Reaction moment in N·m at each support node (zero at pinned supports)", GH_ParamAccess.list);
+        pManager.AddNumberParameter("BucklingFactor", "λ", "Linear buckling load factor of the first mode: the applied loads × λ make the net buckle elastically (null when nothing is in compression or no positive factor converged)", GH_ParamAccess.item);
+        pManager.AddNumberParameter("Factors", "λs", "Load factors of the computed buckling modes, ascending", GH_ParamAccess.list);
+        pManager.AddCurveParameter("Mode", "Bm", "First buckling mode: the laths displaced by the mode shape, largest node offset = Scale × 5 % of the net's size (shape only, the amplitude is arbitrary)", GH_ParamAccess.list);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -127,6 +132,8 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.GetDataList(21, layers);
         int align = 0;
         DA.GetData(22, ref align);
+        int buckling = 1;
+        DA.GetData(24, ref buckling);
 
         if (supports.Count == 0)
         {
@@ -234,6 +241,7 @@ public class GridshellAnalysisComponent : MiteComponent
                     Density = Math.Max(0, density), AreaLoad = areaLoad,
                     PointLoads = pointLoads,
                     AxisOffsets = axisOffsets,
+                    BucklingModes = Math.Max(0, buckling),
                 });
         }
         catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
@@ -304,11 +312,52 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.SetDataList(9, reacts);
         DA.SetDataList(11, moments);
         var sumR = Vec3d.Zero; foreach (int n in result.SupportNodes) sumR = sumR + result.Reactions[n];
+        string buck = buckling <= 0 ? "buckling not computed"
+            : result.BucklingFactors.Length == 0 ? (result.BucklingConverged ? "buckling: nothing in compression, no Euler buckling under this load" : "buckling: no positive factor converged")
+            : $"buckling factor λ = {result.BucklingFactors[0]:0.###} (modes: {string.Join(", ", result.BucklingFactors.Select(f => f.ToString("0.###")))}; " +
+              $"{(result.BucklingMissed == 0 ? "Sturm check: none missed below λ" : result.BucklingMissed < 0 ? "Sturm check unavailable" : $"Sturm check: {result.BucklingMissed} lower mode(s) missed")}" +
+              $"{(result.BucklingConverged ? "" : ", not converged")})";
         string stack = axisOffsets == null ? "lath axes on the curves"
             : $"{layers.Distinct().Count()} layer(s) · joint eccentricity {result.Eccentricity * 1000:0.#} mm · moment equilibrium error {result.MomentEquilibriumError:E1}";
         DA.SetData(10, $"load {result.TotalLoad.Z / 1000:0.###} kN (vertical) · reactions {sumR.Z / 1000:0.###} kN · equilibrium error {result.EquilibriumError:E1}\n" +
             $"{result.Nodes.Length} nodes · {result.Utilization.Length} elements · {result.JointCount} joints · {result.SupportNodeCount} supports ({(supportType == 1 ? "pinned" : "fixed")}) · joints {(jointK < 0 ? "rigid" : jointK == 0 ? "hinged" : $"k = {jointK:G3} N·m/rad")} · {stack}\n" +
-            $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}");
+            $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}\n{buck}");
+
+        if (result.BucklingFactors.Length > 0)
+        {
+            DA.SetData(12, result.BucklingFactors[0]);
+            DA.SetDataList(13, result.BucklingFactors);
+            // mode shape at a readable amplitude: 5 % of the net's bounding diagonal, times Scale
+            var mn = new Vec3d(double.MaxValue, double.MaxValue, double.MaxValue); var mx = new Vec3d(double.MinValue, double.MinValue, double.MinValue);
+            foreach (var p in result.Nodes) { mn = new Vec3d(Math.Min(mn.X, p.X), Math.Min(mn.Y, p.Y), Math.Min(mn.Z, p.Z)); mx = new Vec3d(Math.Max(mx.X, p.X), Math.Max(mx.Y, p.Y), Math.Max(mx.Z, p.Z)); }
+            double amp = 0.05 * (mx - mn).Length * scale;
+            var mode = result.BucklingModes[0];
+            var modeCurves = new Curve?[curves.Count];
+            for (int c = 0; c < laths.Count; c++)
+            {
+                var pts = new List<Point3d>();
+                for (int i = 0; i < laths[c].Length; i++)
+                {
+                    Vec3d d = nodeOf.TryGetValue((c, i), out int node) ? mode[node] : Vec3d.Zero;
+                    pts.Add(MeshConvert.ToRhinoPoint(inv * (laths[c][i] + amp * d)));
+                }
+                if (pts.Count > 1) modeCurves[lathIndex[c]] = new PolylineCurve(pts);
+            }
+            DA.SetDataList(14, modeCurves);
+            if (result.BucklingFactors[0] < 1.0)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                    $"Buckling factor {result.BucklingFactors[0]:F2} is below 1 — the net buckles under this load before any lath is overstressed. Stiffen the section, add supports or shorten the laths between joints.");
+            else if (result.BucklingFactors[0] < 3.0)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                    $"Buckling factor {result.BucklingFactors[0]:F2}: elastic stability governs; a factor of 3 or more is customary for gridshells before imperfections and nonlinearity.");
+            if (result.BucklingMissed > 0)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                    $"The Sturm sequence check finds {result.BucklingMissed} buckling mode(s) below the factor reported — the iteration missed the lowest mode; raise Buckling and check the result.");
+            if (!result.BucklingConverged)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "The buckling eigenvalue iteration did not converge; the factors shown are approximate.");
+        }
+        else if (buckling > 0 && !result.BucklingConverged)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "No positive buckling factor converged — the net may buckle under the reversed load first; check the axial forces.");
 
         if (result.MaxUtilization > 1.0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,

@@ -44,9 +44,26 @@ namespace Mite.Core.Analysis;
 /// composite beams, Adv. Eng. Softw. 52) note the limit of rigid-bar
 /// coupling for two *parallel* beams (discrete links over-constrain the slip);
 /// crossing laths are coupled at isolated points, where the link is exact.
+
+/// Linear (Euler) buckling, <see cref="Options.BucklingModes"/>: the axial
+/// forces N of the linear solve build the consistent geometric stiffness
+/// k_g = (N/L) · [u: 1, −1; v–θz and w–θy: 6/5, ±L/10, 2L²/15, −L²/30;
+/// θx: I_p/A] of every element (cubic Hermite beam, Przemieniecki 1968 ch. 15;
+/// McGuire, Gallagher &amp; Ziemian 2000, Matrix Structural Analysis 2nd ed.
+/// eq. 9.19, with the axial P/L term and the Wagner torsion term I_p/A;
+/// Gavin 2012, Geometric stiffness effects in 2D and 3D frames, Duke CEE 421L,
+/// for the Timoshenko form that reduces to it). The load factor λ solves
+/// (K_e + λ K_g) φ = 0: the applied load pattern times λ_1 (smallest positive
+/// eigenvalue) is the elastic critical load of the first mode (Timoshenko &amp;
+/// Gere 1961, Theory of Elastic Stability; Euler column P_cr = π²EI/(K L)²
+/// with K = 2 fixed–free, 1 pinned, 0.5 fixed–fixed as the exact checks).
+/// Solved by subspace iteration on K_e φ = λ (−K_g) φ (Bathe &amp; Wilson 1973)
+/// and verified by the Sturm sequence count of K_e − μ(−K_g) at μ just below
+/// λ_1 (no eigenvalue may lie there). Negative eigenvalues (buckling under the reversed load) are left out.
 /// </summary>
 public static class FrameAnalysis
 {
+
     /// <summary>How a support point holds its node.</summary>
     public enum SupportKind
     {
@@ -130,6 +147,19 @@ public static class FrameAnalysis
         /// − <see cref="LathProfile.NormalLow"/>), outward.
         /// </summary>
         public IReadOnlyList<double>? AxisOffsets { get; set; }
+        /// Number of linear buckling modes to compute from the axial forces of
+        /// the solve (0 = none, the default). The first positive factor λ_1
+        /// times the applied load is the Euler critical load of the net; see
+        /// <see cref="Result.BucklingFactors"/> / <see cref="Result.BucklingModes"/>.
+        /// </summary>
+        public int BucklingModes { get; set; } = 0;
+
+        /// <summary>
+        /// Relative change of a factor between subspace iterations below which
+        /// it counts as converged (default 1e-6; the true error is a few times
+        /// the change when the spectrum is dense).
+        /// </summary>
+        public double BucklingTolerance { get; set; } = 1e-6;
     }
 
     public readonly struct Result
@@ -217,6 +247,32 @@ public static class FrameAnalysis
         /// lever arms of the stacked laths are carried into the supports.
         /// </summary>
         public readonly double MomentEquilibriumError;
+        /// <summary>
+        /// Positive linear buckling load factors, ascending (empty when
+        /// <see cref="Options.BucklingModes"/> is 0 or no positive factor was
+        /// found): the applied loads times BucklingFactors[0] is the elastic
+        /// critical load of the first mode. Only factors the iteration
+        /// converged on are listed.
+        /// </summary>
+        public readonly double[] BucklingFactors;
+
+        /// <summary>Per factor: the mode's node translations, normalised so the largest is 1 (shape only, no amplitude).</summary>
+        public readonly Vec3d[][] BucklingModes;
+
+        /// <summary>
+        /// Sturm sequence check: the number of eigenvalues of (K_e + λ K_g) φ = 0
+        /// in (0, λ₁(1 − 20·tolerance)), i.e. buckling modes below the first
+        /// factor found that the iteration missed — 0 when λ₁ really is the
+        /// lowest; −1 when not computed (no factor, or the shifted matrix was
+        /// singular).
+        /// </summary>
+        public readonly int BucklingMissed;
+
+        /// <summary>Subspace iterations spent on the buckling problem (0 = not requested).</summary>
+        public readonly int BucklingIterations;
+
+        /// <summary>True when the requested number of buckling factors converged to <see cref="Options.BucklingTolerance"/>.</summary>
+        public readonly bool BucklingConverged;
 
         public Result(Vec3d[] nodes, List<(int, int)>[] nodeMap, Vec3d[] displacements,
             double maxDisplacement, (int, int)[] elementSource,
@@ -233,15 +289,22 @@ public static class FrameAnalysis
             Vec3d totalLoad, double equilibriumError, Vec3d[][] laths, int jointCount, int[] floatingLaths)
             : this(nodes, nodeMap, displacements, maxDisplacement, elementSource, axial, bendY, bendZ,
                 utilization, maxUtilization, supportNodeCount, torsion, supportNodes, reactions, totalLoad,
-                equilibriumError, laths, jointCount, floatingLaths, new Vec3d[nodes.Length], 0.0, new double[laths.Length], Vec3d.Zero, 0.0) { }
+                equilibriumError, laths, jointCount, floatingLaths, new Vec3d[nodes.Length], 0.0, new double[laths.Length], Vec3d.Zero, 0.0,
+                Array.Empty<double>(), Array.Empty<Vec3d[]>(), -1, 0, false) { }
 
         public Result(Vec3d[] nodes, List<(int, int)>[] nodeMap, Vec3d[] displacements,
             double maxDisplacement, (int, int)[] elementSource,
             double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
             int supportNodeCount, double[] torsion, int[] supportNodes, Vec3d[] reactions,
             Vec3d totalLoad, double equilibriumError, Vec3d[][] laths, int jointCount, int[] floatingLaths,
-            Vec3d[] reactionMoments, double eccentricity, double[] axisOffsets, Vec3d totalMoment, double momentEquilibriumError)
+            Vec3d[] reactionMoments, double eccentricity, double[] axisOffsets, Vec3d totalMoment, double momentEquilibriumError,
+            double[] bucklingFactors, Vec3d[][] bucklingModes, int bucklingMissed, int bucklingIterations, bool bucklingConverged)
         {
+            BucklingFactors = bucklingFactors;
+            BucklingModes = bucklingModes;
+            BucklingMissed = bucklingMissed;
+            BucklingIterations = bucklingIterations;
+            BucklingConverged = bucklingConverged;
             TotalMoment = totalMoment;
             MomentEquilibriumError = momentEquilibriumError;
             ReactionMoments = reactionMoments;
@@ -907,10 +970,106 @@ public static class FrameAnalysis
             if (utilization[e] > maxUtil) maxUtil = utilization[e];
         }
 
+        // ---- Linear buckling: (K_e + λ K_g) φ = 0 ---------------------------
+        var bucklingFactors = Array.Empty<double>();
+        var bucklingModes = Array.Empty<Vec3d[]>();
+        int bucklingMissed = -1, bucklingIterations = 0;
+        bool bucklingConverged = false;
+        if (options.BucklingModes > 0)
+        {
+            // B = −K_g on the free degrees of freedom: compression (N < 0) makes it positive
+            var Bff = new SparseSymmetricSolver.Builder(nfree);
+            double Ip = Iy + Iz;
+            bool anyCompression = false;
+            for (int e = 0; e < ne; e++)
+            {
+                if (elemRot[e] == null) continue;
+                double N = axial[e];
+                if (N == 0) continue;
+                if (N < 0) anyCompression = true;
+                var kg = GeometricStiffness(N, elemLen[e], Ip / A);
+                var rot = elemRot[e];
+                var dofs = ElemDofs(e);
+                // global axes, then — like K_e — through the rigid links of the beam ends
+                var kgg = new double[12, 12];
+                for (int r = 0; r < 12; r++)
+                {
+                    int rb = r / 3 * 3, ra = r % 3;
+                    for (int c = 0; c < 12; c++)
+                    {
+                        int cb = c / 3 * 3, ca = c % 3;
+                        double sum = 0;
+                        for (int a = 0; a < 3; a++)
+                        {
+                            double qa = Component(rot[a], ra);
+                            if (qa == 0) continue;
+                            for (int b = 0; b < 3; b++)
+                                sum += qa * kg[rb + a, cb + b] * Component(rot[b], ca);
+                        }
+                        kgg[r, c] = sum;
+                    }
+                }
+                if (eccentric) kgg = OffsetStiffness(kgg, elemArm[e][0], elemArm[e][1]);
+                for (int r = 0; r < 12; r++)
+                {
+                    int fr = dofMap[dofs[r]];
+                    if (fr < 0) continue;
+                    for (int c = 0; c < 12; c++)
+                    {
+                        int fc = dofMap[dofs[c]];
+                        if (fc < 0 || fr > fc) continue;
+                        double sum = kgg[r, c];
+                        if (sum != 0) Bff.Add(fr, fc, -sum);
+                    }
+                }
+            }
+            if (anyCompression)
+            {
+                var eig = SubspaceEigen.Solve(Kff, Bff, options.BucklingModes, positiveOnly: true,
+                    tolerance: options.BucklingTolerance, maxIterations: 300, startVectors: new[] { u });
+                if (eig != null)
+                {
+                    bucklingIterations = eig.Iterations;
+                    bucklingConverged = eig.Converged;
+                    var pos = new List<(double L, double[] V)>();
+                    for (int k = 0; k < eig.Eigenvalues.Length; k++)
+                        if (eig.Eigenvalues[k] > 0 && !double.IsInfinity(eig.Eigenvalues[k])) pos.Add((eig.Eigenvalues[k], eig.Eigenvectors[k]));
+                    pos.Sort((x, y) => x.L.CompareTo(y.L));
+                    if (pos.Count > options.BucklingModes) pos.RemoveRange(options.BucklingModes, pos.Count - options.BucklingModes);
+                    bucklingFactors = pos.Select(x => x.L).ToArray();
+                    bucklingModes = new Vec3d[pos.Count][];
+                    for (int m = 0; m < pos.Count; m++)
+                    {
+                        var v = pos[m].V;
+                        var mode = new Vec3d[nodes.Count];
+                        double big = 0;
+                        for (int i = 0; i < nodes.Count; i++)
+                        {
+                            double Mx(int dof) { int mm = dofMap[dof]; return mm >= 0 ? v[mm] : 0.0; }
+                            mode[i] = new Vec3d(Mx(transBase[i]), Mx(transBase[i] + 1), Mx(transBase[i] + 2));
+                            big = Math.Max(big, mode[i].Length);
+                        }
+                        if (big > 0) for (int i = 0; i < nodes.Count; i++) mode[i] = mode[i] / big;
+                        bucklingModes[m] = mode;
+                    }
+                    if (bucklingFactors.Length > 0)
+                    {
+                        // Sturm check just below the first factor: any eigenvalue in (0, μ) was
+                        // missed. Rayleigh–Ritz estimates converge from above by a few times the
+                        // last change, so the margin is a multiple of the tolerance.
+                        double mu = bucklingFactors[0] * (1 - 20 * Math.Max(options.BucklingTolerance, 1e-12));
+                        bucklingMissed = SubspaceEigen.CountBelow(Kff, Bff, mu) ?? -1;
+                    }
+                }
+            }
+            else bucklingConverged = true; // nothing in compression: no Euler buckling under this load
+        }
+
         return new Result(nodes.ToArray(), nodeMap.ToArray(), displacements, maxDisp,
             elemSrc.ToArray(), axial, bendY, bendZ, utilization, maxUtil, supportNodes.Count,
             torsion, supportNodes.ToArray(), reactions, totalLoad, eqErr, lathsW, jointCount, floatingCurves.OrderBy(c => c).ToArray(),
-            reactionMoments, eccentricity, offsets, totalMoment, momentErr);
+            reactionMoments, eccentricity, offsets, totalMoment, momentErr,
+            bucklingFactors, bucklingModes, bucklingMissed, bucklingIterations, bucklingConverged);
     }
 
     /// <summary>One axis offset per lath from the option (null / empty → zeros, one value → all laths).</summary>
@@ -1086,6 +1245,38 @@ public static class FrameAnalysis
     }
 
     private static double Component(Vec3d v, int i) => i == 0 ? v.X : i == 1 ? v.Y : v.Z;
+
+    /// <summary>
+    /// Consistent 12x12 geometric stiffness of a beam element carrying the
+    /// axial force N (tension positive), local coordinates, same DOF order as
+    /// <see cref="LocalStiffness"/>: k_g = (N/L) · [...] with the cubic Hermite
+    /// bending terms 6/5, ±L/10, 2L²/15, −L²/30 in both planes, the axial term
+    /// 1, −1 and the torsional (Wagner) term I_p/A = (Iy + Iz)/A (McGuire,
+    /// Gallagher &amp; Ziemian 2000 eq. 9.19; Przemieniecki 1968 ch. 15).
+    /// Bending-moment coupling terms (lateral–torsional buckling of open
+    /// sections) are not included.
+    /// </summary>
+    public static double[,] GeometricStiffness(double N, double L, double IpOverA)
+    {
+        var k = new double[12, 12];
+        double f = N / L, L2 = L * L;
+        void Set(int i, int j, double v) { k[i, j] = v; k[j, i] = v; }
+        // Axial
+        Set(0, 0, f); Set(0, 6, -f); Set(6, 6, f);
+        // Torsion (Wagner)
+        Set(3, 3, f * IpOverA); Set(3, 9, -f * IpOverA); Set(9, 9, f * IpOverA);
+        // Bending about z (v, rz)
+        Set(1, 1, f * 6 / 5); Set(1, 5, f * L / 10); Set(1, 7, -f * 6 / 5); Set(1, 11, f * L / 10);
+        Set(5, 5, f * 2 * L2 / 15); Set(5, 7, -f * L / 10); Set(5, 11, -f * L2 / 30);
+        Set(7, 7, f * 6 / 5); Set(7, 11, -f * L / 10);
+        Set(11, 11, f * 2 * L2 / 15);
+        // Bending about y (w, ry)
+        Set(2, 2, f * 6 / 5); Set(2, 4, -f * L / 10); Set(2, 8, -f * 6 / 5); Set(2, 10, -f * L / 10);
+        Set(4, 4, f * 2 * L2 / 15); Set(4, 8, f * L / 10); Set(4, 10, -f * L2 / 30);
+        Set(8, 8, f * 6 / 5); Set(8, 10, f * L / 10);
+        Set(10, 10, f * 2 * L2 / 15);
+        return k;
+    }
 
     /// <summary>
     /// Standard 12x12 Euler-Bernoulli beam stiffness in local coordinates.
