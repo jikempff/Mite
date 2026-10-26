@@ -12,6 +12,8 @@
 //     a round bar sweeps as a tube and gets its own utilization.
 //  5. Layouts: the border web ends every curve on the border (no T-junctions),
 //     the fill still traces, the legend explains the viewport markers.
+//  5b. Chebyshev angle map (node angles, cell integrals, coloured cells, lock
+//     angle recolours in place) and isocurve labels (one per curve, its level).
 //
 // Usage (needs a published site and a static server):
 //   dotnet publish src/Mite.Web -c Release -o /tmp/miteweb -p:RunAOTCompilation=false
@@ -82,6 +84,47 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   check(fill.layout === 0 && fill.n > 20, `evenly spaced fill traces (${fill.n} curves)`);
   check(/seed/.test(fill.legend), 'marker legend names the seed');
   await page.click("#layouts [data-layout='3']"); await idle(180000);
+
+  // 5b. the Chebyshev angle map: every node carries its shear angle, every
+  //     cell its Hazzidakis integral; the cells are drawn coloured, the lock
+  //     angle recolours without a new trace; isocurves carry their level and
+  //     one label each
+  await page.click('#nets [data-net=chebyshev]'); await idle(180000);
+  const cheb = await page.evaluate(() => {
+    const c = window.__mite.netData?.chebyshev, cells = window.__mite.viewer.overlayGroup.children.find((o) => o.userData.tag === 'cells');
+    return c && { nodes: c.nodeCount, cells: c.cellCount, angles: c.angles.length, finite: c.angles.filter((w) => w > 0 && w < 180).length, min: c.minAngle, max: c.maxAngle, total: c.totalCurvature,
+      k: c.cellCurvature.length, drawn: cells ? cells.geometry.index.count : 0, legend: document.getElementById('clegend').classList.contains('hidden') ? '' : document.getElementById('clegend').textContent, stats: document.getElementById('net-stats').textContent };
+  });
+  check(cheb && cheb.nodes > 20 && cheb.cells > 10 && cheb.angles === cheb.nodes && cheb.k === cheb.cells, `Chebyshev net carries ${cheb?.nodes} node angles and ${cheb?.cells} cell integrals`);
+  // the default net on the catenoid (8 nodes per side) runs into the catenoid's curvature and locks at its far corners:
+  // the angles must stay strictly inside (0°, 180°) and the locked count must be exactly the nodes outside the lock band
+  check(cheb && cheb.finite >= cheb.nodes - 4 && cheb.min > 0 && cheb.max < 180 && cheb.min < 90 && cheb.max > 90, `shear angles ${cheb?.min.toFixed(1)}° … ${cheb?.max.toFixed(1)}° around the 90° seed`);
+  const lockCount = await page.evaluate(() => { const c = window.__mite.netData.chebyshev; return { outside: c.angles.filter((w) => w >= 0 && (w < 45 || w > 135)).length, stated: +(document.getElementById('net-stats').textContent.match(/(\d+) locked/) || [0, -1])[1] }; });
+  check(lockCount.outside === lockCount.stated, `locked count is the nodes outside 45° … 135° (${lockCount.stated})`);
+  check(cheb && cheb.total < 0 && Math.abs(cheb.total) < 2 * Math.PI, `the catenoid's cells read negative curvature (∬K dA = ${cheb?.total.toFixed(3)})`);
+  check(cheb && cheb.drawn === 6 * cheb.cells && /shear angle/.test(cheb.legend) && /Hazzidakis/.test(cheb.stats), `angle map drawn (${cheb?.drawn / 6} cells) with its legend`);
+  const before = await page.$eval('#net-stats', (e) => +(e.textContent.match(/(\d+) locked/) || [0, -1])[1]);
+  await page.$eval('#lockangle', (e) => { e.value = '80'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => ({ locked: +(document.getElementById('net-stats').textContent.match(/(\d+) locked/) || [0, -1])[1], legend: document.getElementById('clegend').textContent, busy: !document.getElementById('busy').classList.contains('hidden') }));
+  check(after.locked > before && after.locked >= 0 && /80°/.test(after.legend) && !after.busy, `lock angle 45° → 80° recolours in place: ${before} → ${after.locked} nodes locked`);
+  await page.$eval('#lockangle', (e) => { e.value = '45'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.uncheck('#anglemap'); await page.waitForTimeout(100);
+  check(await page.evaluate(() => !window.__mite.viewer.overlayGroup.children.some((o) => o.userData.tag === 'cells') && document.getElementById('clegend').classList.contains('hidden')), 'angle map off removes the cells and the legend');
+  await page.check('#anglemap');
+  await page.click('#nets [data-net=isocurves]'); await idle(180000);
+  const iso = await page.evaluate(() => {
+    const d = window.__mite.netData, labels = [...document.querySelectorAll('.labels .label')];
+    return { curves: d.countA, levels: d.curveLevels?.length, values: d.levelValues?.length, labels: labels.length, texts: labels.map((l) => +l.textContent),
+      onLevel: labels.every((l) => d.levelValues.some((v) => Math.abs(v - +l.textContent) <= 0.5 * Math.pow(10, -(l.textContent.split('.')[1] || '').length))) };
+  });
+  check(iso.levels === iso.curves && iso.values === 12 && iso.curves >= 12, `every isocurve carries its level (${iso.curves} curves, ${iso.values} levels)`);
+  check(iso.labels === Math.min(400, iso.curves) && iso.onLevel, `one label per isocurve showing its level (${iso.labels})`);
+  await page.uncheck('#isolabels'); await page.waitForTimeout(100);
+  check((await page.$$eval('.labels .label', (l) => l.length)) === 0, 'labels off removes them');
+  await page.check('#isolabels');
+  await page.click('#nets [data-net=asymptotic]'); await idle(180000);
+  check((await page.$$eval('.labels .label', (l) => l.length)) === 0, 'another net clears the labels');
 
   // 6. one section for every lath; the section choice reaches the kernel
   await page.check('#solid'); await idle(180000);

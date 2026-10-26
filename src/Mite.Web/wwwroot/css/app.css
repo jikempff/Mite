@@ -43,6 +43,9 @@ button, input, select { font: inherit; color: inherit; }
 .hud-bl { bottom: 10px; left: 14px; right: 14px; display: flex; flex-direction: column; gap: 6px; }
 .hint { color: var(--faint); }
 .legend { display: inline-flex; align-items: center; gap: 8px; pointer-events: none; }
+.labels { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.labels .label { position: absolute; left: 0; top: 0; transform: translate(-1000px, -1000px); font: 11px/1 var(--mono); color: var(--ink); background: color-mix(in srgb, var(--bg) 80%, transparent); border: 1px solid var(--line); border-radius: 3px; padding: 2px 4px; margin: -9px 0 0 6px; white-space: nowrap; }
+.labels .label.dim { opacity: 0.18; }
 .legend i { display: inline-block; width: 160px; height: 8px; border-radius: 3px; border: 1px solid var(--line); }
 .legend b { font-weight: 400; color: var(--ink); margin-left: 6px; }
 .hidden { display: none !important; }

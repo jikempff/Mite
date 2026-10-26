@@ -237,7 +237,38 @@ public class NetPayload
     /// <summary>Symmetric web only: the node diagonals of the geodesic candidate family and the web statistics.</summary>
     public double[][][] G { get; set; } = Array.Empty<double[][]>();
     public WebInfo? Web { get; set; }
+    /// <summary>Isocurves only: the level of every curve of A, in the order of A.</summary>
+    public double[] CurveLevels { get; set; } = Array.Empty<double>();
+    /// <summary>Isocurves only: the levels asked for, in the order the field was sliced.</summary>
+    public double[] LevelValues { get; set; } = Array.Empty<double>();
+    /// <summary>Chebyshev net only: nodes, shear angles and the Hazzidakis reading per cell.</summary>
+    public ChebyshevInfo? Chebyshev { get; set; }
     public long Ms { get; set; }
+}
+
+/// <summary>
+/// The angle map of a Chebyshev net: one angle ω per node (degrees, 90 = square
+/// cell; Garg et al. 2014 lock the wire mesh outside [45°, 135°]) and, per cell,
+/// Hazzidakis' integral ∬K dA = 2π − Σ corner angles with the cell's chord area.
+/// </summary>
+public class ChebyshevInfo
+{
+    /// <summary>Flat xyz of the valid nodes.</summary>
+    public double[] Nodes { get; set; } = Array.Empty<double>();
+    /// <summary>Shear angle per node (degrees; NaN is sent as −1 where undefined).</summary>
+    public double[] Angles { get; set; } = Array.Empty<double>();
+    /// <summary>Four node indices per complete cell, counter-clockwise in (u, v).</summary>
+    public int[] Quads { get; set; } = Array.Empty<int>();
+    /// <summary>Hazzidakis integral ∬K dA per cell (steradians).</summary>
+    public double[] CellCurvature { get; set; } = Array.Empty<double>();
+    /// <summary>Chord area per cell.</summary>
+    public double[] CellArea { get; set; } = Array.Empty<double>();
+    public double MinAngle { get; set; }
+    public double MaxAngle { get; set; }
+    /// <summary>Σ of the cell integrals — the total curvature the net covers (2π is the existence limit).</summary>
+    public double TotalCurvature { get; set; }
+    public int NodeCount { get; set; }
+    public int CellCount { get; set; }
 }
 
 public class LathPayload
@@ -332,6 +363,7 @@ public class KitPayload
 [JsonSerializable(typeof(LathPayload))]
 [JsonSerializable(typeof(FramePayload))]
 [JsonSerializable(typeof(WebInfo))]
+[JsonSerializable(typeof(ChebyshevInfo))]
 [JsonSerializable(typeof(AagOptions))]
 [JsonSerializable(typeof(AagPayload))]
 [JsonSerializable(typeof(LathAllPayload))]
@@ -479,6 +511,9 @@ public static partial class MiteApi
         double resolvedSpacing = 0, resolvedStep = 0;
         bool crossFamilies = true;
         WebInfo? webInfo = null;
+        ChebyshevInfo? chebInfo = null;
+        var curveLevels = new List<double>();
+        double[] levelValues = Array.Empty<double>();
         var diagonals = new List<Vec3d[]>();
         _web = null;
 
@@ -595,6 +630,7 @@ public static partial class MiteApi
                 }
                 resolvedSpacing = L;
                 if (valid < nu * nv) warnings.Add($"{nu * nv - valid} of {nu * nv} nodes left the mesh (ragged border).");
+                chebInfo = ChebyshevAngleMap(r);
                 break;
             }
             case "isocurves":
@@ -613,7 +649,8 @@ public static partial class MiteApi
                 var levels = new List<double>();
                 for (int i = 1; i <= n; i++) levels.Add(lo + (hi - lo) * i / (n + 1));
                 var iso = MeshIsocurves.Compute(_mesh, values, levels);
-                foreach (var lvl in iso) foreach (var c in lvl) a.Add(c);
+                for (int k = 0; k < iso.Count; k++) foreach (var c in iso[k]) { a.Add(c); curveLevels.Add(levels[k]); }
+                levelValues = levels.ToArray();
                 crossFamilies = false;
                 break;
             }
@@ -629,7 +666,8 @@ public static partial class MiteApi
             Kind = kind, A = ToJagged(a), B = ToJagged(b), CountA = a.Count, CountB = b.Count,
             MinLength = all.Count > 0 ? all.Min(ArcLength) : 0, MaxLength = all.Count > 0 ? all.Max(ArcLength) : 0,
             ResolvedSpacing = resolvedSpacing, ResolvedStep = resolvedStep,
-            Warnings = warnings.ToArray(), G = ToJagged(diagonals), Web = webInfo
+            Warnings = warnings.ToArray(), G = ToJagged(diagonals), Web = webInfo,
+            Chebyshev = chebInfo, CurveLevels = curveLevels.ToArray(), LevelValues = levelValues
         };
         payload.Ends = EndStatistics(all, regionMask, out var endPts, out var endCls);
         if (webInfo != null)
@@ -667,6 +705,44 @@ public static partial class MiteApi
         }
         payload.Ms = sw.ElapsedMilliseconds;
         return JsonSerializer.Serialize(payload, MiteJson.Default.NetPayload);
+    }
+
+    /// <summary>Nodes, shear angles, cells and Hazzidakis integrals of a Chebyshev net for the angle map.</summary>
+    private static ChebyshevInfo ChebyshevAngleMap(ChebyshevNet.Result r)
+    {
+        int nu = r.Points.GetLength(0), nv = r.Points.GetLength(1);
+        var index = new int[nu, nv];
+        var nodes = new List<double>(); var angles = new List<double>();
+        var w = ChebyshevNet.ShearAngles(r);
+        double minA = double.MaxValue, maxA = double.MinValue;
+        for (int i = 0; i < nu; i++)
+            for (int j = 0; j < nv; j++)
+            {
+                index[i, j] = -1;
+                if (!r.Valid[i, j]) continue;
+                index[i, j] = nodes.Count / 3;
+                var p = r.Points[i, j]; nodes.Add(p.X); nodes.Add(p.Y); nodes.Add(p.Z);
+                double ang = w[i, j];
+                angles.Add(double.IsNaN(ang) ? -1 : ang);
+                if (!double.IsNaN(ang)) { minA = Math.Min(minA, ang); maxA = Math.Max(maxA, ang); }
+            }
+        var k = ChebyshevNet.CellCurvature(r);
+        var quads = new List<int>(); var cellK = new List<double>(); var cellA = new List<double>();
+        double total = 0;
+        for (int i = 0; i + 1 < nu; i++)
+            for (int j = 0; j + 1 < nv; j++)
+            {
+                if (double.IsNaN(k[i, j])) continue;
+                quads.Add(index[i, j]); quads.Add(index[i + 1, j]); quads.Add(index[i + 1, j + 1]); quads.Add(index[i, j + 1]);
+                cellK.Add(k[i, j]); cellA.Add(ChebyshevNet.CellArea(r, i, j)); total += k[i, j];
+            }
+        return new ChebyshevInfo
+        {
+            Nodes = nodes.ToArray(), Angles = angles.ToArray(), Quads = quads.ToArray(),
+            CellCurvature = cellK.ToArray(), CellArea = cellA.ToArray(),
+            MinAngle = angles.Count > 0 && minA <= maxA ? minA : 0, MaxAngle = angles.Count > 0 && minA <= maxA ? maxA : 0,
+            TotalCurvature = total, NodeCount = nodes.Count / 3, CellCount = cellK.Count
+        };
     }
 
     // ---- Lath --------------------------------------------------------------

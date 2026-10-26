@@ -166,8 +166,11 @@ internal static class Tests
             c =>
             {
                 var mesh = MeshOut(c, 3);
+                var angles = Numbers(c, 4); var cells = Numbers(c, 5);
                 return Expect(CurveCount(c, 1) >= 3 && CurveCount(c, 2) >= 3, "lath families produced")
-                    && Expect(mesh != null && mesh.Faces.Count > 10, $"net mesh has {mesh?.Faces.Count ?? 0} faces");
+                    && Expect(mesh != null && mesh.Faces.Count > 10, $"net mesh has {mesh?.Faces.Count ?? 0} faces")
+                    && Expect(angles.Count > 10 && angles.TrueForAll(a => double.IsNaN(a) || (a > 0 && a < 180)), $"{angles.Count} node angles")
+                    && Expect(cells.Count > 10 && cells.TrueForAll(k => k > 0), $"{cells.Count} cells read K > 0 on the sphere (Hazzidakis sum {cells.Sum():F3})");
             });
 
         TestComponent("Lath Analysis",

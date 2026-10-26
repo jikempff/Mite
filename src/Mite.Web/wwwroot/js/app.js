@@ -349,6 +349,7 @@ async function traceNet() {
   $('net-note').textContent = NET_NOTES[S.net];
   showComponent('gh-net', GH_NET[S.net]);
   $('famB-row').classList.toggle('hidden', ['geodesic', 'streamMax', 'streamMin', 'isocurves'].includes(S.net));
+  clearNetDecor();
   if (S.net === 'none') {
     v.clearCurves(); v.clearOverlay('ends'); S.netData = null;
     $('net-stats').textContent = ''; $('net-warn').classList.add('hidden'); $('hud-net').textContent = ''; $('quality').classList.add('hidden'); $('spacing-count').textContent = '';
@@ -369,10 +370,18 @@ async function traceNet() {
     drawNetCurves();
     if ($('crossings').checked && d.crossings) v.showPoints('crossings', d.crossings.points, v.ink(), 3.5); else v.clearOverlay('crossings');
     showEndMarkers();
+    showAngleMap(); showIsoLabels();
     const closed = S.stats.boundaryVertices === 0;
     let s = `A <b>${d.countA}</b>${d.countB ? ` · B <b>${d.countB}</b>` : ''} laths · length <b>${fmt(d.minLength, 2)} … ${fmt(d.maxLength, 2)}</b>` +
       (d.resolvedSpacing ? ` · spacing <b>${fmt(d.resolvedSpacing, 3)}</b> (${fmt(d.resolvedSpacing * toMetres(), 2)} m)` : '') + ` · ${d.ms} ms`;
     if (d.crossings) s += `\ncrossings <b>${d.crossings.count}</b> · angles <b>${fmt(d.crossings.minAngle, 1)}° … ${fmt(d.crossings.maxAngle, 1)}°</b> · T-junctions <b>${d.crossings.tJunctions}</b>`;
+    if (d.chebyshev) {
+      const c = d.chebyshev, lock = +$('lockangle').value;
+      const locked = lockedNodes(c, lock);
+      s += `\nshear angles <b>${fmt(c.minAngle, 1)}° … ${fmt(c.maxAngle, 1)}°</b> at ${c.nodeCount} nodes · <b>${locked}</b> locked (outside ${lock}° … ${180 - lock}°)` +
+        `\ncurvature read from the cells (Hazzidakis): ∬K dA = <b>${fmt(c.totalCurvature, 3)}</b> over ${c.cellCount} cells = ${fmt(100 * Math.abs(c.totalCurvature) / (2 * Math.PI), 1)} % of the 2π a single net can cover`;
+    }
+    if (d.curveLevels?.length) s += `\n${d.levelValues.length} levels <b>${fmt(d.levelValues[0], 3)} … ${fmt(d.levelValues[d.levelValues.length - 1], 3)}</b> · ${d.countA} curves`;
     if (d.web) {
       const w = d.web;
       const sym = w.rotational ? 'surface of revolution (rotational AAG web)' : w.symmetry > 1 ? `${w.symmetry}-fold — one sector traced, the rest rotated (nodes repeat within ${fmt(w.symmetryError * toMetres() * 1000, 1)} mm)` : 'none used';
@@ -395,6 +404,10 @@ async function traceNet() {
 
 function traceNetStatsOnly() {
   const d = S.netData; if (!d) return;
+  if (d.chebyshev) {
+    const lock = +$('lockangle').value, locked = lockedNodes(d.chebyshev, lock);
+    $('net-stats').innerHTML = $('net-stats').innerHTML.replace(/at (\d+) nodes · <b>\d+<\/b> locked \(outside \d+° … \d+°\)/, `at $1 nodes · <b>${locked}</b> locked (outside ${lock}° … ${180 - lock}°)`);
+  }
   if (S.lath && S.selected) analyseSelected();
 }
 
@@ -447,6 +460,62 @@ async function runAag() {
     updateRecipe();
   });
 }
+
+// ---------------------------------------------------------------------------
+// Chebyshev angle map and isocurve labels
+// ---------------------------------------------------------------------------
+
+function lockedNodes(c, lock) { let n = 0; for (const w of c.angles) if (w >= 0 && (w < lock || w > 180 - lock)) n++; return n; }
+
+/** Colour of a node angle: blue closing, white square, red opening, saturated at the lock angle, black beyond it. */
+function shearColor(w, lock) {
+  if (!(w >= 0)) return [0.6, 0.6, 0.6];
+  if (w < lock || w > 180 - lock) return [0.04, 0.04, 0.04];
+  const t = 0.5 + 0.5 * Math.max(-1, Math.min(1, (w - 90) / Math.max(1e-9, 90 - lock)));
+  // the diverging ramp of the colour maps: neon blue – white – neon red
+  const stops = [[0.00, [0.10, 0.12, 0.85]], [0.25, [0.45, 0.52, 1.00]], [0.50, [0.97, 0.97, 0.97]], [0.75, [1.00, 0.45, 0.55]], [1.00, [0.85, 0.05, 0.20]]];
+  for (let i = 1; i < stops.length; i++) if (t <= stops[i][0]) {
+    const [t0, c0] = stops[i - 1], [t1, c1] = stops[i], u = (t - t0) / (t1 - t0);
+    return [c0[0] + (c1[0] - c0[0]) * u, c0[1] + (c1[1] - c0[1]) * u, c0[2] + (c1[2] - c0[2]) * u];
+  }
+  return stops[stops.length - 1][1];
+}
+
+function showAngleMap() {
+  const v = S.viewer, c = S.netData?.chebyshev;
+  const on = !!c && S.net === 'chebyshev' && $('anglemap').checked;
+  $('clegend').classList.toggle('hidden', !on);
+  if (!on) { v.clearOverlay('cells'); return; }
+  const lock = +$('lockangle').value;
+  v.showCells('cells', c.nodes, c.quads, Array.from(c.angles, (w) => shearColor(w, lock)));
+  $('clegend-min').textContent = `${lock}°`; $('clegend-max').textContent = `${180 - lock}°`;
+  $('clegend-bar').style.background = legendGradient([[0, [0.10, 0.12, 0.85]], [0.25, [0.45, 0.52, 1.00]], [0.5, [0.97, 0.97, 0.97]], [0.75, [1.00, 0.45, 0.55]], [1, [0.85, 0.05, 0.20]]]);
+  const locked = lockedNodes(c, lock);
+  $('clegend-title').textContent = `shear angle · 90° = square cell · ${locked ? `${locked} nodes locked (black)` : 'none locked'}`;
+}
+
+/** One label per isocurve, at the point nearest its arc-length midpoint. */
+function showIsoLabels() {
+  const v = S.viewer, d = S.netData;
+  const on = !!d?.curveLevels?.length && S.net === 'isocurves' && $('isolabels').checked;
+  if (!on) { v.clearLabels('iso'); return; }
+  const items = [];
+  // enough decimals to tell neighbouring levels apart
+  const digits = Math.max(1, Math.min(5, 1 - Math.floor(Math.log10(Math.max(1e-12, Math.abs(d.levelValues[d.levelValues.length - 1] - d.levelValues[0]) / Math.max(1, d.levelValues.length))))));
+  d.a.forEach((pts, i) => {
+    if (pts.length < 2) return;
+    let total = 0; const acc = [0];
+    for (let k = 1; k < pts.length; k++) { total += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1], pts[k][2] - pts[k - 1][2]); acc.push(total); }
+    // walk along each curve by a golden-ratio fraction of its length so the labels of nested
+    // loops (which all start at the same seam) spread around instead of stacking
+    const target = total * ((0.5 + 0.618034 * i) % 1);
+    let k = 0; while (k + 1 < acc.length && acc[k + 1] < target) k++;
+    items.push({ p: pts[k], text: (+d.curveLevels[i]).toFixed(digits), level: d.curveLevels[i] });
+  });
+  v.showLabels('iso', items.slice(0, 400));
+}
+
+function clearNetDecor() { S.viewer.clearOverlay('cells'); S.viewer.clearLabels('iso'); $('clegend').classList.add('hidden'); }
 
 // The markers in the viewport, explained next to the numbers: only the
 // kinds that are actually there, plus the seed knob (which is always there
@@ -770,8 +839,8 @@ function updateRecipe() {
     const o = netOptions();
     const comp = { asymptotic: 'Asymptotic Net', conjugate: 'Conjugate Net', geodesic: 'Geodesic Net', geodesicBoth: 'Geodesic Net ×2', streamMax: 'Curvature Streamlines (MaxDir = True)', streamMin: 'Curvature Streamlines (MaxDir = False)', chebyshev: 'Chebyshev Net', isocurves: 'Mesh Isocurves' }[S.net];
     let p = `${comp}: `;
-    if (S.net === 'chebyshev') p += `L = ${fmt(o.edgeLength)}, Count = ${o.count}, Angle = ${o.angleDeg}°`;
-    else if (S.net === 'isocurves') p += `field ${o.field}, ${o.levels} levels`;
+    if (S.net === 'chebyshev') p += `L = ${fmt(o.edgeLength)}, Count = ${o.count}, Angle = ${o.angleDeg}° → Angles (colour by |An − 90|, lock at ${$('lockangle').value}°), Curvature (Kc, Hazzidakis per cell)`;
+    else if (S.net === 'isocurves') p += `field ${o.field}, ${o.levels} levels → Curves (one branch per level: Text Tag the branch's level)`;
     else if (o.layout === 3) p = `Asymptotic Web: Spacing = ${fmt(o.spacing)}, Symmetry = ${o.symmetry} (−1 detect), Seed = ${S.seed >= 0 ? S.seed : 'auto'}` + (S.aag ? ' → AAG Web (Iterations 16, Proximity 0.3)' : $('diagonals').checked ? ' → Diagonals (G)' : '');
     else p += `AutoSpace = True, Spacing = ${fmt(o.spacing)}, Layout = ${o.layout} (${["evenly spaced fill", "web from the border", "web from the seed cross"][o.layout]}), Continuous = ${o.continuous}, Step = 0 (auto)`;
     if (S.net === 'asymptotic' && o.layout !== 3) p += `, MinAngle = ${o.minAngle}`;
@@ -888,8 +957,12 @@ async function main() {
   });
   document.querySelectorAll('#net-params input[type=range]').forEach((inp) => {
     inp.addEventListener('input', () => { if (inp.nextElementSibling?.tagName === 'OUTPUT' && !inp.nextElementSibling.id) inp.nextElementSibling.value = inp.value; updateSpacingReadout(); });
-    inp.addEventListener('change', () => { if (S.net !== 'none') traceNet(); });
+    if (inp.id !== 'lockangle') inp.addEventListener('change', () => { if (S.net !== 'none') traceNet(); });
   });
+  // the angle map and the labels redraw from the data in hand: no new trace
+  $('lockangle').addEventListener('input', () => { showAngleMap(); if (S.netData?.chebyshev) traceNetStatsOnly(); });
+  $('anglemap').addEventListener('change', showAngleMap);
+  $('isolabels').addEventListener('change', showIsoLabels);
   document.querySelectorAll('.presets [data-sp]').forEach((b) => b.addEventListener('click', () => { $('spacing').value = b.dataset.sp; updateSpacingReadout(); if (S.net !== 'none') traceNet(); }));
   $('isofield').addEventListener('change', () => { if (S.net === 'isocurves') traceNet(); });
   for (const id of ['continuous', 'jacobi']) $(id).addEventListener('change', () => { if (S.net !== 'none') traceNet(); });

@@ -42,6 +42,7 @@ public class ChebyshevNetComponent : MiteComponent
         pManager.AddCurveParameter("VCurves", "Cv", "Laths of the second family", GH_ParamAccess.list);
         pManager.AddMeshParameter("NetMesh", "N", "Quad mesh over the valid net cells", GH_ParamAccess.item);
         pManager.AddNumberParameter("Angles", "An", "Shear angle between the families at each node (degrees); locking occurs near 0 / 180", GH_ParamAccess.tree);
+        pManager.AddNumberParameter("Curvature", "Kc", "Hazzidakis integral of the Gaussian curvature over each cell, 2π − Σ corner angles (one branch per row of cells; divide by the cell area for K)", GH_ParamAccess.tree);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -115,7 +116,7 @@ public class ChebyshevNetComponent : MiteComponent
             {
                 if (!net.Valid[i, j]) continue;
                 pointTree.Add(MeshConvert.ToRhinoPoint(net.Points[i, j]), path);
-                angleTree.Add(ShearAngle(net, i, j), path);
+                angleTree.Add(ChebyshevNet.ShearAngle(net, i, j), path);
                 validCount++;
             }
         }
@@ -129,21 +130,16 @@ public class ChebyshevNetComponent : MiteComponent
         DA.SetDataList(2, ExtractCurves(net, alongU: false));
         DA.SetData(3, BuildNetMesh(net));
         DA.SetDataTree(4, angleTree);
-    }
 
-    /// <summary>Angle (degrees) between the two lath directions at a node, from its valid neighbors.</summary>
-    private static double ShearAngle(ChebyshevNet.Result net, int i, int j)
-    {
-        int nu = net.Points.GetLength(0), nv = net.Points.GetLength(1);
-        Vec3d p = net.Points[i, j];
-        Vec3d? du = null, dv = null;
-        if (i + 1 < nu && net.Valid[i + 1, j]) du = net.Points[i + 1, j] - p;
-        else if (i > 0 && net.Valid[i - 1, j]) du = p - net.Points[i - 1, j];
-        if (j + 1 < nv && net.Valid[i, j + 1]) dv = net.Points[i, j + 1] - p;
-        else if (j > 0 && net.Valid[i, j - 1]) dv = p - net.Points[i, j - 1];
-        if (du == null || dv == null) return double.NaN;
-        double d = Vec3d.Dot(du.Value.Normalized(), dv.Value.Normalized());
-        return Math.Acos(Math.Max(-1.0, Math.Min(1.0, d))) * 180.0 / Math.PI;
+        var cellK = ChebyshevNet.CellCurvature(net);
+        var cellTree = new DataTree<double>();
+        for (int i = 0; i + 1 < nu; i++)
+        {
+            var path = BranchPath(DA, i);
+            for (int j = 0; j + 1 < nv; j++)
+                if (!double.IsNaN(cellK[i, j])) cellTree.Add(cellK[i, j], path);
+        }
+        DA.SetDataTree(5, cellTree);
     }
 
     private static List<Curve> ExtractCurves(ChebyshevNet.Result net, bool alongU)

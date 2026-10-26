@@ -39,6 +39,7 @@
     <div class="hud hud-bl">
       <div id="legend" class="legend hidden"><span id="legend-min"></span><i id="legend-bar"></i><span id="legend-max"></span><b id="legend-title"></b></div>
       <div id="ulegend" class="legend hidden"><span>0</span><i id="ulegend-bar"></i><span>1.3+</span><b id="ulegend-title">lath utilization · 1 = limit</b></div>
+      <div id="clegend" class="legend hidden"><span id="clegend-min">45°</span><i id="clegend-bar"></i><span id="clegend-max">135°</span><b id="clegend-title">shear angle · 90° = square cell · black = locked</b></div>
       <div class="hint">drag orbit · right-drag pan · scroll zoom · hover / click a curve · shift-click the surface to move the seed · drag the orange knob to turn the seed direction</div>
     </div>
     <div class="hud hud-tr" id="hud-net"></div>
@@ -113,6 +114,10 @@
         <div class="row slider" data-for="chebyshev"><label for="edge">edge length</label><input id="edge" type="range" min="2" max="20" step="0.5" value="6"><output for="edge" id="edge-out">–</output></div>
         <div class="row slider" data-for="chebyshev"><label for="count">nodes per side</label><input id="count" type="range" min="2" max="24" step="1" value="8"><output for="count">8</output></div>
         <div class="row slider" data-for="geodesicBoth chebyshev"><label for="famangle">family angle <span class="unit">°</span></label><input id="famangle" type="range" min="30" max="150" step="5" value="90"><output for="famangle">90</output></div>
+        <div class="row toggles" data-for="chebyshev">
+          <label class="chk" title="Every cell coloured by the angle between the two laths at its nodes: blue where the net closes (below 90°), red where it opens (above), black past the lock angle. Grasshopper: the Angles output of Chebyshev Net"><input id="anglemap" type="checkbox" checked> angle map</label>
+        </div>
+        <div class="row slider" data-for="chebyshev"><label for="lockangle" title="The shear the material can take: Garg et al. 2014 measured an exponential rise of the shearing force of wire mesh from 45° (cells outside 45° … 135°); Sageman-Furnas et al. 2019 use 30°">lock angle <span class="unit">°</span></label><input id="lockangle" type="range" min="20" max="80" step="5" value="45"><output for="lockangle">45</output></div>
         <div class="row" data-for="asymptotic" id="sym-row"><label for="symmetry">symmetry</label><select id="symmetry"><option value="-1">detect</option><option value="0">none</option><option value="2">2-fold</option><option value="3">3-fold</option><option value="4">4-fold</option><option value="6">6-fold</option></select></div>
         <div class="row toggles" data-for="asymptotic" id="aag-row">
           <label class="chk" title="The quad diagonals of the web that come closest to geodesics: a third family of flat slats (Schling, Wang, Hoyer & Pottmann 2022)"><input id="diagonals" type="checkbox"> <i class="sw swG"></i> geodesic diagonals (AAG)</label>
@@ -121,7 +126,8 @@
         <p id="aag-stats" class="stats hidden"></p>
         <div class="row slider" data-for="asymptotic"><label for="minangle">min crossing <span class="unit">°</span></label><input id="minangle" type="range" min="0" max="45" step="1" value="15"><output for="minangle">15</output></div>
         <div class="row slider" data-for="isocurves"><label for="levels">levels</label><input id="levels" type="range" min="3" max="40" step="1" value="12"><output for="levels">12</output></div>
-        <div class="row" data-for="isocurves"><label for="isofield">field</label><select id="isofield"><option value="K">Gaussian K</option><option value="H">Mean H</option><option value="k1">k1</option><option value="k2">k2</option><option value="z">height z</option></select></div>
+        <div class="row" data-for="isocurves"><label for="isofield">field</label><select id="isofield"><option value="K">Gaussian K</option><option value="H">Mean H</option><option value="k1">k1</option><option value="k2">k2</option><option value="z">height z</option></select>
+          <label class="chk" title="The level value on every curve, at its midpoint; faded where the surface hides it. Grasshopper: one branch per level — Text Tag the branch index"><input id="isolabels" type="checkbox" checked> labels</label></div>
         <div class="row toggles" data-for="asymptotic conjugate geodesic geodesicBoth streamMax streamMin">
           <label class="chk" id="continuous-row"><input id="continuous" type="checkbox" checked> continuous <span class="unit">fill: run to the border</span></label>
           <label class="chk"><input id="crossings" type="checkbox"> crossing dots</label>

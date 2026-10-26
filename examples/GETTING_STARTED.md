@@ -91,7 +91,14 @@ curve shortening, kept for comparison.
 
 **Chebyshev Net**: seed vertex + direction + `L` (lath joint spacing, try mesh
 size / 12). Outputs both lath families and a quad net mesh whose edges all have
-length `L` — the flat-lattice kinematics of an elastic gridshell.
+length `L` — the flat-lattice kinematics of an elastic gridshell. `An` is the
+angle between the two laths at every node (90° = square cell): colour the
+nodes by `|An − 90|` and watch for nodes outside 45° … 135°, where wire mesh
+locks (Garg et al. 2014) — the web app's *angle map* does exactly this, with a
+lock-angle slider. `Kc` is the Gaussian curvature each cell covers, read from
+the net's own angles (Hazzidakis: ∬K dA = 2π − Σ corner angles): its sum tells
+how much of the 2π a single net can carry the patch has used. In the app,
+**Isocurves** now label every curve with its level.
 
 ### Layout: web or fill
 

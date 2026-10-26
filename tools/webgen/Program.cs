@@ -135,7 +135,35 @@ var sw = Stopwatch.StartNew();
     scenes["cheb"] = new { wire = SphereWire(8), u = u.ToArray(), v = v.ToArray() };
     var shear = new List<double>();
     for (int i = 0; i + 1 < nu; i++) for (int j = 0; j + 1 < nv; j++) if (cheb.Valid[i, j] && cheb.Valid[i + 1, j] && cheb.Valid[i, j + 1]) { var e1 = (cheb.Points[i + 1, j] - cheb.Points[i, j]).Normalized(); var e2 = (cheb.Points[i, j + 1] - cheb.Points[i, j]).Normalized(); shear.Add(Math.Acos(Math.Abs(Vec3d.Dot(e1, e2))) * 180 / Math.PI); }
-    numbers["cheb"] = new { nodes = u.Sum(l => l.Length), valid = u.Sum(l => l.Length), total = nu * nv, maxEdgeErr = R3(edgeErr.Max() * 100), meanEdgeErr = R3(edgeErr.Average() * 100), minAngle = R3(shear.Min()), maxAngle = R3(shear.Max()) };
+    // the angle map: node angles ω by central differences, Hazzidakis' integral per cell
+    // ∬K dA = ω(i+1,j) + ω(i,j+1) − ω(i,j) − ω(i+1,j+1) against the spherical area of the cell (K = 1)
+    var w = ChebyshevNet.ShearAngles(cheb); var cellK = ChebyshevNet.CellCurvature(cheb);
+    double SphTri(Vec3d p, Vec3d q, Vec3d r) { p = p.Normalized(); q = q.Normalized(); r = r.Normalized(); return 2 * Math.Atan2(Math.Abs(Vec3d.Dot(p, Vec3d.Cross(q, r))), 1 + Vec3d.Dot(p, q) + Vec3d.Dot(q, r) + Vec3d.Dot(r, p)); }
+    double sumH = 0, sumA = 0; var cellErr = new List<double>();
+    for (int i = 0; i + 1 < nu; i++) for (int j = 0; j + 1 < nv; j++)
+    {
+        if (double.IsNaN(cellK[i, j])) continue;
+        Vec3d p0 = cheb.Points[i, j], p1 = cheb.Points[i + 1, j], p2 = cheb.Points[i + 1, j + 1], p3 = cheb.Points[i, j + 1];
+        double area = 0.5 * (SphTri(p0, p1, p2) + SphTri(p0, p2, p3) + SphTri(p1, p2, p3) + SphTri(p1, p3, p0));
+        sumH += cellK[i, j]; sumA += area; cellErr.Add(Math.Abs(cellK[i, j] - area) / area);
+    }
+    cellErr.Sort();
+    var nodeAngles = w.Cast<double>().Where(x => !double.IsNaN(x)).ToList();
+    // the same construction where the truth is exact: a flat lattice at 60° and the unrolled square net of a cylinder
+    var plane = TestMeshes.CreateQuadGrid(20, 20, 0.5).ToTriangulated();
+    var flat = ChebyshevNet.Compute(plane, 10 * 21 + 10, new Vec3d(1, 0, 0), new ChebyshevNet.Options { EdgeLength = 0.4, CountU = 5, CountV = 5, Angle = Math.PI / 3 });
+    var flatW = ChebyshevNet.ShearAngles(flat).Cast<double>().Where(x => !double.IsNaN(x)).ToList();
+    var flatK = ChebyshevNet.CellCurvature(flat).Cast<double>().Where(x => !double.IsNaN(x)).ToList();
+    var cyl = TestMeshes.CreateCylinder(1.0, 4.0, 64, 32);
+    int cylSeed = 0; { double bd = double.MaxValue; for (int k = 0; k < cyl.VertexCount; k++) { double dd = (cyl.Vertices[k] - new Vec3d(1, 0, 0)).LengthSquared; if (dd < bd) { bd = dd; cylSeed = k; } } }
+    var cylNet = ChebyshevNet.Compute(cyl, cylSeed, new Vec3d(0, 0, 1), new ChebyshevNet.Options { EdgeLength = 0.3, CountU = 4, CountV = 4 });
+    var cylW = ChebyshevNet.ShearAngles(cylNet).Cast<double>().Where(x => !double.IsNaN(x)).ToList();
+    var cylK = ChebyshevNet.CellCurvature(cylNet).Cast<double>().Where(x => !double.IsNaN(x)).ToList();
+    numbers["cheb"] = new { nodes = u.Sum(l => l.Length), valid = u.Sum(l => l.Length), total = nu * nv, maxEdgeErr = R3(edgeErr.Max() * 100), meanEdgeErr = R3(edgeErr.Average() * 100), minAngle = R3(shear.Min()), maxAngle = R3(shear.Max()),
+        nodeMin = R3(nodeAngles.Min()), nodeMax = R3(nodeAngles.Max()), locked45 = ChebyshevNet.CountLocked(cheb, 45), locked30 = ChebyshevNet.CountLocked(cheb, 30),
+        hazzidakis = R3(sumH), sphericalArea = R3(sumA), cells = cellErr.Count, cellMedianErr = R3(100 * cellErr[cellErr.Count / 2]), cellWorstErr = R3(100 * cellErr[cellErr.Count - 1]),
+        flatAngleErr = flatW.Max(x => Math.Abs(x - 60)), flatIntegral = flatK.Max(Math.Abs), flatNodes = flatW.Count,
+        cylAngleErr = cylW.Max(x => Math.Abs(x - 90)), cylIntegral = cylK.Max(Math.Abs), cylCells = cylK.Count };
 }
 
 // ---------- Geodesic Path: exact geodesics by edge flips (FlipOut) on a polyhedral cone and a saddle vertex ----------
