@@ -53,6 +53,7 @@ public class ChebyshevNetComponent : MiteComponent
         pManager.AddTextParameter("Report", "R", // 6
             "Nodes placed, largest edge-length error, shear-angle range, nodes refused by MinAngle (locked) and compass steps that left the mesh",
             GH_ParamAccess.item);
+        pManager.AddNumberParameter("Curvature", "Kc", "Hazzidakis integral of the Gaussian curvature over each cell, 2π − Σ corner angles (one branch per row of cells; divide by the cell area for K)", GH_ParamAccess.tree);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -186,19 +187,15 @@ public class ChebyshevNetComponent : MiteComponent
         return runs;
     }
 
-    /// <summary>Angle (degrees) between the two lath directions at a node, from its valid neighbors.</summary>
-    private static double ShearAngle(ChebyshevNet.Result net, int i, int j)
-    {
-        int nu = net.Points.GetLength(0), nv = net.Points.GetLength(1);
-        Vec3d p = net.Points[i, j];
-        Vec3d? du = null, dv = null;
-        if (i + 1 < nu && net.Valid[i + 1, j]) du = net.Points[i + 1, j] - p;
-        else if (i > 0 && net.Valid[i - 1, j]) du = p - net.Points[i - 1, j];
-        if (j + 1 < nv && net.Valid[i, j + 1]) dv = net.Points[i, j + 1] - p;
-        else if (j > 0 && net.Valid[i, j - 1]) dv = p - net.Points[i, j - 1];
-        if (du == null || dv == null) return double.NaN;
-        double d = Vec3d.Dot(du.Value.Normalized(), dv.Value.Normalized());
-        return Math.Acos(Math.Max(-1.0, Math.Min(1.0, d))) * 180.0 / Math.PI;
+        var cellK = ChebyshevNet.CellCurvature(net);
+        var cellTree = new DataTree<double>();
+        for (int i = 0; i + 1 < nu; i++)
+        {
+            var path = BranchPath(DA, i);
+            for (int j = 0; j + 1 < nv; j++)
+                if (!double.IsNaN(cellK[i, j])) cellTree.Add(cellK[i, j], path);
+        }
+        DA.SetDataTree(7, cellTree);
     }
 
     private static List<Curve> ExtractCurves(ChebyshevNet.Result net, bool alongU)

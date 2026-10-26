@@ -223,6 +223,7 @@ internal static class Tests
             c =>
             {
                 var mesh = MeshOut(c, 3);
+                var angles = Numbers(c, 4); var cells = Numbers(c, 5);
                 return Expect(CurveCount(c, 1) >= 3 && CurveCount(c, 2) >= 3, "lath families produced")
                     && Expect(mesh != null && mesh.Faces.Count > 10, $"net mesh has {mesh?.Faces.Count ?? 0} faces")
                     && Expect(Texts(c, 5).FirstOrDefault()?.Contains("edge-length error") == true, "report text");
@@ -242,6 +243,8 @@ internal static class Tests
                 return Expect(angles.Count > 50 && angles.All(a => a >= 30 - 1e-6 && a <= 150 + 1e-6),
                         $"all {angles.Count} angles within [30°, 150°], min {(angles.Count > 0 ? angles.Min() : 0):F1}")
                     && Expect(!report.Contains("locked by MinAngle 0;"), $"locked nodes reported: {report}");
+                    && Expect(angles.Count > 10 && angles.TrueForAll(a => double.IsNaN(a) || (a > 0 && a < 180)), $"{angles.Count} node angles")
+                    && Expect(cells.Count > 10 && cells.TrueForAll(k => k > 0), $"{cells.Count} cells read K > 0 on the sphere (Hazzidakis sum {cells.Sum():F3})");
             });
 
         TestComponent("Lath Analysis",

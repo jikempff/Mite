@@ -647,6 +647,41 @@ remains the self-test review page.
       Open: the Chebyshev angle map (colour the Chebyshev nodes by shear
       angle with the Hazzidakis check 2π − Σα = ∫∫K per quad; the 10-19
       compass bundle's `Report` carries the angles) and isocurve labels.
+- [ ] App: lath segmentation, joints and nesting sheet (material %).
+- [ ] App: planarization (done in the unmerged 2026-10-22 bundle: panels /
+      planarity on Net Topology, the app's *panels · planarity* block).
+- [x] App: Chebyshev angle map and isocurve labels — 2026-10-26 (session 1,
+      C). Cells coloured by the node angle (blue closing, red opening, black
+      past the lock angle, 45° default after Garg et al. 2014, Sageman-Furnas
+      et al. 2019 use 30°), legend, locked count, Hazzidakis total against
+      2π; the lock angle recolours in place. One label per isocurve at a
+      golden-ratio fraction of its length, faded behind the surface (ray
+      test every 150 ms). Core: `ChebyshevNet.ShearAngle(s)` (central
+      differences; third-order one-sided on the rim), `CellCurvature`
+      (Hazzidakis ω(i+1,j) + ω(i,j+1) − ω(i,j) − ω(i+1,j+1)), `CellArea`,
+      `CountLocked`; Grasshopper `Curvature` (`Kc`) output appended.
+      Findings: (1) the corner angles of the chord polygon do not work for
+      Hazzidakis — their one-sided O(L) errors are as large as K·L² (the
+      sphere read 12 % of its area); the alternating node-angle form with
+      central differences converges, and the rim needs third-order one-sided
+      stencils (second order left −14 … −40 % on the saddle's rim cells,
+      third order −9 % at L = 0.15, −3.5 % at 0.075). (2) The axis geodesics
+      were resampled by arc length while every interior edge is a chord of
+      length L: the axis chords were short by L³κ²/24 and the first interior
+      nodes read a 0.42° shear on a unit cylinder that no mesh refinement
+      removed. Resampled at chord length the cylinder's net is the exact
+      square lattice (90° ± 2e-13, ∬K dA ≤ 2e-15) and the sphere's cell
+      error halved (1.58 → 0.55 % median). (3) The default app net on the
+      catenoid (8 nodes per side) covers ∬K dA = −5.9 of the −2π a single
+      net can carry and locks 56 of 153 nodes at 45°: the catenoid needs a
+      smaller patch or several nets (Masson's singularities). (4) The nodes
+      sit on the facets: with the net edge L only 3 mesh edges the
+      Hazzidakis reading carries facet noise e²/(8L) in the angles (24 × 48
+      sphere 3.4 % median cell error, 96 × 192 0.5 %). Follow-ups: a Lock
+      input on the Grasshopper component (mode-menu catalogue) and a
+      coloured `NetMesh`; the 10-19b bundle's `MinAngle` stop uses its own
+      shear angle — replace it by `ShearAngle` when merging; Chebyshev
+      nets with singularities (Masson 2017) where the 2π budget is exceeded.
 - [x] App: catalogue extended with n-fold Enneper, the bilinear ruled patch,
       Schwarz D and gyroid (nodal form → marching tetrahedra → relaxation);
       Lath block section choice (rectangle / round); favicon, touch icon and
@@ -1243,6 +1278,18 @@ remains the self-test review page.
       net converges to it only as L → 0); a shear-angle colour map on the
       net mesh once the custom previews (B) land; the AGH hybrid needs the
       geodesic family wrapped through the compass cells (D above).
+      Partly done 2026-10-26 (C item above): shear-angle bounds (Garg's
+      γ_max = π/4 from Instron tests, Sageman-Furnas' ζ = 30°), Hazzidakis'
+      formula ∬K dA = 2π − Σ α_i as the per-cell curvature reading, the 2π
+      existence bound (Burago, Ivanov & Malev 2007: ω⁺, ω⁻ < 2π, a quadrant
+      between orthogonal geodesics needs each < π/2; Masson & Monasse 2017),
+      the chord-length axis fix. Open: Masson's nets with conical
+      singularities past the 2π budget; the compass method's own limits
+      (10-19b bundle: MinAngle stop, locking report); elastic rigidity
+      (Baek & Reis). Read: Garg et al. 2014 (full text, §3–5), Sageman-Furnas,
+      Chern, Ben-Chen & Vaxman 2019 (full text), Burago, Ivanov & Malev 2007
+      (arXiv math/0506580, theorems 1–3); Masson 2017 and Douthe et al. 2006
+      only through secondary sources (HAL blocks automated access).
 - [ ] Form finding: Schek 1974 (Force density method); Barnes 1999
 - [x] Form finding: Schek 1974 (Force density method); Barnes 1999
       (Form finding and analysis of tension structures by dynamic
@@ -2091,6 +2138,11 @@ Open
       and geodesic laths that end straight on their neighbours instead of
       being bent onto them (Pirazzi & Weinand 2006, Pottmann et al. 2010);
       bench `saddle · hole` / `flat annulus` shapes, 79 self-tests.
+- [x] 2026-10-26 (session 1, C/D): Chebyshev angle map and isocurve labels
+      in the web app; `ShearAngle`, Hazzidakis `CellCurvature`, `CountLocked`
+      in the core, `Curvature` output on Chebyshev Net; the chord-length axis
+      fix; 8 exact tests (plane, sphere, cylinder, saddle with convergence),
+      3 bench self-tests (78 PASS), 9 web-smoke checks (37 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench
