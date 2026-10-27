@@ -225,6 +225,35 @@ internal static class Tests
                     && Expect(Boxes(c, 3).Count == 2 && Boxes(c, 4).Count == 2, "notch solids for both families");
             });
 
+        TestComponent("Net Joints (hybrid: upright A, flat B threads through)",
+            new Mite.Grasshopper.Components.NetJointsComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-2, -2, 0);
+                plane.Vertices.Add(2, -2, 0);
+                plane.Vertices.Add(2, 2, 0);
+                plane.Vertices.Add(-2, 2, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                // A upright 0.1 × 0.012 on the surface, B flat 0.08 × 0.012 on it: every crossing is threaded
+                SetInputs(c, (0, plane), (3, 0.1), (4, 0.012), (5, true), (12, 0.08), (13, 0.012), (14, false));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1, -1, 0), new Rhino.Geometry.Point3d(1, 1, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0.5, -1, 0), new Rhino.Geometry.Point3d(0.5, 1, 0)));
+                SetCurveList(c, 2,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1, 0, 0), new Rhino.Geometry.Point3d(1, 0, 0)));
+            },
+            c =>
+            {
+                var pts = Points(c, 0);
+                var slots = Boxes(c, 3);
+                // the slot opens on A's bottom edge: from −0.005 (bleed) to 0.012 (B's thickness)
+                bool depthOk = slots.Count == 2 && slots.All(b => System.Math.Abs(b.Z.Length - 0.017) < 1e-9 && System.Math.Abs(b.Center.Z - 0.0035) < 1e-9);
+                return Expect(pts.Count == 2, $"2 crossings, got {pts.Count}")
+                    && Expect(slots.Count == 2 && depthOk, $"two slots through A, 0.017 deep (got {slots.Count}: {string.Join(", ", slots.Select(b => b.Z.Length.ToString("F4")))})")
+                    && Expect(Boxes(c, 4).Count == 0, $"the flat family B is not cut ({Boxes(c, 4).Count} boxes)");
+            });
+
         TestComponent("Mesh Cleanup",
             new Mite.Grasshopper.Components.MeshCleanupComponent(),
             c => SetInputs(c, (0, sphere.DuplicateMesh()), (1, 0.0), (2, true)),
@@ -297,6 +326,35 @@ internal static class Tests
                 double err = System.Math.Abs(maxDisp - expected) / expected;
                 return Expect(CurveCount(c, 0) == 3, "3 deformed laths")
                     && Expect(err < 0.05, $"deflection {maxDisp:F3} vs analytic {expected:F3} ({err:P1})");
+            });
+
+        TestComponent("Gridshell Analysis (hybrid: upright A, flat B with its own section)",
+            new Mite.Grasshopper.Components.GridshellAnalysisComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-2, -2, 0);
+                plane.Vertices.Add(2, -2, 0);
+                plane.Vertices.Add(2, 2, 0);
+                plane.Vertices.Add(-2, 2, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                // two independent cantilevers: A upright 0.1 × 0.02, B flat 0.1 × 0.02 → B deflects 25× more
+                SetInputs(c, (0, plane), (7, 0.1), (8, 0.02), (9, true), (22, 0.1), (23, 0.02), (24, false));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1.5, -1, 0), new Rhino.Geometry.Point3d(1.5, -1, 0)));
+                SetCurveList(c, 21,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1.5, 1, 0), new Rhino.Geometry.Point3d(1.5, 1, 0)));
+                SetPointList(c, 3, new Rhino.Geometry.Point3d(-1.5, -1, 0), new Rhino.Geometry.Point3d(-1.5, 1, 0));
+            },
+            c =>
+            {
+                var util = Numbers(c, 4); // per lath: A then B
+                double IA = 0.02 * System.Math.Pow(0.1, 3) / 12.0, IB = 0.1 * System.Math.Pow(0.02, 3) / 12.0;
+                // same moment, W = I / (half depth): utilization ratio B/A = (IA / 0.05) / (IB / 0.01) = 5
+                double ratio = util.Count == 2 && util[0] > 0 ? util[1] / util[0] : 0;
+                return Expect(CurveCount(c, 0) == 2, "2 deformed laths (A then B)")
+                    && Expect(System.Math.Abs(ratio - 5.0) < 0.05, $"flat B stressed 5× the upright A (got {ratio:F3})")
+                    && Expect(Texts(c, 10).FirstOrDefault()?.Contains("hybrid") == true, "report names the hybrid");
             });
 
         TestComponent("Lath Unroll",

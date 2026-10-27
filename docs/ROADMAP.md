@@ -39,7 +39,10 @@ where they overlap
    check slot play and the deployment against the model, hub plate design,
    supports, and the G laths in the kit.
 4. One lath section for every curve (done in the web app 1.3.0; per-family
-   profiles in Grasshopper still open).
+   profiles in Grasshopper: done 2026-10-27 for Net Joints and Gridshell
+   Analysis — family B's own profile, the threaded joint of the AGH hybrid,
+   one section per lath in the frame; the `Mite Net` wire of the 1.4.0 bundle
+   carries the per-family profile to Lath Sweep / Lath Analysis).
 5. Black, white and neon for everything visual (web app done 1.3.0; bench,
    icons and Food4Rhino images still in the old palette).
 
@@ -193,9 +196,59 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       them) and applies to every curve of the list. Volume = area × length
       to 1e-6 on straight laths, within 0.1% on the saddle lath in the
       bench. Open: Net Joints notches and Lath Unroll still assume the
-      rectangle (they use Width/Thickness as the bounding box); per-family
-      profiles (A upright, B flat — the AGH hybrid); a "Profile" value list
-      auto-attached to Shape.
+      rectangle (they use Width/Thickness as the bounding box); a "Profile"
+      value list auto-attached to Shape.
+- [x] Per-family profiles (A upright, B flat — the AGH hybrid) — 2026-10-27
+      (session 1, B / D). Net Joints: `WidthB`, `ThicknessB`, `UprightB`,
+      `OffsetB` appended (unset = as A); Gridshell Analysis: `CurvesB`,
+      `WidthB`, `ThicknessB`, `UprightB` appended. Core:
+      `JointGeometry.TryBuildNotches(… out JointKind)` — same orientation:
+      the lap pair as before; mixed: a slot through the upright lath over the
+      flat lath's footprint (box in the flat lath's frame, along it
+      t_up/sin θ + w_flat |cos θ|/sin θ, across w_flat, normal = the interval
+      [max(lows), min(highs)] the two sections share, 5 % bleed past the
+      lamella's edge where the slot opens on it, only the clearance where it
+      stays inside — a mortise), the flat lath uncut (`NotchSolid.IsEmpty`),
+      `JointKind.None` with nothing cut when the sections do not overlap;
+      `TryBuildLapNotches` keeps its signature and now returns the threaded
+      joint for mixed profiles (it used to return false, and Net Joints
+      counted the crossing as "nearly tangential").
+      `FrameAnalysis.Compute(…, IReadOnlyList<LathProfile> profiles, …)`:
+      A, Iy, Iz, J, Wy, Wz, twist length, the beam frame (upright: local y
+      along the normal) and ρgA self-weight per lath; the single-profile call
+      delegates and is bit-identical. Measured (`HybridNetTests`, 13): slot
+      boxes equal to the closed form at 90° and 60°, with and without
+      clearance (volume to 1e-15); mortise and top-edge cases; symmetric when
+      B is the upright one; a cross of an upright and a flat 100 × 20 beam
+      (pinned, P at the crossing) shares P as 48EI/L³ says (A 96.15 %) with
+      δ = P/(k_A + k_B) to 1e-9, no torsion, each lath's utilization equal to
+      M/W of its own section to 1e-9; self-weight per lath ρgAL⁴/8EI within
+      0.1 % of the lumped FE and equal to the single-lath run to 1e-12. The
+      catenoid AGH net (A = one asymptotic family, Spacing 0.3, 21 laths;
+      B = 16 meridian geodesics): interior max |kn(A)| 0.021 (mean 0.0065;
+      the rim samples reach 0.115 at the border exit, the known 1° turn),
+      max |kg(B)| 0.0061, |kn(B)| = 1/cosh² z within 0.039 (mean 0.759 vs
+      tanh 1 = 0.762), 108 of 108 crossings threaded with a 0.017 slot; the
+      hybrid frame (rim ends fixed, 1 kN/m) deflects 8.2 mm against 3.0 mm
+      with every lath upright, peaks A 1.63 / B 1.44. Literature: Schling,
+      Wang, Hoyer & Pottmann 2022 §2.2 (geodesic strips with osculating planes
+      normal to S, asymptotic strips tangent), §4.2 (timber AGG web: geodesic
+      slats interwoven between the top and bottom asymptotic lamellas, M8
+      bolts through the gaps, slats offset by half a grid), §1.2 (steel web
+      notched in a single layer); Schling, Wan, Wang & D'Acunto 2023 (AAG
+      2023, "flat geodesic planks interlaced at the midpoint of the
+      asymptotic beams", 60 m² demonstrator); Hoyer, D'Acunto & Schling 2024
+      (IASS 2024: 25 × 100 mm ash split to 12 × 100, geodesic slats slide
+      through the asymptotic grid during forming, blocks between the twin
+      lamellas); Wan, D'Acunto & Schling 2024 (Eng. Struct.: live load
+      7.0 kN/m², joint stiffness and supports govern — abstract only, the
+      paper is paywalled). Open: Lath Analysis has no family input (run it
+      twice, or through the Mite Net wire); a custom `Section` per family;
+      Lath Unroll / Flat Kit flat strips for the G laths (H); the AGH
+      tri-hex layout itself (geodesics at the mid points between nodes,
+      §4.2) is a web item, not a joint item; a twin-lamella option (two
+      upright strips with a gap = the slat thickness, blocks between them)
+      would be the literal timber detail.
 - [ ] A `Mite Net` data type (GH_Goo) carrying mesh + families + contacts +
       per-family profile, so Net Joints, Net Topology, Gridshell Analysis,
       Lath Segment, Lath Labels and Net Kinetics (E) take one wire.
@@ -323,10 +376,12 @@ remains the self-test review page.
       nonlinear FE calibrated on load tests, simulated live-load capacity
       7.0 kN/m²; joint rotational stiffness and supports govern performance.
       Mite work: a `Hybrid Net` mode (asymptotic family A + geodesic family
-      B started orthogonal to A at the seeds), per-family profiles (B above),
-      a joint rotational-stiffness parameter in Gridshell Analysis, and a
-      bench check that the AGH net on the catenoid has A upright / B flat
-      with kn(B) ≠ 0 and kg(B) = 0.
+      B started orthogonal to A at the seeds) — open; per-family profiles
+      (B above) — done 2026-10-27; a joint rotational-stiffness parameter in
+      Gridshell Analysis — done 1.3.0; the bench check that the AGH net on
+      the catenoid has A upright / B flat with kn(B) ≠ 0 and kg(B) = 0 —
+      done 2026-10-27 (Net Joints and Gridshell Analysis cards, catenoid ·
+      hybrid shape, four self-tests; the numbers are in B above).
 - [ ] Geodesic gridshells: Pirazzi & Weinand 2006 (Geodesic lines on
       free-form surfaces — optimized grids for timber rib shells); Pottmann
       et al. 2010 (Geodesic patterns) — geodesic strip patterns with
@@ -659,6 +714,11 @@ Open
 
 ## Done
 
+- [x] 2026-10-27 (session 1, B/D): per-family profiles for the
+      asymptotic–geodesic hybrid — family B's own profile on Net Joints with
+      threaded joints (a slot through the upright lamella, the flat slat
+      uncut) and on Gridshell Analysis with one section per lath; 13 exact
+      tests, the catenoid AGH net on the bench (79 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

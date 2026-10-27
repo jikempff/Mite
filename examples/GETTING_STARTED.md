@@ -137,6 +137,16 @@ N/m², `Lp`/`F` point loads. The `Rp` report must show the reactions equal to th
 load (equilibrium error ≈ 1e-12); laths that no support reaches are listed and
 left out instead of making the frame singular.
 
+Two families with different sections — the asymptotic–geodesic hybrid of
+Schling et al., upright asymptotic lamellas with flat geodesic slats threaded
+through them: wire the asymptotic family into `C` with `U` = True and the
+geodesic family into `Cb` with `Ub` = False (and `Wb` / `Tb` when the slats
+have another section). Every lath is then analysed with its own A, I and J, the
+outputs list family A's laths first and then B's, and the last line of `Rp`
+gives each family's peak utilization. The flat slats are the soft members: on
+the catenoid (asymptotic lamellas 100 × 12 upright, meridian slats 100 × 12
+flat, 1 kN/m) the net deflects 2.8× more than with every lath upright.
+
 Sanity values: on an asymptotic lath `Kn` should sit near 0 (it is measured from
 the surface normal, so mesh facets do not spike it) and `Tg` near √−K of the
 surface — on a hyperboloid throat with K = −1 an upright 100 × 10 mm timber lath
@@ -159,6 +169,18 @@ pair of notch solids per crossing (`Na` / `Nb`). Feed the swept laths and their
 notches into **Solid Difference** to cut half-lap joints (egg-crate slots when
 Upright is on); `L` sets the lap fraction (0.5 = half-lap), `Cl` the fit
 clearance.
+
+For the asymptotic–geodesic hybrid give family B its own profile: `Wb`, `Tb`,
+`Ub` = False and `Ob` (appended; unset means "as A"). An upright A crossed by a
+flat B gets a *threaded* joint instead of a lap: `Na` is a slot through the
+lamella — B's footprint, as deep as the normal interval the two sections share,
+open on the lamella's bottom edge when B lies on the surface (a 12 mm slat on a
+100 × 12 lamella: a 12 mm slot plus a 5 mm bleed), a mortise through the middle
+when A is centred (`Al` = 1) — and `Nb` is null, because the slat is not cut:
+it slides through the lamellas during the kinetic erection and is bolted
+(Schling et al. 2022 §4.2). `L` has no effect on threaded joints. If the two
+families do not overlap along the normal (B lifted above A), the component
+warns and cuts nothing: lower `Ob`, or connect them with a block and a bolt.
 
 ## 5. From model to workshop (5 minutes)
 

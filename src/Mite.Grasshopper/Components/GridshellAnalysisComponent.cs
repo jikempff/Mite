@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Grasshopper;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
@@ -18,7 +19,9 @@ public class GridshellAnalysisComponent : MiteComponent
             "scissor hinge or semi-rigid about the surface normal); supports are fixed or pinned points; " +
             "loads per metre of lath, self-weight, area load and point loads. Geometry is converted from the document units to " +
             "metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. " +
-            "A first-order sanity check, not a full FE package.",
+            "A first-order sanity check, not a full FE package. A second family (CurvesB) may carry its own " +
+            "section (WidthB, ThicknessB, UprightB): upright asymptotic lamellas with flat geodesic slats — the " +
+            "asymptotic–geodesic hybrid — are analysed with each lath's own A, I and J.",
             "Analysis", "GridshellAnalysis") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDF3");
@@ -45,9 +48,18 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("AreaLoad", "q", "Vertical area load in N/m² on the mesh area (snow, cladding), shared by the laths per metre of length (0 = none)", GH_ParamAccess.item, 0.0);
         pManager.AddPointParameter("LoadPoints", "Lp", "Points where concentrated forces act (attached to the nearest node)", GH_ParamAccess.list);
         pManager.AddVectorParameter("Forces", "F", "Force in N per load point (one per point, or one for all)", GH_ParamAccess.list);
+        // Family B with its own section (appended 2026-10-27): unset = as family A
+        pManager.AddCurveParameter("CurvesB", "Cb", "Second lath family with its own section (optional; Curves is then family A). Outputs list A's laths first, then B's", GH_ParamAccess.list);
+        pManager.AddNumberParameter("WidthB", "Wb", "Width of family B in model units (unset: as Width)", GH_ParamAccess.item);
+        pManager.AddNumberParameter("ThicknessB", "Tb", "Thickness of family B in model units (unset: as Thickness)", GH_ParamAccess.item);
+        pManager.AddBooleanParameter("UprightB", "Ub", "Orientation of family B when it differs from A (unset: as Upright): upright asymptotic A with flat geodesic B is the asymptotic–geodesic hybrid", GH_ParamAccess.item);
         pManager[2].Optional = true;
         pManager[19].Optional = true;
         pManager[20].Optional = true;
+        pManager[21].Optional = true;
+        pManager[22].Optional = true;
+        pManager[23].Optional = true;
+        pManager[24].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -99,15 +111,24 @@ public class GridshellAnalysisComponent : MiteComponent
         var loadPts = new List<Point3d>(); var forces = new List<Vector3d>();
         DA.GetDataList(19, loadPts);
         DA.GetDataList(20, forces);
+        var curvesB = new List<Curve>();
+        DA.GetDataList(21, curvesB);
+        double widthB = width, thicknessB = thickness; bool uprightB = upright;
+        if (!DA.GetData(22, ref widthB)) widthB = width;
+        if (!DA.GetData(23, ref thicknessB)) thicknessB = thickness;
+        if (!DA.GetData(24, ref uprightB)) uprightB = upright;
+        int countA = curves.Count;
+        bool hybrid = curvesB.Count > 0;
+        if (hybrid) curves = curves.Concat(curvesB).ToList();
 
         if (supports.Count == 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "At least one support point is required.");
             return;
         }
-        if (width <= 0 || thickness <= 0 || e <= 0 || allowable <= 0)
+        if (width <= 0 || thickness <= 0 || e <= 0 || allowable <= 0 || widthB <= 0 || thicknessB <= 0)
         {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness, E and Allowable must be positive.");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness (and WidthB / ThicknessB), E and Allowable must be positive.");
             return;
         }
 
@@ -122,10 +143,13 @@ public class GridshellAnalysisComponent : MiteComponent
         var meshM = Scale(input.Data, s);
         // Section in metres too: A, I and J come from the profile (rectangle,
         // round bar or custom polygon — LathProfile.SectionProperties)
-        if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, s, curves.Count, out LathProfile profile)) return;
+        if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, s, hybrid ? countA : curves.Count, out LathProfile profile)) return;
+        LathProfile profileB = profile;
+        if (hybrid && !SectionInput.TryBuild(this, shape, section, widthB, thicknessB, uprightB, 0.0, s, curvesB.Count, out profileB)) return;
 
         var laths = new List<Vec3d[]>();
         var lathIndex = new List<int>();
+        var profiles = new List<LathProfile>();
         int skipped = 0;
         for (int c = 0; c < curves.Count; c++)
         {
@@ -135,6 +159,7 @@ public class GridshellAnalysisComponent : MiteComponent
             for (int i = 0; i < sub.Length; i++) sub[i] = s * sub[i];
             laths.Add(sub);
             lathIndex.Add(c);
+            profiles.Add(c < countA ? profile : profileB);
         }
         if (laths.Count == 0)
         {
@@ -167,7 +192,7 @@ public class GridshellAnalysisComponent : MiteComponent
         try
         {
             result = FrameAnalysis.Compute(meshM, laths, jointPts, supportPts,
-                profile,
+                profiles,
                 MeshConvert.ToVec3d(load),
                 new FrameAnalysis.Options
                 {
@@ -245,9 +270,18 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.SetDataList(8, supNodes);
         DA.SetDataList(9, reacts);
         var sumR = Vec3d.Zero; foreach (int n in result.SupportNodes) sumR = sumR + result.Reactions[n];
+        string families = "";
+        if (hybrid)
+        {
+            double peakA = 0, peakB = 0;
+            for (int c = 0; c < curves.Count; c++) { if (c < countA) peakA = Math.Max(peakA, lathMax[c]); else peakB = Math.Max(peakB, lathMax[c]); }
+            string Sec(LathProfile p) => p.Kind == SectionKind.Rectangle ? $"{p.Width / s:G4} × {p.Thickness / s:G4} {(p.Upright ? "upright" : "flat")}" : p.Kind == SectionKind.Round ? $"round Ø {p.Width / s:G4}" : $"custom {p.Width / s:G4} × {p.Thickness / s:G4} {(p.Upright ? "upright" : "flat")}";
+            families = $"\nfamily A {countA} laths {Sec(profile)}, peak utilization {peakA:0.00} · family B {curvesB.Count} laths {Sec(profileB)}, peak utilization {peakB:0.00}" +
+                (profile.Upright != profileB.Upright ? " · asymptotic–geodesic hybrid (one family upright, one flat)" : "");
+        }
         DA.SetData(10, $"load {result.TotalLoad.Z / 1000:0.###} kN (vertical) · reactions {sumR.Z / 1000:0.###} kN · equilibrium error {result.EquilibriumError:E1}\n" +
             $"{result.Nodes.Length} nodes · {result.Utilization.Length} elements · {result.JointCount} joints · {result.SupportNodeCount} supports ({(supportType == 1 ? "pinned" : "fixed")}) · joints {(jointK < 0 ? "rigid" : jointK == 0 ? "hinged" : $"k = {jointK:G3} N·m/rad")}\n" +
-            $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}");
+            $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}" + families);
 
         if (result.MaxUtilization > 1.0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,

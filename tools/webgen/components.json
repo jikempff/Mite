@@ -883,6 +883,42 @@
     "access": "item",
     "default": null,
     "optional": true
+   },
+   {
+    "name": "CurvesB",
+    "nick": "Cb",
+    "type": "Curve",
+    "desc": "Second lath family with its own section (optional; Curves is then family A). Outputs list A's laths first, then B's",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "WidthB",
+    "nick": "Wb",
+    "type": "Number",
+    "desc": "Width of family B in model units (unset: as Width)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "ThicknessB",
+    "nick": "Tb",
+    "type": "Number",
+    "desc": "Thickness of family B in model units (unset: as Thickness)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "UprightB",
+    "nick": "Ub",
+    "type": "Boolean",
+    "desc": "Orientation of family B when it differs from A (unset: as Upright): upright asymptotic A with flat geodesic B is the asymptotic–geodesic hybrid",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -2005,6 +2041,50 @@
     "desc": "Chord deviation for curve sampling (0 = automatic from the mesh edge length)",
     "access": "item",
     "default": "0.0"
+   },
+   {
+    "name": "Align",
+    "nick": "Al",
+    "type": "Integer",
+    "desc": "Where the lath sits along the surface normal: 0 grows from the surface out (default), 1 centred on the surface (its centre line on the curve), 2 grows from the surface in. Offset is the gap to the near face, or the shift of the centre when centred",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "WidthB",
+    "nick": "Wb",
+    "type": "Number",
+    "desc": "Profile width of family B (unset: as Width)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "ThicknessB",
+    "nick": "Tb",
+    "type": "Number",
+    "desc": "Profile thickness of family B (unset: as Thickness)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "UprightB",
+    "nick": "Ub",
+    "type": "Boolean",
+    "desc": "Orientation of family B when it differs from A (unset: as Upright). Upright A with flat B is the asymptotic–geodesic hybrid: the flat slat threads through a slot in the upright lamella (Lap does not apply there)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "OffsetB",
+    "nick": "Ob",
+    "type": "Number",
+    "desc": "Gap between the surface and the nearest face of family B (unset: as Offset); with Align 1 the shift of B's centre. Lift a flat B to the level where it should pass through the upright A",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -2036,7 +2116,7 @@
     "name": "NotchesA",
     "nick": "Na",
     "type": "Box",
-    "desc": "Notch solids to subtract from family A laths",
+    "desc": "Notch solids to subtract from family A laths (null at a threaded joint where A is the flat slat that passes through B)",
     "access": "list",
     "default": null
    },
@@ -2044,7 +2124,7 @@
     "name": "NotchesB",
     "nick": "Nb",
     "type": "Box",
-    "desc": "Notch solids to subtract from family B laths",
+    "desc": "Notch solids to subtract from family B laths (null at a threaded joint where B is the flat slat that passes through A)",
     "access": "list",
     "default": null
    },
