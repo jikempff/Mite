@@ -3054,7 +3054,7 @@
     "name": "NotchesA",
     "nick": "Na",
     "type": "Box",
-    "desc": "Notch solids to subtract from family A laths",
+    "desc": "Notch solids to subtract from family A laths (null at a threaded joint where A is the flat slat that passes through B)",
     "access": "list",
     "default": null
    },
@@ -3062,7 +3062,7 @@
     "name": "NotchesB",
     "nick": "Nb",
     "type": "Box",
-    "desc": "Notch solids to subtract from family B laths",
+    "desc": "Notch solids to subtract from family B laths (null at a threaded joint where B is the flat slat that passes through A)",
     "access": "list",
     "default": null
    },

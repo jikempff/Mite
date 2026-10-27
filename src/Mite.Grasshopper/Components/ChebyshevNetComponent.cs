@@ -165,6 +165,16 @@ public class ChebyshevNetComponent : MiteComponent
         DA.SetDataTree(4, angleTree);
         DA.SetData(6, report);
         DA.SetData(5, new MiteNetGoo(new LathNet(data, Runs(net, alongU: true), Runs(net, alongU: false), NetKind.Chebyshev, edgeLength)));
+
+        var cellK = ChebyshevNet.CellCurvature(net);
+        var cellTree = new DataTree<double>();
+        for (int i = 0; i + 1 < nu; i++)
+        {
+            var path = BranchPath(DA, i);
+            for (int j = 0; j + 1 < nv; j++)
+                if (!double.IsNaN(cellK[i, j])) cellTree.Add(cellK[i, j], path);
+        }
+        DA.SetDataTree(7, cellTree);
     }
 
     /// <summary>Runs of valid nodes along one family, as polylines through the nodes.</summary>
@@ -185,17 +195,6 @@ public class ChebyshevNetComponent : MiteComponent
             Flush();
         }
         return runs;
-    }
-
-        var cellK = ChebyshevNet.CellCurvature(net);
-        var cellTree = new DataTree<double>();
-        for (int i = 0; i + 1 < nu; i++)
-        {
-            var path = BranchPath(DA, i);
-            for (int j = 0; j + 1 < nv; j++)
-                if (!double.IsNaN(cellK[i, j])) cellTree.Add(cellK[i, j], path);
-        }
-        DA.SetDataTree(7, cellTree);
     }
 
     private static List<Curve> ExtractCurves(ChebyshevNet.Result net, bool alongU)

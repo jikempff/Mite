@@ -588,6 +588,71 @@ var sw = Stopwatch.StartNew();
         var portalLaths = new List<Vec3d[]> { Seg(new Vec3d(0, 2, 0.01), new Vec3d(h, 2, 0.01), 8), Seg(new Vec3d(0, 2 + lb, 0.01), new Vec3d(h, 2 + lb, 0.01), 8), Seg(new Vec3d(h, 2, 0.01), new Vec3d(h, 2 + lb, 0.01), 8) };
         var portal = FrameAnalysis.Compute(flat, portalLaths, null, new[] { new Vec3d(0, 2, 0.01), new Vec3d(0, 2 + lb, 0.01) }, new LathProfile(w, th, true), Vec3d.Zero, new FrameAnalysis.Options { E = E, BucklingModes = 1, BucklingTolerance = 1e-10, PointLoads = new List<(Vec3d, Vec3d)> { (new Vec3d(h, 2, 0.01), new Vec3d(-1, 0, 0)), (new Vec3d(h, 2 + lb, 0.01), new Vec3d(-1, 0, 0)) } });
         numbers["buckling"] = new { cantileverErr = errs, cantileverExact = exact, roundFactors = rb.BucklingFactors, roundExact = exactR, roundMissed = rb.BucklingMissed, portalExact = exactPortal, portalFactor = portal.BucklingFactors.Length > 0 ? portal.BucklingFactors[0] : 0, portalExactDimless = exactPortal * h * h / EI, portalMissed = portal.BucklingMissed };
+
+    }
+    // ---- Per-family profiles: the asymptotic–geodesic hybrid (Schling, Wang, Hoyer & Pottmann 2022; Schling, Wan, Wang & D'Acunto 2023)
+    // 1. Closed form: two simply supported beams crossing at mid-span, pinned, P at the crossing — A upright, B flat
+    //    (same 100 × 20 mm strip). δ = P / (kA + kB), k = 48 E I / L³; each lath rated with its own section modulus.
+    {
+        var grid = TestMeshes.CreateQuadGrid(4, 4, 10.0);
+        const double Lh = 8.0, Pload = 400.0, w = 0.1, tt = 0.02, E = 11e9, allow = 20e6;
+        Vec3d[] Seg(Vec3d a0, Vec3d b0, int n) { var pts = new Vec3d[n + 1]; for (int i = 0; i <= n; i++) pts[i] = a0 + (double)i / n * (b0 - a0); return pts; }
+        var la = Seg(new Vec3d(1, 5, 0), new Vec3d(9, 5, 0), 16); var lb = Seg(new Vec3d(5, 1, 0), new Vec3d(5, 9, 0), 16);
+        var pa = new LathProfile(w, tt, true); var pb = new LathProfile(w, tt, false);
+        var rh = FrameAnalysis.Compute(grid, new[] { la, lb }, new[] { new Vec3d(5, 5, 0) }, new[] { la[0], la[^1], lb[0], lb[^1] }, new[] { pa, pb }, Vec3d.Zero,
+            new FrameAnalysis.Options { E = E, AllowableStress = allow, Support = FrameAnalysis.SupportKind.Pinned, PointLoads = new[] { (new Vec3d(5, 5, 0), new Vec3d(0, 0, -Pload)) } });
+        double IA = tt * w * w * w / 12, IB = w * tt * tt * tt / 12, kA = 48 * E * IA / (Lh * Lh * Lh), kB = 48 * E * IB / (Lh * Lh * Lh);
+        double delta = Pload / (kA + kB), PA = kA * delta, PB = kB * delta;
+        double uA = 0, uB = 0; for (int e = 0; e < rh.Utilization.Length; e++) { if (rh.ElementSource[e].Curve == 0) uA = Math.Max(uA, rh.Utilization[e]); else uB = Math.Max(uB, rh.Utilization[e]); }
+        numbers["hybridCross"] = new { delta = rh.MaxDisplacement, deltaTheory = delta, shareA = PA / Pload, utilA = uA, utilATheory = (PA * Lh / 4) / (IA / (w / 2)) / allow, utilB = uB, utilBTheory = (PB * Lh / 4) / (IB / (tt / 2)) / allow, torsion = rh.Torsion.Max() };
+    }
+    // 2. The AGH net on the catenoid: asymptotic family A upright (100 × 12), meridian geodesics B flat (100 × 12) —
+    //    kn(A) ≈ 0, kg(B) ≈ 0, kn(B) = 1/cosh² z; every crossing a threaded joint (slot in A); frame with both sections.
+    {
+        const int segC = 96, rowsC = 48;
+        var cat = TestMeshes.CreateCatenoid(1.0, 2.0, segC, rowsC);
+        var projCat = new MeshProjection(cat);
+        var pcC = PrincipalCurvature.Compute(cat, 2);
+        var fieldC = AsymptoticCurves.ComputeDirections(pcC, cat, 15.0);
+        var aghA = EvenlySpacedNet.TraceField(cat, fieldC.Family1, fieldC.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.3 }, fieldC.Family2);
+        int waist = (rowsC / 2) * segC;
+        var seedsC = Enumerable.Range(0, segC / 6).Select(i => waist + 6 * i).ToArray();
+        var aghB = GeodesicCurves.Trace(cat, seedsC, seedsC.Select(_ => new Vec3d(0, 0, 1)).ToArray(), new GeodesicCurves.Options { StepSize = 0.02, MaxSteps = 4000 });
+        var pUp = new LathProfile(0.1, 0.012, true); var pFlat = new LathProfile(0.1, 0.012, false);
+        var lathA = LathAnalysis.Analyze(cat, aghA, new LathAnalysis.Options { Profile = pUp, Window = 0.1 });
+        var lathB = LathAnalysis.Analyze(cat, aghB, new LathAnalysis.Options { Profile = pFlat, Window = 0.1 });
+        double Interior(double[] v) => v.Length > 10 ? v.Skip(5).Take(v.Length - 10).Select(Math.Abs).Max() : v.Select(Math.Abs).Max();
+        double knErr = 0, knMean = 0; int knCnt = 0;
+        for (int c = 0; c < aghB.Count; c++) for (int i = 5; i + 5 < aghB[c].Length; i++) { double truth = 1.0 / Math.Pow(Math.Cosh(aghB[c][i].Z), 2); knErr = Math.Max(knErr, Math.Abs(Math.Abs(lathB[c].NormalCurvature[i]) - truth)); knMean += Math.Abs(lathB[c].NormalCurvature[i]); knCnt++; }
+        var xsH = NetIntersections.Find(aghA, aghB);
+        int threaded = 0, lapJ = 0, apart = 0; double slotDepth = 0;
+        foreach (var x in xsH)
+        {
+            var ta = NetIntersections.TangentAt(aghA, x, false); var tb = NetIntersections.TangentAt(aghB, x, true);
+            var n = projCat.ClosestPoint(x.Point, projCat.NearestVertexGlobal(x.Point)).SmoothNormal;
+            if (!JointGeometry.TryBuildNotches(x.Point, ta, tb, n, pUp, pFlat, 0.5, 0.0, out var na, out _, out var kind)) continue;
+            if (kind == JointKind.SlotInA) { threaded++; slotDepth = Math.Max(slotDepth, 2 * na.HalfZ); } else if (kind == JointKind.Lap) lapJ++; else apart++;
+        }
+        // frame: A upright + B flat vs all upright, rim ends fixed, 1 kN/m
+        var lathsH = aghA.Concat(aghB).Select(l => Sub(l, 0.05)).ToList();
+        var profH = aghA.Select(_ => pUp).Concat(aghB.Select(_ => pFlat)).ToList();
+        var supH = new List<Vec3d>(); foreach (var l in lathsH) foreach (var e in new[] { l[0], l[^1] }) { var h = projCat.ClosestPoint(e, projCat.NearestVertexGlobal(e)); if (projCat.IsOnBoundary(h, 1e-4)) supH.Add(e); }
+        var jH = xsH.Select(x => x.Point).ToList();
+        var tHyb = Stopwatch.StartNew();
+        var frH = FrameAnalysis.Compute(cat, lathsH, jH, supH, profH, new Vec3d(0, 0, -1000));
+        tHyb.Stop();
+        var frU = FrameAnalysis.Compute(cat, lathsH, jH, supH, pUp, new Vec3d(0, 0, -1000));
+        double peakA = 0, peakB = 0, peakAU = 0, peakBU = 0;
+        for (int e = 0; e < frH.Utilization.Length; e++) { if (frH.ElementSource[e].Curve < aghA.Count) peakA = Math.Max(peakA, frH.Utilization[e]); else peakB = Math.Max(peakB, frH.Utilization[e]); }
+        for (int e = 0; e < frU.Utilization.Length; e++) { if (frU.ElementSource[e].Curve < aghA.Count) peakAU = Math.Max(peakAU, frU.Utilization[e]); else peakBU = Math.Max(peakBU, frU.Utilization[e]); }
+        var nodeOfH = new Dictionary<(int, int), int>();
+        for (int n = 0; n < frH.NodeMap.Length; n++) foreach (var (c, i) in frH.NodeMap[n]) nodeOfH.TryAdd((c, i), n);
+        var deflH = new List<double[][]>();
+        for (int c = 0; c < lathsH.Count; c++) { var l = new List<double[]>(); for (int i = 0; i < lathsH[c].Length; i++) { var d = nodeOfH.TryGetValue((c, i), out int n) ? frH.Displacements[n] : Vec3d.Zero; l.Add(P(lathsH[c][i] + 100 * d)); } deflH.Add(l.ToArray()); }
+        scenes["jointsAgh"] = new { wire = Edges(cat, 6), a = aghA.Select(l => Line(l, 3)).ToArray(), b = aghB.Select(l => Line(l, 3)).ToArray(), nodes = xsH.Select(x => P(x.Point)).ToArray() };
+        scenes["frameAgh"] = new { wire = Edges(cat, 6), originalA = aghA.Select(l => Line(l, 3)).ToArray(), originalB = aghB.Select(l => Line(l, 3)).ToArray(), deformed = deflH.ToArray(), scale = 100, supports = supH.Select(P).ToArray() };
+        numbers["agh"] = new { lathsA = aghA.Count, lathsB = aghB.Count, knA = R3(lathA.Max(r => Interior(r.NormalCurvature))), knAMean = R3(lathA.Average(r => r.NormalCurvature.Select(Math.Abs).Average())), kgB = R3(lathB.Max(r => Interior(r.GeodesicCurvature))), knBMean = R3(knMean / Math.Max(1, knCnt)), knBErr = R3(knErr), crossings = xsH.Count, threaded, lap = lapJ, apart, slotDepth = R3(slotDepth),
+            frameMs = tHyb.ElapsedMilliseconds, maxDisp = R3(frH.MaxDisplacement * 1000), maxDispUniform = R3(frU.MaxDisplacement * 1000), peakA = R3(peakA), peakB = R3(peakB), peakAUniform = R3(peakAU), peakBUniform = R3(peakBU), supports = frH.SupportNodeCount, elements = frH.Utilization.Length };
     }
 }
 

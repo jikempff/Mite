@@ -350,9 +350,40 @@ public static class FrameAnalysis
         Vec3d loadPerUnitLength,
         Options? options = null)
     {
-        options ??= new Options();
         if (profile.Width <= 0 || profile.Thickness <= 0)
             throw new ArgumentException("Profile width and thickness must be positive.", nameof(profile));
+        var same = new LathProfile[laths.Count];
+        for (int i = 0; i < same.Length; i++) same[i] = profile;
+        return Compute(mesh, laths, joints, supports, same, loadPerUnitLength, options);
+    }
+
+    /// <summary>
+    /// The same analysis with one profile per lath (profiles[c] belongs to
+    /// laths[c]): an asymptotic–geodesic hybrid has its asymptotic family
+    /// upright and its geodesic family flat, usually with different sections
+    /// (Schling, Wang, Hoyer &amp; Pottmann 2022 §1: "the asymptotic lamellas
+    /// offer high structural resilience against normal loads, the geodesic
+    /// slats offer in-plane stiffness"). Every element takes A, I, J, the
+    /// section moduli, the twist length and the beam frame (upright: local y
+    /// along the normal; flat: local y across the lath) from its own lath's
+    /// profile, and self-weight is ρ g A per element with that lath's area.
+    /// With all profiles equal this is bit for bit the single-profile call.
+    /// </summary>
+    public static Result Compute(
+        MeshData mesh,
+        IReadOnlyList<Vec3d[]> laths,
+        IReadOnlyList<Vec3d>? joints,
+        IReadOnlyList<Vec3d>? supports,
+        IReadOnlyList<LathProfile> profiles,
+        Vec3d loadPerUnitLength,
+        Options? options = null)
+    {
+        options ??= new Options();
+        if (profiles == null || profiles.Count != laths.Count)
+            throw new ArgumentException("One profile per lath is required.", nameof(profiles));
+        foreach (var pr in profiles)
+            if (pr.Width <= 0 || pr.Thickness <= 0)
+                throw new ArgumentException("Profile width and thickness must be positive.", nameof(profiles));
         if (options.E <= 0)
             throw new ArgumentException("Young's modulus must be positive.", nameof(options));
 
@@ -654,18 +685,26 @@ public static class FrameAnalysis
         if (anchored.Count == 0)
             throw new ArgumentException("No support point lies on a lath: nothing holds the net.", nameof(supports));
 
-        // ---- Section properties ------------------------------------------
-        // From the profile's section (rectangle, round bar or custom polygon,
+        // ---- Section properties, one set per lath -------------------------
+        // From each profile's section (rectangle, round bar or custom polygon,
         // see LathProfile.SectionProperties): the same profile Lath Sweep
-        // builds is what the frame is made of.
-        var section = profile.SectionProperties();
-        double A = section.Area;
-        double Iy = section.IA; // bending through the thickness (about the first axis)
-        double Iz = section.IB; // bending across the width (about the second axis)
-        double J = section.J;   // Saint-Venant torsion
-        double Wy = Iy / section.ExtentB;
-        double Wz = Iz / section.ExtentA;
-        double tauPerTorque = J > 0 ? section.TwistLength / J : 0; // τ_max = T · t_twist / J
+        // builds is what the frame is made of. Element e uses the set of its
+        // lath elemCurve[e].
+        int nl = laths.Count;
+        var A = new double[nl]; var Iy = new double[nl]; var Iz = new double[nl]; var J = new double[nl];
+        var Wy = new double[nl]; var Wz = new double[nl]; var tauPerTorque = new double[nl]; var uprightOf = new bool[nl];
+        for (int c = 0; c < nl; c++)
+        {
+            var section = profiles[c].SectionProperties();
+            A[c] = section.Area;
+            Iy[c] = section.IA; // bending through the thickness (about the first axis)
+            Iz[c] = section.IB; // bending across the width (about the second axis)
+            J[c] = section.J;   // Saint-Venant torsion
+            Wy[c] = Iy[c] / section.ExtentB;
+            Wz[c] = Iz[c] / section.ExtentA;
+            tauPerTorque[c] = J[c] > 0 ? section.TwistLength / J[c] : 0; // τ_max = T · t_twist / J
+            uprightOf[c] = profiles[c].Upright;
+        }
         double E = options.E;
         double G = options.G > 0 ? options.G : options.E / 2.6;
 
@@ -673,12 +712,13 @@ public static class FrameAnalysis
         double totalLength = 0;
         for (int e = 0; e < ne; e++) totalLength += (nodes[elemB[e]] - nodes[elemA[e]]).Length;
         Vec3d q = loadPerUnitLength;
-        if (options.Density > 0) q = q + new Vec3d(0, 0, -options.Density * A * options.Gravity);
         if (options.AreaLoad != 0 && totalLength > 0)
         {
             double area = options.LoadedArea > 0 ? options.LoadedArea : MeshArea(mesh);
             q = q + new Vec3d(0, 0, -options.AreaLoad * area / totalLength);
         }
+        // self-weight per element: ρ g A of its own lath
+        Vec3d QOf(int c) => options.Density > 0 ? q + new Vec3d(0, 0, -options.Density * A[c] * options.Gravity) : q;
 
         // ---- Assemble -----------------------------------------------------
         var K = new Dictionary<long, double>();
@@ -715,7 +755,8 @@ public static class FrameAnalysis
             Vec3d mid = 0.5 * (nodes[elemA[e]] + nodes[elemB[e]]);
             Vec3d nrm = proj.ClosestPoint(mid, proj.NearestVertexGlobal(mid)).SmoothNormal;
             Vec3d ey;
-            if (profile.Upright)
+            int lc = elemCurve[e];
+            if (uprightOf[lc])
             {
                 ey = nrm - Vec3d.Dot(nrm, ex) * ex;
                 if (ey.LengthSquared < 1e-20) ey = Math.Abs(ex.Y) < 0.9
@@ -732,8 +773,8 @@ public static class FrameAnalysis
             var rot = new[] { ex, ey, ez };
             elemRot[e] = rot;
 
-            var ke = LocalStiffness(E, G, A, Iy, Iz, J, L);
-            double kr = 4 * E * Math.Max(Iy, Iz) / L;
+            var ke = LocalStiffness(E, G, A[lc], Iy[lc], Iz[lc], J[lc], L);
+            double kr = 4 * E * Math.Max(Iy[lc], Iz[lc]) / L;
             nodeRotStiff[elemA[e]] = Math.Max(nodeRotStiff[elemA[e]], kr);
             nodeRotStiff[elemB[e]] = Math.Max(nodeRotStiff[elemB[e]], kr);
 
@@ -763,9 +804,10 @@ public static class FrameAnalysis
                 for (int c = 0; c < 12; c++)
                     AddK(dofs[r], dofs[c], kg[r, c]);
 
-            // Distributed load -> lumped forces at the beam ends; an end on a
-            // rigid link hands its node the force and the moment r × f
-            Vec3d f = 0.5 * L * q;
+            // Distributed load -> lumped forces at the beam ends (per-lath
+            // load q of this lath's profile); an end on a rigid link hands
+            // its node the force and the moment r × f
+            Vec3d f = 0.5 * L * QOf(lc);
             for (int end = 0; end < 2; end++)
             {
                 int node = end == 0 ? elemA[e] : elemB[e];
@@ -953,7 +995,8 @@ public static class FrameAnalysis
                     ul[blk * 3 + a] = sum;
                 }
 
-            var ke = LocalStiffness(E, G, A, Iy, Iz, J, L);
+            int lc = elemCurve[e];
+            var ke = LocalStiffness(E, G, A[lc], Iy[lc], Iz[lc], J[lc], L);
             var fl = new double[12];
             for (int r = 0; r < 12; r++)
                 for (int c = 0; c < 12; c++)
@@ -964,8 +1007,8 @@ public static class FrameAnalysis
             bendY[e] = Math.Max(Math.Abs(fl[4]), Math.Abs(fl[10]));
             bendZ[e] = Math.Max(Math.Abs(fl[5]), Math.Abs(fl[11]));
 
-            double sigma = Math.Abs(axial[e]) / A + bendY[e] / Wy + bendZ[e] / Wz;
-            double tau = torsion[e] * tauPerTorque;
+            double sigma = Math.Abs(axial[e]) / A[lc] + bendY[e] / Wy[lc] + bendZ[e] / Wz[lc];
+            double tau = torsion[e] * tauPerTorque[lc];
             utilization[e] = Math.Sqrt(sigma * sigma + 3 * tau * tau) / options.AllowableStress;
             if (utilization[e] > maxUtil) maxUtil = utilization[e];
         }
@@ -979,7 +1022,6 @@ public static class FrameAnalysis
         {
             // B = −K_g on the free degrees of freedom: compression (N < 0) makes it positive
             var Bff = new SparseSymmetricSolver.Builder(nfree);
-            double Ip = Iy + Iz;
             bool anyCompression = false;
             for (int e = 0; e < ne; e++)
             {
@@ -987,7 +1029,8 @@ public static class FrameAnalysis
                 double N = axial[e];
                 if (N == 0) continue;
                 if (N < 0) anyCompression = true;
-                var kg = GeometricStiffness(N, elemLen[e], Ip / A);
+                int lcb = elemCurve[e];
+                var kg = GeometricStiffness(N, elemLen[e], (Iy[lcb] + Iz[lcb]) / A[lcb]); // polar radius² of this lath's section
                 var rot = elemRot[e];
                 var dofs = ElemDofs(e);
                 // global axes, then — like K_e — through the rigid links of the beam ends

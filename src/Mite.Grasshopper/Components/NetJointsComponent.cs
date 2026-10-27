@@ -13,7 +13,10 @@ public class NetJointsComponent : MiteComponent
         : base("Net Joints", "Joints",
             "Finds the crossings between the two lath families of a gridshell net and builds " +
             "lap-joint notch solids for each crossing. Boolean-subtract the notches from the " +
-            "swept laths (Mesh Difference) to fabricate the joints.",
+            "swept laths (Mesh Difference) to fabricate the joints. Family B may have its own " +
+            "profile (WidthB, ThicknessB, UprightB, OffsetB): an upright family crossed by a flat one " +
+            "— the asymptotic–geodesic hybrid — gets threaded joints, a slot through the upright " +
+            "lamella for the flat slat to pass, the slat itself uncut.",
             "Fabrication", "NetJoints") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDED");
@@ -35,7 +38,16 @@ public class NetJointsComponent : MiteComponent
         RegisterNetInput(pManager, "Its profiles (per family) shape the notches unless W / T / U / O are wired"); // 12
         pManager[0].Optional = true;
         pManager[1].Optional = true;
+        // Family B's own profile (appended 2026-10-27, after Net): unset = as family A
+        pManager.AddNumberParameter("WidthB", "Wb", "Profile width of family B (unset: as Width)", GH_ParamAccess.item);
+        pManager.AddNumberParameter("ThicknessB", "Tb", "Profile thickness of family B (unset: as Thickness)", GH_ParamAccess.item);
+        pManager.AddBooleanParameter("UprightB", "Ub", "Orientation of family B when it differs from A (unset: as Upright). Upright A with flat B is the asymptotic–geodesic hybrid: the flat slat threads through a slot in the upright lamella (Lap does not apply there)", GH_ParamAccess.item);
+        pManager.AddNumberParameter("OffsetB", "Ob", "Gap between the surface and the nearest face of family B (unset: as Offset); with Align 1 the shift of B's centre. Lift a flat B to the level where it should pass through the upright A", GH_ParamAccess.item);
         pManager[2].Optional = true;
+        pManager[13].Optional = true;
+        pManager[14].Optional = true;
+        pManager[15].Optional = true;
+        pManager[16].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -43,8 +55,8 @@ public class NetJointsComponent : MiteComponent
         pManager.AddPointParameter("Points", "P", "Crossing points", GH_ParamAccess.list);
         pManager.AddPlaneParameter("Planes", "F", "Joint frame per crossing (X along family A, Z along the surface normal)", GH_ParamAccess.list);
         pManager.AddNumberParameter("Angles", "An", "Crossing angle between the laths, in degrees", GH_ParamAccess.list);
-        pManager.AddBoxParameter("NotchesA", "Na", "Notch solids to subtract from family A laths", GH_ParamAccess.list);
-        pManager.AddBoxParameter("NotchesB", "Nb", "Notch solids to subtract from family B laths", GH_ParamAccess.list);
+        pManager.AddBoxParameter("NotchesA", "Na", "Notch solids to subtract from family A laths (null at a threaded joint where A is the flat slat that passes through B)", GH_ParamAccess.list);
+        pManager.AddBoxParameter("NotchesB", "Nb", "Notch solids to subtract from family B laths (null at a threaded joint where B is the flat slat that passes through A)", GH_ParamAccess.list);
         pManager.AddIntegerParameter("IndexA", "Ia", "Index of the family A curve at each crossing", GH_ParamAccess.list);
         pManager.AddIntegerParameter("IndexB", "Ib", "Index of the family B curve at each crossing (a family A index when CurvesB is empty)", GH_ParamAccess.list);
     }
@@ -70,10 +82,17 @@ public class NetJointsComponent : MiteComponent
         DA.GetData(10, ref sampling);
         int align = 0;
         DA.GetData(11, ref align);
+        double widthB = width, thicknessB = thickness, offsetB = offset;
+        bool uprightB = upright;
+        bool ownB = false;
+        if (DA.GetData(13, ref widthB)) ownB = true; else widthB = width;
+        if (DA.GetData(14, ref thicknessB)) ownB = true; else thicknessB = thickness;
+        if (DA.GetData(15, ref uprightB)) ownB = true; else uprightB = upright;
+        if (DA.GetData(16, ref offsetB)) ownB = true; else offsetB = offset;
 
-        if (width <= 0 || thickness <= 0)
+        if (width <= 0 || thickness <= 0 || widthB <= 0 || thicknessB <= 0)
         {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width and Thickness must be positive.");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width and Thickness (and WidthB / ThicknessB) must be positive.");
             return;
         }
         CheckSection(width, thickness, System.Linq.Enumerable.Concat(curvesA, curvesB));
@@ -81,25 +100,31 @@ public class NetJointsComponent : MiteComponent
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);
         var profile = new LathProfile(width, thickness, upright, offset).WithAlign(AlignOf(align));
-        // a net's own profiles (e.g. A upright, B flat) unless the section inputs are wired
+        // a net's own profiles (e.g. A upright, B flat) unless the section inputs are wired;
+        // WidthB / ThicknessB / UprightB / OffsetB give family B its own profile either way
         var profileA = NetProfile(netIn, 0, 3, 4, 5, 6) ?? profile;
-        var profileB = netIn != null ? NetProfile(netIn, netIn.CountA, 3, 4, 5, 6) ?? profile : profile;
+        var profileB = ownB ? new LathProfile(widthB, thicknessB, uprightB, offsetB).WithAlign(AlignOf(align))
+            : netIn != null ? NetProfile(netIn, netIn.CountA, 3, 4, 5, 6) ?? profile : profile;
+        profile = profileA;
 
         // Keep curve indices aligned with the inputs: null / degenerate curves become empty polylines
         var familyA = SampleAligned(curvesA, chord);
         var familyB = SampleAligned(curvesB, chord);
         bool selfMode = curvesB.Count == 0;
+        if (selfMode) profileB = profile; // crossings within one family: one profile
+        bool mixed = profile.Upright != profileB.Upright;
 
         var crossings = NetIntersections.Find(familyA, selfMode ? null : familyB, tolerance);
 
         var points = new List<Point3d>();
         var planes = new List<Plane>();
         var angles = new List<double>();
-        var notchesA = new List<Box>();
-        var notchesB = new List<Box>();
+        var notchesA = new List<Box?>();
+        var notchesB = new List<Box?>();
         var indexA = new List<int>();
         var indexB = new List<int>();
-        int parallel = 0;
+        int parallel = 0, threadedA = 0, threadedB = 0, apart = 0, lapCount = 0;
+        double apartGap = 0;
 
         foreach (var crossing in crossings)
         {
@@ -113,11 +138,21 @@ public class NetJointsComponent : MiteComponent
             var hit = proj.ClosestPoint(crossing.Point, proj.NearestVertexGlobal(crossing.Point));
             Vec3d n = hit.SmoothNormal;
 
-            if (!JointGeometry.TryBuildLapNotches(crossing.Point, ta, tb, n,
-                    profileA, selfMode ? profileA : profileB, lap, clearance, out NotchSolid notchA, out NotchSolid notchB))
+            if (!JointGeometry.TryBuildNotches(crossing.Point, ta, tb, n,
+                    profile, selfMode ? profile : profileB, lap, clearance, out NotchSolid notchA, out NotchSolid notchB, out JointKind kind))
             {
                 parallel++;
                 continue;
+            }
+            switch (kind)
+            {
+                case JointKind.SlotInA: threadedA++; break;
+                case JointKind.SlotInB: threadedB++; break;
+                case JointKind.None:
+                    apart++;
+                    apartGap = Math.Max(apartGap, Math.Max(profile.FaceLow, profileB.FaceLow) - Math.Min(profile.FaceLow + profile.NormalDepth, profileB.FaceLow + profileB.NormalDepth));
+                    break;
+                default: lapCount++; break;
             }
 
             Vec3d g = Vec3d.Cross(n, ta);
@@ -128,8 +163,8 @@ public class NetJointsComponent : MiteComponent
             planes.Add(plane);
             angles.Add(Rhino.RhinoMath.ToDegrees(
                 Vector3d.VectorAngle(MeshConvert.ToRhinoVector(ta), MeshConvert.ToRhinoVector(tb))));
-            notchesA.Add(ToRhinoBox(notchA));
-            notchesB.Add(ToRhinoBox(notchB));
+            notchesA.Add(notchA.IsEmpty ? null : ToRhinoBox(notchA));
+            notchesB.Add(notchB.IsEmpty ? null : ToRhinoBox(notchB));
             indexA.Add(crossing.CurveA);
             indexB.Add(crossing.CurveB);
         }
@@ -140,6 +175,17 @@ public class NetJointsComponent : MiteComponent
         if (parallel > 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
                 $"{parallel} crossing(s) skipped: the laths meet nearly tangentially, no lap joint is possible there.");
+        if (mixed && (threadedA + threadedB) > 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                $"Hybrid net: {threadedA + threadedB} threaded joint(s) — the flat family passes through a slot in the upright one " +
+                $"(slot in {(threadedA > 0 ? "A" : "B")}, the flat lath is not cut, Lap does not apply; the {(threadedA > 0 ? "NotchesB" : "NotchesA")} entries are null there){(lapCount > 0 ? $"; {lapCount} lap joint(s)" : "")}.");
+        if (apart > 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                $"{apart} crossing(s) where the two families do not touch (they pass each other by up to {apartGap:G3} along the normal): " +
+                "nothing is cut there — lower OffsetB (or Offset) so the flat slat runs through the upright lamella, or connect them with a block and bolt.");
+        if (ownB && !mixed && (Math.Abs(widthB - width) > 1e-12 || Math.Abs(thicknessB - thickness) > 1e-12 || Math.Abs(offsetB - offset) > 1e-12))
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                $"Family B notched with its own profile {widthB:G4} × {thicknessB:G4}{(Math.Abs(offsetB - offset) > 1e-12 ? $", offset {offsetB:G4}" : "")}; the lap plane follows each lath's own depth.");
 
         DA.SetDataList(0, points);
         DA.SetDataList(1, planes);

@@ -21,7 +21,9 @@ public class GridshellAnalysisComponent : MiteComponent
             "loads per metre of lath, self-weight, area load and point loads; linear (Euler) buckling of the loaded net: " +
             "the load factor at which the first mode buckles and its shape. Geometry is converted from the document units to " +
             "metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. " +
-            "A first-order sanity check, not a full FE package.",
+            "A first-order sanity check, not a full FE package. A second family (CurvesB) may carry its own " +
+            "section (WidthB, ThicknessB, UprightB): upright asymptotic lamellas with flat geodesic slats — the " +
+            "asymptotic–geodesic hybrid — are analysed with each lath's own A, I and J.",
             "Analysis", "GridshellAnalysis") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDF3");
@@ -61,6 +63,15 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager[1].Optional = true;
         pManager[2].Optional = true;
         pManager[3].Optional = true;
+        // Family B with its own section (appended 2026-10-27, after Buckling): unset = as family A
+        pManager.AddCurveParameter("CurvesB", "Cb", "Second lath family with its own section (optional; Curves is then family A). Outputs list A's laths first, then B's", GH_ParamAccess.list);
+        pManager.AddNumberParameter("WidthB", "Wb", "Width of family B in model units (unset: as Width)", GH_ParamAccess.item);
+        pManager.AddNumberParameter("ThicknessB", "Tb", "Thickness of family B in model units (unset: as Thickness)", GH_ParamAccess.item);
+        pManager.AddBooleanParameter("UprightB", "Ub", "Orientation of family B when it differs from A (unset: as Upright): upright asymptotic A with flat geodesic B is the asymptotic–geodesic hybrid", GH_ParamAccess.item);
+        pManager[25].Optional = true;
+        pManager[26].Optional = true;
+        pManager[27].Optional = true;
+        pManager[28].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -134,15 +145,28 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.GetData(22, ref align);
         int buckling = 1;
         DA.GetData(24, ref buckling);
+        var curvesB = new List<Curve>();
+        DA.GetDataList(25, curvesB);
+        double widthB = width, thicknessB = thickness; bool uprightB = upright;
+        if (!DA.GetData(26, ref widthB)) widthB = width;
+        if (!DA.GetData(27, ref thicknessB)) thicknessB = thickness;
+        if (!DA.GetData(28, ref uprightB)) uprightB = upright;
+        int countA = curves.Count;
+        bool hybrid = curvesB.Count > 0;
+        if (hybrid)
+        {
+            if (fromNet) AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "CurvesB is appended to the Net's laths; the net's own families keep their profiles unless W / T / U / Shape / Section are wired.");
+            curves = curves.Concat(curvesB).ToList();
+        }
 
         if (supports.Count == 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "At least one support point is required.");
             return;
         }
-        if (width <= 0 || thickness <= 0 || e <= 0 || allowable <= 0)
+        if (width <= 0 || thickness <= 0 || e <= 0 || allowable <= 0 || widthB <= 0 || thicknessB <= 0)
         {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness, E and Allowable must be positive.");
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness (and WidthB / ThicknessB), E and Allowable must be positive.");
             return;
         }
         CheckSection(width, thickness, curves);
@@ -158,17 +182,31 @@ public class GridshellAnalysisComponent : MiteComponent
         var meshM = Scale(input.Data, s);
         // Section in metres too: A, I and J come from the profile (rectangle,
         // round bar or custom polygon — LathProfile.SectionProperties)
-        if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, s, curves.Count, out LathProfile profile)) return;
+        if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, s, hybrid ? countA : curves.Count, out LathProfile profile)) return;
+        LathProfile profileB = profile;
+        if (hybrid && !SectionInput.TryBuild(this, shape, section, widthB, thicknessB, uprightB, 0.0, s, curvesB.Count, out profileB)) return;
+        // A net that carries its profiles hands one section per family: the
+        // frame takes A's and B's each for its own laths (the hybrid of a net)
         var netProfile = NetProfile(netIn, 0, 7, 8, 9, 13, 14);
-        if (netProfile != null)
+        LathProfile? netProfileB = netIn != null && netIn.CountB > 0 ? NetProfile(netIn, netIn.CountA, 7, 8, 9, 13, 14) : null;
+        if (netProfile != null && fromNet && !hybrid)
         {
             profile = netProfile.Value.Scaled(s);
-            if (netIn!.CountB > 0 && LathNet.Describe(netIn.ProfileOf(netIn.CountA)) != LathNet.Describe(netIn.ProfileA))
-                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "The frame uses one section for every lath: family A's profile (the net's B profile differs).");
+            countA = netIn!.CountA;
+            profileB = netProfileB?.Scaled(s) ?? profile;
+            hybrid = netProfileB != null && LathNet.Describe(netProfileB) != LathNet.Describe(netProfile);
+        }
+        else if (netProfile != null)
+        {
+            profile = netProfile.Value.Scaled(s);
+            if (!hybrid) profileB = profile;
+            if (netProfileB != null && LathNet.Describe(netProfileB) != LathNet.Describe(netProfile))
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "The net's B profile differs from A's; with Curves wired the frame uses family A's profile for them (wire CurvesB for a second section).");
         }
 
         var laths = new List<Vec3d[]>();
         var lathIndex = new List<int>();
+        var profiles = new List<LathProfile>();
         int skipped = 0;
         for (int c = 0; c < curves.Count; c++)
         {
@@ -178,6 +216,7 @@ public class GridshellAnalysisComponent : MiteComponent
             for (int i = 0; i < sub.Length; i++) sub[i] = s * sub[i];
             laths.Add(sub);
             lathIndex.Add(c);
+            profiles.Add(c < countA ? profile : profileB);
         }
         if (laths.Count == 0)
         {
@@ -231,7 +270,7 @@ public class GridshellAnalysisComponent : MiteComponent
         try
         {
             result = FrameAnalysis.Compute(meshM, laths, jointPts, supportPts,
-                profile,
+                profiles,
                 MeshConvert.ToVec3d(load),
                 new FrameAnalysis.Options
                 {
@@ -312,6 +351,15 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.SetDataList(9, reacts);
         DA.SetDataList(11, moments);
         var sumR = Vec3d.Zero; foreach (int n in result.SupportNodes) sumR = sumR + result.Reactions[n];
+        string families = "";
+        if (hybrid)
+        {
+            double peakA = 0, peakB = 0;
+            for (int c = 0; c < curves.Count; c++) { if (c < countA) peakA = Math.Max(peakA, lathMax[c]); else peakB = Math.Max(peakB, lathMax[c]); }
+            string Sec(LathProfile p) => p.Kind == SectionKind.Rectangle ? $"{p.Width / s:G4} × {p.Thickness / s:G4} {(p.Upright ? "upright" : "flat")}" : p.Kind == SectionKind.Round ? $"round Ø {p.Width / s:G4}" : $"custom {p.Width / s:G4} × {p.Thickness / s:G4} {(p.Upright ? "upright" : "flat")}";
+            families = $"\nfamily A {countA} laths {Sec(profile)}, peak utilization {peakA:0.00} · family B {curves.Count - countA} laths {Sec(profileB)}, peak utilization {peakB:0.00}" +
+                (profile.Upright != profileB.Upright ? " · asymptotic–geodesic hybrid (one family upright, one flat)" : "");
+        }
         string buck = buckling <= 0 ? "buckling not computed"
             : result.BucklingFactors.Length == 0 ? (result.BucklingConverged ? "buckling: nothing in compression, no Euler buckling under this load" : "buckling: no positive factor converged")
             : $"buckling factor λ = {result.BucklingFactors[0]:0.###} (modes: {string.Join(", ", result.BucklingFactors.Select(f => f.ToString("0.###")))}; " +
@@ -321,7 +369,7 @@ public class GridshellAnalysisComponent : MiteComponent
             : $"{layers.Distinct().Count()} layer(s) · joint eccentricity {result.Eccentricity * 1000:0.#} mm · moment equilibrium error {result.MomentEquilibriumError:E1}";
         DA.SetData(10, $"load {result.TotalLoad.Z / 1000:0.###} kN (vertical) · reactions {sumR.Z / 1000:0.###} kN · equilibrium error {result.EquilibriumError:E1}\n" +
             $"{result.Nodes.Length} nodes · {result.Utilization.Length} elements · {result.JointCount} joints · {result.SupportNodeCount} supports ({(supportType == 1 ? "pinned" : "fixed")}) · joints {(jointK < 0 ? "rigid" : jointK == 0 ? "hinged" : $"k = {jointK:G3} N·m/rad")} · {stack}\n" +
-            $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}\n{buck}");
+            $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}" + families + $"\n{buck}");
 
         if (result.BucklingFactors.Length > 0)
         {
