@@ -111,6 +111,132 @@
   ]
  },
  {
+  "file": "WebPropagationComponent.cs",
+  "name": "Web Propagation",
+  "nick": "WebProp",
+  "desc": "Grows an AAG web from two neighbouring geodesic rows you draw — no surface needed, the web is the design (Wang, Almaskin & Pottmann 2025). Row by row: every node star stays planar exactly (the new vertex lies on the ruling of the strip's rectifying developable), every new row is a discrete geodesic (its osculating planes contain the node normals), and the remaining freedom repeats the strip's triangles (Offset 0) or makes them equilateral (Offset 1). A = U laths and B = W laths (asymptotic, upright strips), G = the rows (geodesic, flat strips). With AAG on, the whole web is optimised once more with fairness, as in the paper.",
+  "tab": "Gridshells",
+  "icon": "WebPropagation",
+  "guid": "3B9D7F1A-6C2E-4A5B-8D43-0E7F2C9A1B64",
+  "inputs": [
+   {
+    "name": "First",
+    "nick": "V0",
+    "type": "Curve",
+    "desc": "First row of the strip: a polyline (its vertices are the nodes) or any curve (divided into Nodes)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Second",
+    "nick": "V1",
+    "type": "Curve",
+    "desc": "The neighbouring row: same number of nodes; its vertex j sits between vertices j and j+1 of the first row (either order and direction is detected)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Nodes",
+    "nick": "N",
+    "type": "Integer",
+    "desc": "Nodes per row (0 = the polylines' own vertices; both rows must then have the same count)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Rows",
+    "nick": "R",
+    "type": "Integer",
+    "desc": "Rows to add beyond the strip",
+    "access": "item",
+    "default": "10"
+   },
+   {
+    "name": "Offset",
+    "nick": "O",
+    "type": "Number",
+    "desc": "Shape of the new triangles: 0 repeats the strip's own triangles at each position (constant node spacing along the asymptotic laths), > 0 asks for equilateral triangles of that height factor (1 = equilateral)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Fairness",
+    "nick": "F",
+    "type": "Number",
+    "desc": "Weight of the second differences along every new row (0 = none)",
+    "access": "item",
+    "default": "0.01"
+   },
+   {
+    "name": "AAG",
+    "nick": "G",
+    "type": "Boolean",
+    "desc": "Optimise the finished web globally (planar stars, geodesic rows, fairness) as the paper does after propagation",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Iterations",
+    "nick": "It",
+    "type": "Integer",
+    "desc": "Iterations of the global AAG optimisation",
+    "access": "item",
+    "default": "16"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "A",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Asymptotic laths of the U family (upright strips), one per node of the strip",
+    "access": "list"
+   },
+   {
+    "name": "B",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Asymptotic laths of the W family (upright strips)",
+    "access": "list"
+   },
+   {
+    "name": "G",
+    "nick": "G",
+    "type": "Curve",
+    "desc": "The rows: geodesic laths (flat strips), the two given ones first",
+    "access": "list"
+   },
+   {
+    "name": "Nodes",
+    "nick": "N",
+    "type": "Point",
+    "desc": "Web nodes, row by row",
+    "access": "list"
+   },
+   {
+    "name": "Quads",
+    "nick": "Q",
+    "type": "Mesh",
+    "desc": "The A × B quad net on the nodes (the rows are its diagonals)",
+    "access": "item"
+   },
+   {
+    "name": "Errors",
+    "nick": "E",
+    "type": "Number",
+    "desc": "Per new row: largest angle (degrees) between the row's osculating plane and the node normal — 0 for a discrete geodesic",
+    "access": "list"
+   },
+   {
+    "name": "Report",
+    "nick": "Rp",
+    "type": "Text",
+    "desc": "Rows built, node count, star and geodesic errors, and — with AAG — how far the global step moved the nodes",
+    "access": "item"
+   }
+  ]
+ },
+ {
   "file": "ChebyshevNetComponent.cs",
   "name": "Chebyshev Net",
   "nick": "ChebNet",

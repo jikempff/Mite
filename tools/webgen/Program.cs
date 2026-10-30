@@ -719,6 +719,74 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     numbers["projection"] = new { vertices = grid.VertexCount, buildMs = t.ElapsedMilliseconds, queries = 20000, queryMs = t2.ElapsedMilliseconds, exact = ok };
 }
 
+// ---------- Web Propagation: AAG webs grown from a boundary strip (Wang, Almaskin & Pottmann 2025) ----------
+{
+    // the exact discrete catenoid web: N meridians, rings ρ_t = R cosh(a t), z_t = a R t, cosh a = 1 / cos(2π/N)
+    Vec3d[] CatRow(int m, int n, int N, int t0)
+    {
+        double delta = 2 * Math.PI / N, a = Math.Log(1 / Math.Cos(delta) + Math.Sqrt(1 / (Math.Cos(delta) * Math.Cos(delta)) - 1));
+        var row = new Vec3d[n];
+        for (int j = 0; j < n; j++) { int t = m + 2 * j - t0; row[j] = new Vec3d(Math.Cosh(a * t) * Math.Cos(m * delta), Math.Cosh(a * t) * Math.Sin(m * delta), a * t); }
+        return row;
+    }
+    Vec3d[] HypRow(int m, int n, int N, int t0, double beta)
+    {
+        double delta = 2 * Math.PI / N;
+        var row = new Vec3d[n];
+        for (int j = 0; j < n; j++) { int k = m + 2 * j - t0; double rho = 1 / Math.Cos(k * delta); row[j] = new Vec3d(rho * Math.Cos(m * delta), rho * Math.Sin(m * delta), Math.Tan(k * delta) / Math.Tan(beta)); }
+        return row;
+    }
+    int nN = 48, nn = 9, rowsAdd = 12;
+    var t = Stopwatch.StartNew();
+    var rep = WebPropagation.Propagate(CatRow(0, nn, nN, 8), CatRow(1, nn, nN, 8), new WebPropagation.Options { Rows = rowsAdd });
+    t.Stop();
+    var t2 = Stopwatch.StartNew();
+    var equi = WebPropagation.Propagate(CatRow(0, nn, nN, 8), CatRow(1, nn, nN, 8), new WebPropagation.Options { Rows = rowsAdd, Offset = 1.0 });
+    t2.Stop();
+    // the naive offset: every row translated by the last step
+    var naive = new List<Vec3d[]> { CatRow(0, nn, nN, 8), CatRow(1, nn, nN, 8) };
+    for (int k = 0; k < rowsAdd; k++) { var pr = naive[^2]; var la = naive[^1]; naive.Add(la.Select((v, j) => v + (la[j] - pr[j])).ToArray()); }
+    double naiveStar = 0, naiveGeo = 0;
+    for (int k = 2; k < naive.Count; k++) { naiveStar = Math.Max(naiveStar, WebPropagation.StarErrorDegrees(naive[k - 2], naive[k - 1], naive[k])); naiveGeo = Math.Max(naiveGeo, WebPropagation.GeodesicErrorDegrees(naive[k - 1], naive[k])); }
+    // exact reproduction with the exact rows as targets: catenoid (24 meridians) and hyperboloid rulings (60)
+    var exactCat = Enumerable.Range(0, 10).Select(m => CatRow(m, 7, 24, 8)).ToList();
+    var repCat = WebPropagation.Propagate(exactCat[0], exactCat[1], new WebPropagation.Options { Rows = 8, Targets = exactCat.Skip(2).ToList(), TargetWeight = 1, Fairness = 0 });
+    double catErr = 0; for (int k = 2; k < exactCat.Count; k++) catErr = Math.Max(catErr, repCat.Rows[k].Zip(exactCat[k], (p, q) => (p - q).Length).Max());
+    var exactHyp = Enumerable.Range(0, 12).Select(m => HypRow(m, 6, 60, 10, 0.6)).ToList();
+    var repHyp = WebPropagation.Propagate(exactHyp[0], exactHyp[1], new WebPropagation.Options { Rows = 10, Targets = exactHyp.Skip(2).ToList(), TargetWeight = 1, Fairness = 0 });
+    double hypErr = 0; for (int k = 2; k < exactHyp.Count; k++) hypErr = Math.Max(hypErr, repHyp.Rows[k].Zip(exactHyp[k], (p, q) => (p - q).Length).Max());
+    double hypBow = 0;
+    foreach (var lath in repHyp.Web.A.Concat(repHyp.Web.B))
+        for (int i = 1; i + 1 < lath.Length; i++) { Vec3d a1 = lath[i] - lath[i - 1], b1 = lath[i + 1] - lath[i]; hypBow = Math.Max(hypBow, Vec3d.Cross(a1, b1).Length / (a1.Length * b1.Length)); }
+    // the global AAG step on the propagated web finds nothing to fix
+    var aag = AagWeb.Optimize(rep.Web, new AagWeb.Options { Iterations = 8, Fairness = 0 });
+    double moved = aag.Nodes.Zip(rep.Web.Nodes, (p, q) => (p - q).Length).Max();
+    double spacingDrift = 0;
+    foreach (var lath in rep.Web.A.Concat(rep.Web.B)) { double first = (lath[1] - lath[0]).Length; for (int i = 1; i + 1 < lath.Length; i++) spacingDrift = Math.Max(spacingDrift, Math.Abs((lath[i + 1] - lath[i]).Length / first - 1)); }
+    object Scene(WebPropagation.Result r, string label) => new
+    {
+        label,
+        strip = r.Rows.Take(2).Select(l => Line(l)).ToArray(),
+        rows = r.Rows.Skip(2).Select(l => Line(l)).ToArray(),
+        a = r.Web.A.Select(l => Line(l)).ToArray(),
+        b = r.Web.B.Select(l => Line(l)).ToArray(),
+        nodes = r.Web.Nodes.Select(P).ToArray(),
+    };
+    scenes["webProp"] = Scene(rep, "catenoid strip · Offset 0 (repeat the strip's triangles)");
+    scenes["webPropEqui"] = Scene(equi, "catenoid strip · Offset 1 (equilateral)");
+    scenes["webPropNaive"] = new { label = "naive offset (no AAG)", strip = naive.Take(2).Select(l => Line(l)).ToArray(), rows = naive.Skip(2).Select(l => Line(l)).ToArray(), a = WebPropagation.BuildWeb(naive).A.Select(l => Line(l)).ToArray(), b = WebPropagation.BuildWeb(naive).B.Select(l => Line(l)).ToArray(), nodes = naive.SelectMany(l => l).Select(P).ToArray() };
+    scenes["webPropHyp"] = Scene(repHyp, "hyperboloid rulings reproduced from two meridians (exact targets)");
+    numbers["webProp"] = new
+    {
+        rows = rep.Rows.Count, rowsBuilt = rep.RowsBuilt, nodes = rep.Web.Nodes.Count, quads = rep.Web.Quads.Count, lathsU = rep.Web.A.Count, lathsW = rep.Web.B.Count,
+        star = rep.MaxStarError, geodesic = rep.MaxGeodesicError, ms = t.ElapsedMilliseconds, iterations = rep.Iterations.ToArray(), spacingDrift = R3(spacingDrift),
+        equiStar = equi.MaxStarError, equiGeodesic = equi.MaxGeodesicError, equiRows = equi.RowsBuilt, equiMs = t2.ElapsedMilliseconds,
+        naiveStar = R3(naiveStar), naiveGeodesic = R3(naiveGeo),
+        catenoidExact = catErr, hyperboloidExact = hypErr, hyperboloidBow = hypBow,
+        aagMoved = moved, aagStar = aag.StarError, aagGeodesic = aag.GeodesicError,
+    };
+}
+
 numbers["totalMs"] = sw.ElapsedMilliseconds;
 var opt = new JsonSerializerOptions { WriteIndented = false, IncludeFields = true };
 File.WriteAllText(Path.Combine(OutDir, "scenes.json"), JsonSerializer.Serialize(scenes, opt));

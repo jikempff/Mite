@@ -66,7 +66,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 30 components", IconsLoad());
+        Check("Icons load for all 31 components", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -150,6 +150,27 @@ internal static class Tests
             new Mite.Grasshopper.Components.AsymptoticWebComponent(),
             c => SetInputs(c, (0, saddle.DuplicateMesh()), (2, 0.25), (4, true)),
             c => Expect(CurveCount(c, 2) >= 3, $"geodesic diagonals: {CurveCount(c, 2)}"));
+
+        TestComponent("Web Propagation (catenoid strip)",
+            new Mite.Grasshopper.Components.WebPropagationComponent(),
+            c =>
+            {
+                // two neighbouring meridian rows of the discrete catenoid web (24 meridians, 7 rings each)
+                double delta = 2 * Math.PI / 24, a = Math.Log(1 / Math.Cos(delta) + Math.Sqrt(1 / (Math.Cos(delta) * Math.Cos(delta)) - 1));
+                Rhino.Geometry.Polyline Row(int m)
+                {
+                    var pl = new Rhino.Geometry.Polyline();
+                    for (int j = 0; j < 7; j++)
+                    {
+                        int t = m + 2 * j - 7;
+                        pl.Add(Math.Cosh(a * t) * Math.Cos(m * delta), Math.Cosh(a * t) * Math.Sin(m * delta), a * t);
+                    }
+                    return pl;
+                }
+                SetInputs(c, (0, Row(0).ToPolylineCurve()), (1, Row(1).ToPolylineCurve()), (3, 6));
+            },
+            c => Expect(CurveCount(c, 0) == 7 && CurveCount(c, 2) == 8 && MeshOut(c, 4) != null && MeshOut(c, 4)!.Faces.Count == 36,
+                $"web: U={CurveCount(c, 0)}, rows={CurveCount(c, 2)}, quads={MeshOut(c, 4)?.Faces.Count ?? 0}"));
 
         TestComponent("Geodesic Net",
             new Mite.Grasshopper.Components.GeodesicNetComponent(),
@@ -556,9 +577,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 30)
+        if (comps.Count != 31)
         {
-            Console.WriteLine($"      expected 30 components, found {comps.Count}");
+            Console.WriteLine($"      expected 31 components, found {comps.Count}");
             return false;
         }
 

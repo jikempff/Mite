@@ -75,9 +75,20 @@ public static class AagWeb
     }
 
     public static Result Optimize(MeshData reference, AsymptoticWeb.Result web, Options? options = null)
+        => Run(new MeshProjection(reference), web, options);
+
+    /// <summary>
+    /// The same optimisation without a reference surface — for a web designed
+    /// free in space (<see cref="WebPropagation"/>, the global step of Wang,
+    /// Almaskin &amp; Pottmann 2025 after propagation): normals start from the
+    /// node stars, the proximity term is absent and the deviations are 0.
+    /// </summary>
+    public static Result Optimize(AsymptoticWeb.Result web, Options? options = null)
+        => Run(null, web, options);
+
+    private static Result Run(MeshProjection? proj, AsymptoticWeb.Result web, Options? options)
     {
         options ??= new Options();
-        var proj = new MeshProjection(reference);
         int N = web.Nodes.Count;
         var res = new Result();
         if (N == 0) return res;
@@ -107,8 +118,13 @@ public static class AagWeb
         for (int i = 0; i < N; i++)
         {
             var p = web.Nodes[i] * inv;
-            var hit = proj.ClosestPoint(web.Nodes[i], proj.NearestVertexGlobal(web.Nodes[i]));
-            var n = hit.SmoothNormal.Normalized();
+            Vec3d n;
+            if (proj != null)
+            {
+                var hit = proj.ClosestPoint(web.Nodes[i], proj.NearestVertexGlobal(web.Nodes[i]));
+                n = hit.SmoothNormal.Normalized();
+            }
+            else n = StarNormal(web, i);
             x[6 * i] = p.X; x[6 * i + 1] = p.Y; x[6 * i + 2] = p.Z;
             x[6 * i + 3] = n.X; x[6 * i + 4] = n.Y; x[6 * i + 5] = n.Z;
         }
@@ -163,7 +179,7 @@ public static class AagWeb
                 }
                 sys.Row(1.0, Vec3d.Dot(n, n) - 1, (6 * i + 3, 2 * n.X), (6 * i + 4, 2 * n.Y), (6 * i + 5, 2 * n.Z));
                 // proximity through the tangent plane at the closest point
-                if (options.Proximity > 0)
+                if (options.Proximity > 0 && proj != null)
                 {
                     var p = V(i) * h;
                     var hit = proj.ClosestPoint(p, proj.NearestVertexGlobal(p));
@@ -251,8 +267,12 @@ public static class AagWeb
         {
             res.Nodes[i] = V(i) * h;
             res.Normals[i] = Nrm(i).Normalized();
-            var hit = proj.ClosestPoint(res.Nodes[i], proj.NearestVertexGlobal(res.Nodes[i]));
-            double d = (hit.Point - res.Nodes[i]).Length;
+            double d = 0;
+            if (proj != null)
+            {
+                var hit = proj.ClosestPoint(res.Nodes[i], proj.NearestVertexGlobal(res.Nodes[i]));
+                d = (hit.Point - res.Nodes[i]).Length;
+            }
             maxDev = Math.Max(maxDev, d); sumDev += d;
         }
         res.MaxDeviation = maxDev; res.MeanDeviation = sumDev / N;
@@ -260,6 +280,35 @@ public static class AagWeb
         foreach (var ch in chainsB) res.B.Add(ch.Select(i => res.Nodes[i]).ToArray());
         foreach (var ch in chainsG) res.G.Add(ch.Select(i => res.Nodes[i]).ToArray());
         return res;
+    }
+
+    /// <summary>
+    /// Unit normal of a node's star from its A and B neighbours: the normal of
+    /// the plane through the node and its two nearest neighbours of different
+    /// families (a star without both is given the mean of its neighbours' planes).
+    /// </summary>
+    internal static Vec3d StarNormal(AsymptoticWeb.Result web, int i)
+    {
+        var v = web.Nodes[i];
+        var a = web.NeighborsA[i]; var b = web.NeighborsB[i];
+        var sum = Vec3d.Zero;
+        foreach (int ja in a)
+            foreach (int jb in b)
+            {
+                var c = Vec3d.Cross(web.Nodes[ja] - v, web.Nodes[jb] - v);
+                if (c.Length < 1e-300) continue;
+                c = c.Normalized();
+                if (Vec3d.Dot(c, sum) < 0) c = -c;
+                sum += c;
+            }
+        if (sum.Length < 1e-300)
+        {
+            // one family only: a plane through the node and its (up to two) neighbours, if any
+            var nb = a.Concat(b).ToArray();
+            if (nb.Length >= 2) sum = Vec3d.Cross(web.Nodes[nb[0]] - v, web.Nodes[nb[1]] - v);
+            if (sum.Length < 1e-300) return new Vec3d(0, 0, 1);
+        }
+        return sum.Normalized();
     }
 
     /// <summary>Chains of nodes along one family: maximal paths through nodes with at most two family neighbours.</summary>

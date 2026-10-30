@@ -594,10 +594,17 @@ Literature
   developables (AGG); fairness 5e-4 → 0, proximity 0.1 → 0; singular
   vertices of valence N ≥ 6 at flat points with diagonals breaking at the
   rays; strips from C³ quintic splines and rectifying developables.
-- Wang, Schling, Pottmann et al. 2024, Computational design of asymptotic
-  geodesic hybrid gridshells via propagation algorithms (CAD 2024): webs grown
-  from a boundary strip of two neighbouring polylines, row by row, with a
-  global optimisation that may adjust the strip; GGG / AGG / AAG.
+- Wang, Almaskin & Pottmann 2025, Computational design of asymptotic geodesic
+  hybrid gridshells via propagation algorithms (Computer-Aided Design 178,
+  103800; this list used to attribute it to "Wang, Schling, Pottmann et al.
+  2024" — Bolun Wang, not Hui Wang, and Schling is not an author): webs grown
+  from a boundary strip of two neighbouring polylines, row by row, then a
+  global optimisation (eq. 11, λ_fair 1e-4, λ_appro 1); GGG (§3.1, Sauer's
+  equal angles, rays from bisector normals), AGG (§3.2, block-coordinate
+  descent on two ray parameters, a guide curve for the free direction), AAG
+  (§3.3: the new vertex on the ruling L_i of the rectifying strip, foot points
+  on its medial line, descent on the scalar r). Code:
+  github.com/wangbolun300/WebsViaPropagation.
 - Schling, Hitrec & Barthel 2017 and Schling 2018 (Repetitive Structures):
   asymptotic networks drawn by alternating curves through each other's
   intersections; on minimal surfaces the families cross at 90° (identical
@@ -628,8 +635,67 @@ Open
 - [ ] AGG webs: a G-net (equal opposite angles) with asymptotic diagonals,
       initialised from a developable (cylinder web of Graf & Sauer) — the
       family with more freedom (Schling et al. 2022 §2.3).
-- [ ] Propagation from a boundary strip (Wang et al. 2024) as a second way to
-      start a web: two neighbouring polylines drawn by the user.
+- [x] Propagation from a boundary strip (Wang, Almaskin & Pottmann 2025) as a
+      second way to start a web — 2026-10-30 (session 1, G/D):
+      `Gridshells/WebPropagation` and the **Web Propagation** component
+      (31 components). The strip is two neighbouring geodesic rows with the
+      same node count, row k's vertex j joined by U to row k+1's vertex j and
+      by W to row k+1's vertex j−1 (the paper's u_{i,1}, w_{i−1,1}); each new
+      row adds n U and n−1 W laths and the A × B quads have the rows as
+      diagonals. Construction, exact where the paper's is approximate: the
+      planar star at vertex j of the last row puts the new vertex j on
+      L_j = P_j ∩ P_{j+1} (the ruling of the discrete rectifying developable;
+      foot = the point of L_j nearest the row-edge midpoint instead of the
+      paper's medial line, which keeps both planes exact — the reference code
+      keeps only the right-hand plane), so the stars are planar to round-off
+      by construction; the geodesic condition of the new row, det(n, e_in,
+      e_out) / (|e_in||e_out|) = 0 with n = u × w (eq. 22), is solved on the n−1
+      ruling parameters plus the last vertex (no incoming W edge: free in the
+      plane of its three edges) by Levenberg–Marquardt with soft targets, then
+      a damped least-norm Gauss–Newton projection, so both conditions hold to
+      ~1e-13° (the paper reports E_aag 0.053 after 16 sweeps on a row). The
+      n−2 conditions leave 4 free directions per row: Offset 0 repeats the
+      strip's triangles (U and W lengths kept — constant node spacing along
+      the asymptotic laths), Offset 1 the equilateral apex of eq. 21; a weak
+      row fairness (eq. 8); `Options.Targets` pins them to given positions.
+      `AagWeb.Optimize(web, options)` is the reference-free overload for the
+      paper's global step. Exact test typologies (`WebPropagationTests`,
+      11 tests): the rotational A-net condition reduces to "(ρ_t, z_t)
+      collinear with (ρ_{t±1} cos δ, z_{t±1})" (the two mirror chords of a star
+      are parallel), so uniform rings give ρ_t = R cosh(a t), cosh a = 1 / cos δ
+      — a discrete catenoid, an exact discrete AAG web (stars 3e-14°,
+      meridians 2e-14°, and it lies on ρ = R cosh(z/R) for h = aR); the
+      hyperboloid's ruling net ρ_k = R / cos kδ, z_k = R cot β tan kδ is the
+      second (both families straight). Measured: rulings through the exact
+      next vertices to 1e-11; with the exact rows as targets both webs are
+      reproduced from their first two rows to 1e-14 over 8–10 rows, the
+      propagated laths straight to 4e-14; from the catenoid strip alone the
+      web is a different, equally exact AAG web (1.4e-13° / 1.2e-13°, 12 rows
+      in 52 ms) where the naive offset is 8.6° / 9.0° off; the global AAG
+      step then moves nodes by 2e-15; a planar equilateral strip continues as
+      the exact lattice (1e-9); a 20 % z-stretch of the targets is followed
+      only in the free directions (the row stays an AAG web to 1e-13°).
+      Findings: (1) the rotation by one meridian step is not a symmetry of
+      the staggered web (rows alternate ring parity), so no local rule —
+      repeat the triangle, equilateral — continues an exact rotational web
+      from two rows; it is reproduced only with the exact rows as targets,
+      which is what the test uses. (2) Soft targets alone leave the geodesic
+      residual at the trade-off (0.24° with weights 1 / 0.05); the second,
+      targets-off projection stage is what reaches 1e-13. (3) The last vertex
+      of a row has no incoming W edge, so P_{n−1} is undefined from the
+      strip; the reference code copies the neighbouring crease and
+      extrapolates the foot (third differences) — here the vertex is free in
+      the plane of its three edges and the star at the last node is measured
+      with the plane that the new row defines. (4) With Offset 0 the lath
+      spacing still drifts (52 % over 12 catenoid rows) because the geodesic
+      condition decides the shape; the exact catenoid web stretches its own
+      U edges 2.6× over the same rings. Open: AGG (§3.2) and GGG (§3.1)
+      propagation; the guide curve of §3.2 as a `Guide` input to steer the
+      free directions (the core `Targets` option is ready); propagation on a
+      given mesh (proximity through the tangent planes, Asymptotic Web's
+      `Proximity`) so the drawn strip can come from a surface; a Mite Net
+      output; the web app; the paper's "approximate the first strip" (make
+      a drawn first row geodesic before propagating).
 - [ ] Refinement: subdivide the AAG web and re-optimise so the laths between
       nodes are smooth (now straight node-to-node chords after AAG); then the
       strip boundaries from the rectifying developables (quintic splines).
@@ -659,6 +725,11 @@ Open
 
 ## Done
 
+- [x] 2026-10-30 (session 1, G/D): Web Propagation — AAG webs grown from a
+      drawn boundary strip (Wang, Almaskin & Pottmann 2025) with exact planar
+      stars and geodesic rows, two closed-form discrete AAG webs (discrete
+      catenoid, hyperboloid rulings) as test typologies, the reference-free
+      AAG optimisation, bench card with four self-tests (79 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

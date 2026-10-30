@@ -577,9 +577,38 @@ def icon_flat_kit():
     finish(img, "FlatKit")
 
 
+def icon_web_propagation():
+    """A web grown from a strip: the two drawn rows bold at the near edge, the
+    propagated rows lighter behind them, zig-zag asymptotic laths between
+    consecutive rows (a triangle strip pattern)."""
+    img, d = canvas()
+    patch(img)
+    rows = [0.12, 0.36, 0.6, 0.84]
+    n = 4
+    for k, v in enumerate(rows):
+        bold = k < 2
+        uvline(d, lambda t, v=v: (t, v + 0.05 * math.sin(math.pi * t)), "surface", 1.4 if bold else 0.7, n=12)
+    for k in range(len(rows) - 1):
+        v0, v1 = rows[k], rows[k + 1]
+        pts = []
+        for j in range(n):
+            u0 = j / (n - 1) + 0.14 * (k % 2)
+            u1 = j / (n - 1) + 0.14 * ((k + 1) % 2)
+            pts.append(uv(min(1, u0), v0 + 0.05 * math.sin(math.pi * min(1, u0))))
+            pts.append(uv(min(1, u1), v1 + 0.05 * math.sin(math.pi * min(1, u1))))
+        for i in range(len(pts) - 1):
+            stroke(d, [P(*pts[i]), P(*pts[i + 1])], "surface", 1.0 if k == 0 else 0.55)
+    for j in range(n):
+        for k in (0, 1):
+            u = min(1, j / (n - 1) + 0.14 * (k % 2))
+            x, y = uv(u, rows[k] + 0.05 * math.sin(math.pi * u))
+            dot(d, x, y, 1.1, "surface")
+    finish(img, "WebPropagation")
+
+
 ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, icon_streamlines, icon_umbilics,
        icon_planarization, icon_minimal_surface, icon_force_density, icon_dynamic_relaxation,
-       icon_asymptotic_net, icon_asymptotic_web, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
+       icon_asymptotic_net, icon_asymptotic_web, icon_web_propagation, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path,
        icon_lath_analysis, icon_gridshell_analysis, icon_mesh_isocurves,
        icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_segment, icon_lath_preview, icon_lath_labels, icon_net_topology, icon_net_kinetics, icon_flat_kit,
        icon_mesh_cleanup, icon_pull_to_mesh, icon_mesh_colour_map, icon_tab]
