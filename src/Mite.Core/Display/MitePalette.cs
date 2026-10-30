@@ -201,37 +201,37 @@ public static class MitePalette
     public static Rgb Ok(Theme t) => t == Theme.Light ? Rgb.FromHex("#00a653") : Rgb.FromHex("#00ff85");
 
     // ---------- colour maps ----------
+    // The maps themselves live in Mite.Core.Visualisation.ColourMap (one
+    // language for Grasshopper, the web app and the bench: Moreland's path for
+    // the diverging map, Kovesi's lightness equalisation for both); this class
+    // exposes them as evenly spaced stops for the generators and the CSS.
+
+    static Rgb[] StopsOf(Visualisation.ColourMap.Rgb[] table, int n)
+        => Enumerable.Range(0, n).Select(i => { var c = table[Visualisation.ColourMap.Index(i / (double)(n - 1))]; return new Rgb(c.R, c.G, c.B); }).ToArray();
+    static Rgb Of(Visualisation.ColourMap.Rgb c) => new Rgb(c.R, c.G, c.B);
+
+    static Rgb[]? _diverging, _sequential;
 
     /// <summary>
     /// Diverging map for signed values (K, H, k2), centred on zero: neon blue
-    /// (= family A) at −max, white at 0, crimson at +max. Both ends at L* 39.5;
-    /// 13 stops at equal L* steps along the sRGB paths.
+    /// (= family A) at −max, white (L* 95) at 0, neon red at +max — 13 stops
+    /// of <see cref="Visualisation.ColourMap.DivergingTable"/> at equal L* steps per arm.
     /// </summary>
-    public static readonly Rgb[] Diverging =
-    {
-        new(42, 60, 255), new(83, 98, 253), new(118, 130, 252), new(151, 159, 251), new(183, 189, 249), new(215, 218, 248),
-        new(247, 247, 247),
-        new(239, 213, 221), new(231, 179, 194), new(223, 144, 166), new(214, 108, 138), new(204, 66, 105), new(188, 0, 53),
-    };
+    public static Rgb[] Diverging => _diverging ??= StopsOf(Visualisation.ColourMap.DivergingTable, 13);
 
     /// <summary>
     /// Sequential map for magnitudes (|k|, lengths, errors): black → neon blue →
-    /// neon green → white, 13 stops at equal L* steps (2.7 → 99.1).
+    /// teal → neon green → white, 13 stops of <see cref="Visualisation.ColourMap.SequentialTable"/>
+    /// at equal L* steps (2.7 → 99.1).
     /// </summary>
-    public static readonly Rgb[] Sequential =
-    {
-        new(10, 10, 10), new(18, 23, 73), new(24, 33, 122), new(30, 44, 172), new(37, 54, 224), new(34, 89, 229),
-        new(24, 127, 192), new(16, 157, 164), new(8, 185, 137), new(1, 212, 112), new(93, 231, 160), new(176, 244, 208),
-        new(245, 255, 247),
-    };
+    public static Rgb[] Sequential => _sequential ??= StopsOf(Visualisation.ColourMap.SequentialTable, 13);
 
-    /// <summary>The sRGB path the diverging map's negative arm is cut from (end → centre).</summary>
-    public static readonly Rgb[] DivergingPathNegative = { new(42, 60, 255), new(247, 247, 247) };
-    /// <summary>The sRGB path the diverging map's positive arm is cut from (end → centre).
-    /// The end is family B's hue at family A's lightness (CIELAB L* 39.5, the largest chroma in gamut).</summary>
-    public static readonly Rgb[] DivergingPathPositive = { new(188, 0, 53), new(247, 247, 247) };
-    /// <summary>The sRGB path the sequential map is cut from (the app's 1.3.0 stops).</summary>
-    public static readonly Rgb[] SequentialPath = { new(10, 10, 10), new(41, 61, 255), new(0, 217, 107), new(245, 255, 247) };
+    /// <summary>The control points of the diverging map's negative arm (end → centre).</summary>
+    public static Rgb[] DivergingPathNegative => new[] { Of(Visualisation.ColourMap.NeonBlue), Of(Visualisation.ColourMap.Diverging(0.5)) };
+    /// <summary>The control points of the diverging map's positive arm (end → centre).</summary>
+    public static Rgb[] DivergingPathPositive => new[] { Of(Visualisation.ColourMap.NeonRed), Of(Visualisation.ColourMap.Diverging(0.5)) };
+    /// <summary>The control points of the sequential map (CIELAB piecewise-linear path).</summary>
+    public static Rgb[] SequentialPath => new[] { Of(Visualisation.ColourMap.Black), Of(Visualisation.ColourMap.SeqBlue), Of(Visualisation.ColourMap.SeqTeal), Of(Visualisation.ColourMap.SeqGreen), Of(Visualisation.ColourMap.White) };
 
     /// <summary>Samples evenly spaced stops at t ∈ [0, 1] by linear interpolation in sRGB (not rounded).</summary>
     public static (double R, double G, double B) SampleExact(IReadOnlyList<Rgb> stops, double t)
@@ -268,10 +268,7 @@ public static class MitePalette
     public static Rgb Utilization(double u)
     {
         if (double.IsNaN(u) || double.IsInfinity(u)) return NoData;
-        if (u < 0.7) return Mix(0.00, 0.85, 0.42, 0.55, 0.95, 0.10, Math.Max(0, u) / 0.7);
-        if (u < 1.0) return Mix(0.55, 0.95, 0.10, 0.85, 1.00, 0.00, (u - 0.7) / 0.3);
-        if (u < 1.3) return Mix(1.00, 0.12, 0.31, 0.75, 0.02, 0.18, (u - 1.0) / 0.3);
-        return new Rgb(89, 0, 20);
+        return Of(Visualisation.ColourMap.Utilisation(u));
     }
 
     /// <summary>

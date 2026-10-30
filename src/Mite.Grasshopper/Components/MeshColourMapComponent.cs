@@ -1,19 +1,27 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
+using Mite.Core.Geometry;
+using Mite.Core.Visualisation;
 
 namespace Mite.Grasshopper.Components;
 
+/// <summary>
+/// Colours a mesh with Mite's shared colour maps (<see cref="ColourMap"/>: the
+/// same tables the web app and the bench use) and builds a legend: a coloured
+/// strip beside the mesh with nice tick values (Heckbert 1990) so the colours
+/// can be read in the viewport — wire Points and Labels into a Text Tag.
+/// </summary>
 public class MeshColourMapComponent : MiteComponent
 {
     public MeshColourMapComponent()
         : base("Mesh Colour Map", "ColourMap",
-            "Colours a mesh by per-vertex values in one step (no Bounds / Remap / Gradient chain). " +
-            "Diverging palettes are centred on zero, which suits signed curvature: neon blue negative, " +
-            "white zero, crimson positive. Palettes 0-2 are Mite's black/white/neon maps, identical to the web app " +
-            "and the bench; their lightness changes at a uniform rate (CIELAB L*), so equal steps in value look equal.",
+            "Colours a mesh by per-vertex values in one step (no Bounds / Remap / Gradient chain), with a legend. " +
+            "The diverging palette is centred on zero, which suits signed curvature: neon blue negative, " +
+            "white zero, neon red positive — the same colours as the web app and the bench.",
             "Util", "MeshColourMap") { }
 
     public override Guid ComponentGuid => new("B1C2D3E4-F5A6-7890-1234-567890ABCDFB");
@@ -23,10 +31,7 @@ public class MeshColourMapComponent : MiteComponent
         pManager.AddMeshParameter("Mesh", "M", "Input mesh", GH_ParamAccess.item);
         pManager.AddNumberParameter("Values", "V", "One value per mesh vertex (e.g. K, H, K1)", GH_ParamAccess.list);
         pManager.AddIntervalParameter("Domain", "D", "Value range to map (empty = automatic, robust 2%..98% percentiles)", GH_ParamAccess.item);
-        pManager.AddIntegerParameter("Palette", "P", "0 = diverging neon blue-white-crimson (centred on 0, equal lightness at both ends), " +
-            "1 = sequential black-neon blue-neon green-white, " +
-            "2 = utilization (1 = limit: green-neon yellow below, neon red above; a wired Domain's upper end is the limit), " +
-            "3-5 = the 1.3.0 colours (blue-white-red, viridis-like, traffic light)", GH_ParamAccess.item, 0);
+        pManager.AddIntegerParameter("Palette", "P", "0 = diverging neon blue – white – neon red (centred on 0), 1 = sequential black – blue – green – white, 2 = utilisation traffic light (green below 0.7, yellow at 1, red above)", GH_ParamAccess.item, 0);
         pManager[2].Optional = true;
     }
 
@@ -35,6 +40,10 @@ public class MeshColourMapComponent : MiteComponent
         pManager.AddMeshParameter("Mesh", "M", "Coloured mesh", GH_ParamAccess.item);
         pManager.AddIntervalParameter("Domain", "D", "Value range that was mapped", GH_ParamAccess.item);
         pManager.AddColourParameter("Colours", "C", "Colour per vertex", GH_ParamAccess.list);
+        pManager.AddMeshParameter("Legend", "L", "Colour bar beside the mesh (a coloured strip, bottom = Domain start, top = Domain end)", GH_ParamAccess.item);
+        pManager.AddNumberParameter("Ticks", "T", "Nice tick values inside the domain (0 is one of them when the domain contains it); the domain ends are the strip's ends", GH_ParamAccess.list);
+        pManager.AddTextParameter("Labels", "Lb", "Tick labels, then the two end labels — pair with Points in a Text Tag", GH_ParamAccess.list);
+        pManager.AddPointParameter("Points", "Pt", "Where each label belongs: one point per tick right of the strip, then the bottom and top ends", GH_ParamAccess.list);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -51,91 +60,61 @@ public class MeshColourMapComponent : MiteComponent
         if (values.Count != mesh.Vertices.Count)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error,
-                $"Values needs one number per vertex: got {values.Count}, mesh has {mesh.Vertices.Count}.");
+                $"Values needs one number per vertex: got {values.Count}, mesh has {mesh.Vertices.Count}. " +
+                "Every Mite curvature output is per vertex; a per-face list needs Face Values → Vertex Values first.");
             return;
         }
+        if (palette < 0 || palette > 2)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"Palette {palette} is not one of 0, 1, 2: using the diverging palette.");
+            palette = 0;
+        }
+        var pal = (ColourMap.Palette)palette;
 
-        double lo, hi;
-        if (domain.IsValid && Math.Abs(domain.Length) > 0)
-        {
-            lo = Math.Min(domain.T0, domain.T1); hi = Math.Max(domain.T0, domain.T1);
-        }
-        else
-        {
-            var sorted = new List<double>();
-            foreach (double v in values) if (!double.IsNaN(v) && !double.IsInfinity(v)) sorted.Add(v);
-            if (sorted.Count == 0) { lo = -1; hi = 1; }
-            else
-            {
-                sorted.Sort();
-                lo = sorted[(int)(0.02 * (sorted.Count - 1))];
-                hi = sorted[(int)(0.98 * (sorted.Count - 1))];
-                if (palette == 2)
-                {
-                    lo = 0; hi = 1; // utilization: the value itself, 1 = at the limit
-                }
-                else if (palette == 0 || palette == 3)
-                {
-                    double m = Math.Max(Math.Abs(lo), Math.Abs(hi));
-                    lo = -m; hi = m;
-                }
-                if (hi - lo < 1e-300) { lo -= 1; hi += 1; }
-            }
-        }
+        double? lo = null, hi = null;
+        if (domain.IsValid && Math.Abs(domain.Length) > 0) { lo = domain.T0; hi = domain.T1; }
+        var mapped = ColourMap.Map(values, pal, lo, hi);
+        if (pal == ColourMap.Palette.Utilisation && lo.HasValue)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "The utilisation palette maps values directly (0 … 1.3, limit at 1); Domain is ignored.");
 
         var colored = mesh.DuplicateMesh();
         colored.VertexColors.Clear();
         var colors = new List<Color>(values.Count);
         for (int i = 0; i < values.Count; i++)
         {
-            double v = values[i];
-            System.Drawing.Color c;
-            if (palette == 2)
-                c = PaletteColours.Utilization(hi > 0 ? v / hi : double.NaN);
-            else
-            {
-                double t = double.IsNaN(v) ? 0.5 : (v - lo) / (hi - lo);
-                c = Palette(palette, Math.Max(0.0, Math.Min(1.0, t)));
-            }
+            var c = ToColor(mapped.Colours[i]);
             colors.Add(c);
             colored.VertexColors.Add(c);
         }
 
+        // legend: a strip as tall as the mesh, standing to its right (+X of the bounding box), in the world XZ plane
+        var legend = Legend.Build(mapped.Lo, mapped.Hi, pal, 64);
+        var bb = mesh.GetBoundingBox(true);
+        double height = Math.Max(bb.Max.Z - bb.Min.Z, 0.25 * bb.Diagonal.Length);
+        if (height <= 0) height = 1;
+        double width = height / 12;
+        var origin = new Vec3d(bb.Max.X + 2 * width, bb.Min.Y, bb.Min.Z);
+        var strip = Legend.BuildStrip(legend, origin, new Vec3d(0, 0, 1), new Vec3d(1, 0, 0), height, width);
+        var stripMesh = new Mesh();
+        foreach (var v in strip.Mesh.Vertices) stripMesh.Vertices.Add(v.X, v.Y, v.Z);
+        foreach (var f in strip.Mesh.Faces) stripMesh.Faces.AddFace(f[0], f[1], f[2], f[3]);
+        foreach (var c in strip.VertexColours) stripMesh.VertexColors.Add(ToColor(c));
+        stripMesh.Normals.ComputeNormals();
+
+        var labels = legend.Labels.ToList();
+        labels.Add(legend.LoLabel); labels.Add(legend.HiLabel);
+        var points = strip.TickPoints.Select(p => new Point3d(p.X, p.Y, p.Z)).ToList();
+        points.Add(new Point3d(strip.LoPoint.X, strip.LoPoint.Y, strip.LoPoint.Z));
+        points.Add(new Point3d(strip.HiPoint.X, strip.HiPoint.Y, strip.HiPoint.Z));
+
         DA.SetData(0, colored);
-        DA.SetData(1, new Interval(lo, hi));
+        DA.SetData(1, new Interval(mapped.Lo, mapped.Hi));
         DA.SetDataList(2, colors);
+        DA.SetData(3, stripMesh);
+        DA.SetDataList(4, legend.Ticks);
+        DA.SetDataList(5, labels);
+        DA.SetDataList(6, points);
     }
 
-    private static Color Palette(int palette, double t)
-    {
-        switch (palette)
-        {
-            case 0:
-                return PaletteColours.Diverging(t);
-            case 1:
-                return PaletteColours.Sequential(t);
-            case 4:
-                return Lerp(new[]
-                {
-                    Color.FromArgb(68, 1, 84), Color.FromArgb(59, 82, 139), Color.FromArgb(33, 145, 140),
-                    Color.FromArgb(94, 201, 98), Color.FromArgb(253, 231, 37)
-                }, t);
-            case 5:
-                return Lerp(new[] { Color.FromArgb(46, 160, 67), Color.FromArgb(230, 200, 40), Color.FromArgb(220, 60, 50) }, t);
-            default: // 3: the 1.3.0 diverging map
-                return Lerp(new[] { Color.FromArgb(33, 102, 172), Color.FromArgb(247, 247, 247), Color.FromArgb(178, 24, 43) }, t);
-        }
-    }
-
-    private static Color Lerp(Color[] stops, double t)
-    {
-        double x = t * (stops.Length - 1);
-        int i = Math.Min(stops.Length - 2, (int)Math.Floor(x));
-        double f = x - i;
-        Color a = stops[i], b = stops[i + 1];
-        return Color.FromArgb(
-            (int)Math.Round(a.R + (b.R - a.R) * f),
-            (int)Math.Round(a.G + (b.G - a.G) * f),
-            (int)Math.Round(a.B + (b.B - a.B) * f));
-    }
+    internal static Color ToColor(ColourMap.Rgb c) => Color.FromArgb(c.R, c.G, c.B);
 }

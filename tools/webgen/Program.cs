@@ -10,6 +10,7 @@ using Mite.Core.Fabrication;
 using Mite.Core.FormFinding;
 using Mite.Core.Geometry;
 using Mite.Core.Gridshells;
+using Mite.Core.Visualisation;
 using Mite.Tests;
 
 var scenes = new Dictionary<string, object>();
@@ -2492,6 +2493,58 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         catenoidExact = catErr, hyperboloidExact = hypErr, hyperboloidBow = hypBow,
         aagMoved = moved, aagStar = aag.StarError, aagGeodesic = aag.GeodesicError,
     };
+}
+
+// ---------- Colour maps and legends (one colour language: Grasshopper, web app, bench) ----------
+{
+    var torus = TestMeshes.CreateTorus(3.0, 1.0, 64, 32);
+    var K = GaussianCurvature.Compute(torus);
+    var H = MeanCurvature.Compute(torus).Values;
+    var faces = new List<int[]>();
+    for (int i = 0; i < 64; i++) for (int j = 0; j < 32; j++) { int a = i * 32 + j, b = ((i + 1) % 64) * 32 + j, c = ((i + 1) % 64) * 32 + (j + 1) % 32, d = i * 32 + (j + 1) % 32; faces.Add(new[] { a, b, c, d }); }
+    // face colours as the bench draws them: the mean of the face's (rounded) vertex values on the automatic symmetric domain
+    object FaceColours(double[] vals)
+    {
+        var v = vals.Select(R3).ToArray();
+        var m = ColourMap.Map(v, ColourMap.Palette.Diverging);
+        var cols = faces.Select(f => ColourMap.Diverging((f.Average(vi => v[vi]) - m.Lo) / (m.Hi - m.Lo)).Hex).ToArray();
+        var lg = Legend.Build(m.Lo, m.Hi, ColourMap.Palette.Diverging, 32);
+        return new { lo = m.Lo, hi = m.Hi, colours = cols, ticks = lg.Ticks, labels = lg.Labels, loLabel = lg.LoLabel, hiLabel = lg.HiLabel, step = lg.Step };
+    }
+    double Worst(ColourMap.Rgb[] t, int from, int to)
+    {
+        double mean = Math.Abs(ColourMap.Lightness(t[to]) - ColourMap.Lightness(t[from])) / (to - from), worst = 0;
+        for (int i = from; i + 8 <= to; i += 4) worst = Math.Max(worst, Math.Abs(Math.Abs(ColourMap.Lightness(t[i + 8]) - ColourMap.Lightness(t[i])) / 8 / mean - 1));
+        return R3(100 * worst);
+    }
+    var div = ColourMap.DivergingTable; var seq = ColourMap.SequentialTable;
+    var old = new ColourMap.Rgb[257];
+    double[][] st = { new[] { 0.10, 0.12, 0.85 }, new[] { 0.45, 0.52, 1.00 }, new[] { 0.97, 0.97, 0.97 }, new[] { 1.00, 0.45, 0.55 }, new[] { 0.85, 0.05, 0.20 } };
+    for (int i = 0; i < 257; i++) { double x = i / 64.0; int j = Math.Min(3, (int)Math.Floor(x)); double f = x - j; old[i] = new ColourMap.Rgb((int)Math.Round(255 * (st[j][0] + (st[j + 1][0] - st[j][0]) * f)), (int)Math.Round(255 * (st[j][1] + (st[j + 1][1] - st[j][1]) * f)), (int)Math.Round(255 * (st[j][2] + (st[j + 1][2] - st[j][2]) * f))); }
+    double minChroma = 1e9; for (int i = 24; i < 232; i++) minChroma = Math.Min(minChroma, ColourMap.Chroma(seq[i]));
+    var legends = new[] { (105.0, 543.0), (2.03, 2.17), (-0.37, 0.37), (0.0, 1.3), (-0.0042, 0.0042), (0.0, 1.0), (-1.0, 0.25) }
+        .Select(d => { var lg = Legend.Build(d.Item1, d.Item2, ColourMap.Palette.Diverging, 8); return new { lo = d.Item1, hi = d.Item2, step = lg.Step, ticks = lg.Ticks, labels = lg.Labels, loLabel = lg.LoLabel, hiLabel = lg.HiLabel }; }).ToArray();
+    numbers["colourMap"] = new
+    {
+        divEnds = new[] { div[0].Hex, div[128].Hex, div[256].Hex },
+        divL = new[] { R3(ColourMap.Lightness(div[0])), R3(ColourMap.Lightness(div[128])), R3(ColourMap.Lightness(div[256])) },
+        divCentreChroma = R3(ColourMap.Chroma(div[128])), centreLightness = ColourMap.CentreLightness,
+        divStepBlue = R3(Math.Abs(ColourMap.Lightness(div[128]) - ColourMap.Lightness(div[0])) / 128), divStepRed = R3(Math.Abs(ColourMap.Lightness(div[256]) - ColourMap.Lightness(div[128])) / 128),
+        divWorstBlue = Worst(div, 0, 128), divWorstRed = Worst(div, 128, 256), oldWorstBlue = Worst(old, 0, 128), oldWorstRed = Worst(old, 128, 256),
+        seqEnds = new[] { seq[0].Hex, seq[256].Hex }, seqL = new[] { R3(ColourMap.Lightness(seq[0])), R3(ColourMap.Lightness(seq[256])) },
+        seqStep = R3((ColourMap.Lightness(seq[256]) - ColourMap.Lightness(seq[0])) / 256), seqWorst = Worst(seq, 0, 256), seqMinChroma = R3(minChroma),
+        seqMonotone = Enumerable.Range(1, 256).All(i => ColourMap.Lightness(seq[i]) >= ColourMap.Lightness(seq[i - 1]) - 0.05),
+        moreland = new[] { ColourMap.Moreland(new ColourMap.Rgb(59, 76, 192), new ColourMap.Rgb(180, 4, 38), 0.25).Hex, ColourMap.Moreland(new ColourMap.Rgb(59, 76, 192), new ColourMap.Rgb(180, 4, 38), 0.5).Hex, ColourMap.Moreland(new ColourMap.Rgb(59, 76, 192), new ColourMap.Rgb(180, 4, 38), 0.75).Hex },
+        util = new[] { 0, 0.35, 0.7, 0.999, 1.0, 1.15, 1.3, 2.0 }.Select(u => ColourMap.Utilisation(u).Hex).ToArray(),
+        legends,
+        torusK = FaceColours(K), torusH = FaceColours(H),
+        tableSize = ColourMap.TableSize, utilSize = ColourMap.UtilisationSize,
+    };
+    // the JavaScript twin the app and the bench load
+    string js = ColourMap.JavaScriptModule();
+    File.WriteAllText(Path.Combine(OutDir, "colormap-lut.js"), js);
+    string appJs = Path.GetFullPath(Path.Combine(OutDir, "..", "..", "src", "Mite.Web", "wwwroot", "js"));
+    if (Directory.Exists(appJs)) File.WriteAllText(Path.Combine(appJs, "colormap-lut.js"), js);
 }
 
 numbers["totalMs"] = sw.ElapsedMilliseconds;

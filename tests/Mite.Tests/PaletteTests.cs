@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Mite.Core.Display;
+using Mite.Core.Visualisation;
 using Xunit;
 
 namespace Mite.Tests;
@@ -52,28 +53,30 @@ public class PaletteTests
     }
 
     [Fact]
-    public void DivergingMap_IsSymmetricAndUniformInLightness()
+    public void DivergingMap_IsUniformInLightnessOnEachArm()
     {
+        // the stops are cut from ColourMap's diverging table (Moreland's path,
+        // Kovesi's equalisation): neon blue = family A at the negative end,
+        // the white control point (L* 95) at the centre, neon red at the positive end
         var L = LightnessProfile(MitePalette.Diverging);
         int mid = L.Length / 2;
-        double asym = Enumerable.Range(0, mid).Max(i => Math.Abs(L[i] - L[L.Length - 1 - i]));
-        Assert.True(asym < 0.6, $"L* asymmetry {asym:F2}");
-        Assert.InRange(Math.Abs(L[0] - L[^1]), 0, 0.05);           // equal end lightness (Kovesi, Moreland)
-        Assert.InRange(L[mid], 97.0, 97.5);                         // white centre
+        Assert.InRange(L[mid], ColourMap.CentreLightness - 0.6, ColourMap.CentreLightness + 0.6);
         Assert.Equal(MitePalette.FamilyA(Theme.Light), MitePalette.Diverging[0]); // negative end = family A
+        Assert.Equal(ColourMap.NeonRed.Hex, MitePalette.Diverging[^1].Hex);
         // lightness linear along each arm (uniform perceptual rate)
         double dev = 0;
         for (int i = 0; i < L.Length; i++)
         {
             double s = i <= mid ? i / (double)mid : (L.Length - 1 - i) / (double)mid;
-            dev = Math.Max(dev, Math.Abs(L[i] - (L[0] + (L[mid] - L[0]) * s)));
+            double end = i <= mid ? L[0] : L[^1];
+            dev = Math.Max(dev, Math.Abs(L[i] - (end + (L[mid] - end) * s)));
         }
         Assert.True(dev < 1.0, $"max deviation from linear L* {dev:F2}");
         // strictly darker towards both ends
         for (int i = 1; i <= mid; i++) Assert.True(L[i] > L[i - 1]);
         for (int i = mid + 1; i < L.Length; i++) Assert.True(L[i] < L[i - 1]);
 
-        // 1.3.0 (the app's previous stops) for the record: blue end L* 29.8, red end 46.0
+        // 1.3.0 (the app's previous stops) for the record: an L* asymmetry of 16 between the arms, no equalisation
         var old = new[] { (0.00, 0.10, 0.12, 0.85), (0.25, 0.45, 0.52, 1.00), (0.50, 0.97, 0.97, 0.97), (0.75, 1.00, 0.45, 0.55), (1.00, 0.85, 0.05, 0.20) };
         double OldL(double t)
         {
@@ -101,25 +104,27 @@ public class PaletteTests
     }
 
     [Fact]
-    public void Maps_AreTheEqualLightnessCutsOfTheirPaths()
+    public void Maps_AreTheStopsOfTheSharedColourMapTables()
     {
-        // the stored stops are reproducible: cut the sRGB paths at equal L* steps
-        var neg = MitePalette.EqualLightnessRamp(MitePalette.DivergingPathNegative, 6);
-        var pos = MitePalette.EqualLightnessRamp(MitePalette.DivergingPathPositive, 6);
-        var div = neg.Concat(pos.Take(6).Reverse()).ToArray();
-        var seq = MitePalette.EqualLightnessRamp(MitePalette.SequentialPath, 12);
-        void Same(Rgb[] a, Rgb[] b)
+        // one colour language: the stops are samples of ColourMap's tables, so
+        // Grasshopper, the web app and the bench cannot drift apart
+        void Same(Rgb[] a, ColourMap.Rgb[] table)
         {
-            Assert.Equal(a.Length, b.Length);
+            Assert.Equal(13, a.Length);
             for (int i = 0; i < a.Length; i++)
-                Assert.True(Math.Abs(a[i].R - b[i].R) <= 1 && Math.Abs(a[i].G - b[i].G) <= 1 && Math.Abs(a[i].B - b[i].B) <= 1, $"stop {i}: {a[i]} vs {b[i]}");
+            {
+                var c = table[ColourMap.Index(i / 12.0)];
+                Assert.True(a[i].R == c.R && a[i].G == c.G && a[i].B == c.B, $"stop {i}: {a[i]} vs {c}");
+            }
         }
-        Same(div, MitePalette.Diverging);
-        Same(seq, MitePalette.Sequential);
-        // the positive end is family B's hue darkened to family A's lightness
-        Assert.InRange(Math.Abs(ColourScience.Lightness(MitePalette.DivergingPathPositive[0]) - ColourScience.Lightness(MitePalette.FamilyA(Theme.Light))), 0, 0.05);
-        var hb = ColourScience.ToLab(MitePalette.FamilyB(Theme.Light)); var he = ColourScience.ToLab(MitePalette.DivergingPathPositive[0]);
-        Assert.InRange(Math.Abs(Math.Atan2(hb.B, hb.A) - Math.Atan2(he.B, he.A)) * 180 / Math.PI, 0, 2.0);
+        Same(MitePalette.Diverging, ColourMap.DivergingTable);
+        Same(MitePalette.Sequential, ColourMap.SequentialTable);
+        Assert.Equal(ColourMap.NeonBlue.Hex, MitePalette.DivergingPathNegative[0].Hex);
+        Assert.Equal(ColourMap.NeonRed.Hex, MitePalette.DivergingPathPositive[0].Hex);
+        Assert.Equal(5, MitePalette.SequentialPath.Length);
+        // the equal-lightness cutter stays for other paths
+        var ramp = MitePalette.EqualLightnessRamp(new[] { new Rgb(0, 0, 0), new Rgb(255, 255, 255) }, 4);
+        Assert.Equal(5, ramp.Length);
         Assert.Throws<ArgumentException>(() => MitePalette.EqualLightnessRamp(new[] { new Rgb(255, 255, 255), new Rgb(0, 0, 0) }, 4));
     }
 
@@ -168,20 +173,12 @@ public class PaletteTests
         return Path.Combine(new[] { dir!.FullName }.Concat(parts).ToArray());
     }
 
-    private static Rgb[] JsStops(string js, string name)
-    {
-        var m = Regex.Match(js, @"const " + name + @" = evenStops\(\[(.*?)\]\);", RegexOptions.Singleline);
-        Assert.True(m.Success, name + " not found in colormaps.js");
-        return Regex.Matches(m.Groups[1].Value, @"\[\s*(\d+),\s*(\d+),\s*(\d+)\s*\]").Cast<Match>()
-            .Select(x => new Rgb(int.Parse(x.Groups[1].Value), int.Parse(x.Groups[2].Value), int.Parse(x.Groups[3].Value))).ToArray();
-    }
-
     [Fact]
     public void WebApp_UsesTheSamePalette()
     {
+        // the maps reach the app through js/colormap-lut.js (ColourMapTests.JavaScriptTwin_OnDiskIsCurrent); colormaps.js derives its legend stops from it
         string js = File.ReadAllText(RepoFile("src", "Mite.Web", "wwwroot", "js", "colormaps.js"));
-        Assert.Equal(MitePalette.Diverging, JsStops(js, "DIVERGING"));
-        Assert.Equal(MitePalette.Sequential, JsStops(js, "SEQUENTIAL"));
+        Assert.Contains("from './colormap-lut.js'", js);
 
         string css = File.ReadAllText(RepoFile("src", "Mite.Web", "wwwroot", "css", "app.css"));
         Dictionary<string, string> Vars(string selector)
@@ -230,7 +227,7 @@ public class PaletteTests
         // Sample at a stop returns the stop; halfway between two stops is their mean
         Assert.Equal(MitePalette.Diverging[6], MitePalette.Sample(MitePalette.Diverging, 0.5));
         var h = MitePalette.SampleExact(MitePalette.Sequential, 0.5 / 12);
-        Assert.Equal((10 + 18) / 2.0, h.R, 9);
+        Assert.Equal((MitePalette.Sequential[0].R + MitePalette.Sequential[1].R) / 2.0, h.R, 9);
         Assert.Equal(MitePalette.Diverging[0], MitePalette.DivergingColour(-5, 1));
         Assert.Equal(MitePalette.Diverging[12], MitePalette.DivergingColour(5, 1));
     }
