@@ -108,6 +108,27 @@ the surface moved; `R` has the numbers before and after. Exact on a cylinder
 with helices as laths and the rulings as diagonals; elsewhere expect a
 fraction of a degree and a surface move of a percent of the spacing, and a
 warning above 1° when no AGG web lies close to the surface with these laths.
+**Web Propagation** (Mite > Gridshells) — an AAG web without a surface, from
+a strip you draw (Wang, Almaskin & Pottmann 2025):
+
+- `V0`, `V1` — two neighbouring geodesic rows as polylines with the same number
+  of vertices (or any curves with `N` nodes each); the second row's vertex j
+  sits between vertices j and j+1 of the first — the component detects the
+  order and direction and tells you when it reversed them
+- `R` — rows to add; `O` — `0` repeats the strip's triangles at every position
+  (constant node spacing along the asymptotic laths), `1` makes the new
+  triangles equilateral; `F` — a weak fairness along each new row
+- `G` (AAG) — `True` runs the global optimisation of Asymptotic Web once more
+  on the finished web, as the paper does after propagation
+
+`A` and `B` are the asymptotic laths between the rows (upright strips), `G` the
+rows themselves (geodesic, flat strips — the two drawn ones first), `N` the
+nodes, `Q` the quad net and `E` the geodesic error of every new row in
+degrees (expect ~1e-13: the stars are planar and the rows geodesic to
+round-off; a warning names the row where the strip could not continue).
+Try it on two neighbouring meridians of a catenoid web from **Asymptotic Web**
+(`Sy` = −1 on a catenoid; two adjacent `G` diagonals with the same node count):
+the web grows on from the strip and stays an AAG web wherever it goes.
 
 **Asymptotic Net** (Mite > Gridshells) — the older evenly spaced layouts:
 

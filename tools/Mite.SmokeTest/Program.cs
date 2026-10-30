@@ -207,6 +207,26 @@ internal static class Tests
                     && Expect(ge.Count == 1 && ge[0] < 0.05 && asy.Count == 1 && asy[0] < 0.05,
                         $"geodesic {(ge.Count > 0 ? ge[0] : -1):G3}°, asymptotic {(asy.Count > 0 ? asy[0] : -1):G3}° (cylinder caps included in the mesh)");
             });
+        TestComponent("Web Propagation (catenoid strip)",
+            new Mite.Grasshopper.Components.WebPropagationComponent(),
+            c =>
+            {
+                // two neighbouring meridian rows of the discrete catenoid web (24 meridians, 7 rings each)
+                double delta = 2 * Math.PI / 24, a = Math.Log(1 / Math.Cos(delta) + Math.Sqrt(1 / (Math.Cos(delta) * Math.Cos(delta)) - 1));
+                Rhino.Geometry.Polyline Row(int m)
+                {
+                    var pl = new Rhino.Geometry.Polyline();
+                    for (int j = 0; j < 7; j++)
+                    {
+                        int t = m + 2 * j - 7;
+                        pl.Add(Math.Cosh(a * t) * Math.Cos(m * delta), Math.Cosh(a * t) * Math.Sin(m * delta), a * t);
+                    }
+                    return pl;
+                }
+                SetInputs(c, (0, Row(0).ToPolylineCurve()), (1, Row(1).ToPolylineCurve()), (3, 6));
+            },
+            c => Expect(CurveCount(c, 0) == 7 && CurveCount(c, 2) == 8 && MeshOut(c, 4) != null && MeshOut(c, 4)!.Faces.Count == 36,
+                $"web: U={CurveCount(c, 0)}, rows={CurveCount(c, 2)}, quads={MeshOut(c, 4)?.Faces.Count ?? 0}"));
 
         TestComponent("Geodesic Net",
             new Mite.Grasshopper.Components.GeodesicNetComponent(),
