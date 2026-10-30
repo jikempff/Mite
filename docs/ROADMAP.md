@@ -40,7 +40,9 @@ where they overlap
    supports, and the G laths in the kit.
 4. One lath section for every curve (done in the web app 1.3.0; per-family
    profiles in Grasshopper still open).
-5. Black, white and neon for everything visual (web app done 1.3.0; bench,
+5. Black, white and neon for everything visual (web app done 1.3.0; the
+   Grasshopper colour maps — Mesh Colour Map, Lath Preview — and the bench's
+   curvature and utilisation colours done 2026-10-30 from one core table;
    icons and Food4Rhino images still in the old palette).
 
 Priorities set by José (2026-09-25), in order
@@ -284,7 +286,55 @@ remains the self-test review page.
 - [ ] Metrics with distributions, not only extremes: spacing histogram,
       crossing-angle histogram, utilisation histogram (small, consistent
       charts).
-- [ ] Colour-map legends identical to Mesh Colour Map in Grasshopper.
+- [x] Colour-map legends identical to Mesh Colour Map in Grasshopper —
+      2026-10-30 (session 2, C + B): one colour language. `Visualisation/
+      ColourMap` builds three tables (diverging neon blue – white – neon red,
+      sequential black – blue – teal – green – white, utilisation traffic
+      light) and `Visualisation/Legend` the nice ticks and the strip; the
+      plugin (Mesh Colour Map, Lath Preview), the web app (`colormap-lut.js`,
+      generated from the core; a test fails when it is stale) and the bench
+      sample the same tables by the same nearest-entry rule, and the bench
+      checks every face of its torus demo against the library's colours.
+      Literature: Moreland 2009 (Diverging color maps for scientific
+      visualization, ISVC — Msh = polar CIELAB, interpolation through a white
+      control point, AdjustHue; his cool–warm Tables 1–2 are reproduced to
+      ±2 per channel as a test), Kovesi 2015 (Good colour maps: how to design
+      them, arXiv:1509.03700 — equal lightness steps by cumulative |ΔL*|,
+      lightness ≤ 95, equal-chroma ends), Crameri, Shephard & Heron 2020 (The
+      misuse of colour in science communication, Nat. Commun. 11, 5444 —
+      perceptual order, CVD and greyscale readability), Heckbert 1990 (Nice
+      numbers for graph labels, Graphics Gems I — 1, 2, 5 × 10ⁿ steps,
+      nicenum(range) / (NTICK − 1)), Talbot, Lin & Hanrahan 2010 (An
+      extension of Wilkinson's algorithm for positioning tick labels — read,
+      not implemented: its coverage/density scoring is for axes that may be
+      extended; a colour bar cannot be, so ticks are kept inside the domain
+      and the exact ends labelled separately). Findings:
+      - Lightness equalisation must run on the continuous L* of the path, not
+        on the 8-bit colours: rounding noise (±0.2 L*) counted as |ΔL*|
+        inflated the cumulative where the true gradient is small and left
+        half-size steps (46–59 % window deviation instead of 5–7 %).
+      - José's neons are more saturated than the white in Moreland's M
+        (114 and 92 against 95), so Moreland's L* = M cos s overshoots the
+        centre by 1.6 just before it on the blue half; the lightness is
+        therefore taken linear between the ends and only chroma and hue follow
+        the Msh path. The neon red (M 92 < 95) still gets Moreland's hue spin
+        (17° towards orange near white), the blue (M 114) does not.
+      - The blue end is darker than the red (L* 29.9 vs 46.0), so the blue
+        half has 33 % more lightness contrast per unit value: Kovesi and
+        Moreland ask for equal-lightness ends. Kept José's exact colours;
+        equal ends would mean a darker red (≈ #92001e at L* 29.9) or a lighter
+        blue (≈ #694bff at L* 46).
+      - A hue sweep blue → cyan → green in LCh hits the sRGB gamut wall at
+        cyan (a visible seam where chroma is clipped 95 → 44); a straight
+        CIELAB line between the neons greys out (chroma 21). A teal control
+        point (the RGB midpoint of the app's ramp) gives a smooth path with
+        chroma ≥ 28.
+      - The app's viewport colour bar had been 9 px wide since the marker
+        legend (`.legend i { width: 9px }`) was added: scoped to `.hud-bl`.
+      Open: the Grasshopper legend labels need a Text Tag (no text in a
+      component preview without a custom preview — B item); a `Legend` input
+      to switch the strip off; the Food4Rhino screenshots in the new colours;
+      per-component colour of curves (family A / B) is still the viewer's.
 - [ ] Search / filter (failing tests only, by component, by tab); keyboard
       navigation; ticked state summary exportable as a GitHub issue draft.
 - [ ] Component cards show the Grasshopper icon at readable size and the
@@ -659,6 +709,11 @@ Open
 
 ## Done
 
+- [x] 2026-10-30 (session 2, C/B): one colour language — `Visualisation/
+      ColourMap` and `Legend` in the core (Moreland 2009 Msh path, Kovesi 2015
+      lightness equalisation, Heckbert 1990 ticks), Mesh Colour Map legend
+      outputs, Lath Preview and the web app on the same tables, bench colour
+      bars with ticks, 21 tests, five bench self-tests (81 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

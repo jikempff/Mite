@@ -1176,7 +1176,7 @@
   "file": "LathPreviewComponent.cs",
   "name": "Lath Preview",
   "nick": "Preview",
-  "desc": "Colors swept laths by utilization (e.g. from Lath Analysis or Gridshell Analysis): green within limits, yellow near the limit, red beyond it.",
+  "desc": "Colors swept laths by utilization (e.g. from Lath Analysis or Gridshell Analysis): green within limits, yellow at the limit, red beyond it — the same traffic light as the web app and Mesh Colour Map palette 2.",
   "tab": "Fabrication",
   "icon": "LathPreview",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF7",
@@ -1711,7 +1711,7 @@
   "file": "MeshColourMapComponent.cs",
   "name": "Mesh Colour Map",
   "nick": "ColourMap",
-  "desc": "Colours a mesh by per-vertex values in one step (no Bounds / Remap / Gradient chain). Diverging palettes are centred on zero, which suits signed curvature: blue negative, white zero, red positive.",
+  "desc": "Colours a mesh by per-vertex values in one step (no Bounds / Remap / Gradient chain), with a legend. The diverging palette is centred on zero, which suits signed curvature: neon blue negative, white zero, neon red positive — the same colours as the web app and the bench.",
   "tab": "Util",
   "icon": "MeshColourMap",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFB",
@@ -1745,7 +1745,7 @@
     "name": "Palette",
     "nick": "P",
     "type": "Integer",
-    "desc": "0 = diverging blue-white-red (centred on 0), 1 = viridis-like sequential, 2 = traffic light (green-yellow-red)",
+    "desc": "0 = diverging neon blue – white – neon red (centred on 0), 1 = sequential black – blue – green – white, 2 = utilisation traffic light (green below 0.7, yellow at 1, red above)",
     "access": "item",
     "default": "0"
    }
@@ -1774,6 +1774,34 @@
     "desc": "Colour per vertex",
     "access": "list",
     "default": null
+   },
+   {
+    "name": "Legend",
+    "nick": "L",
+    "type": "Mesh",
+    "desc": "Colour bar beside the mesh (a coloured strip, bottom = Domain start, top = Domain end)",
+    "access": "item"
+   },
+   {
+    "name": "Ticks",
+    "nick": "T",
+    "type": "Number",
+    "desc": "Nice tick values inside the domain (0 is one of them when the domain contains it); the domain ends are the strip's ends",
+    "access": "list"
+   },
+   {
+    "name": "Labels",
+    "nick": "Lb",
+    "type": "Text",
+    "desc": "Tick labels, then the two end labels — pair with Points in a Text Tag",
+    "access": "list"
+   },
+   {
+    "name": "Points",
+    "nick": "Pt",
+    "type": "Point",
+    "desc": "Where each label belongs: one point per tick right of the strip, then the bottom and top ends",
+    "access": "list"
    }
   ]
  },

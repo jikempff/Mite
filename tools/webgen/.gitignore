@@ -4,3 +4,4 @@ __pycache__/
 scenes.json
 numbers.json
 site/
+colormap-lut.js

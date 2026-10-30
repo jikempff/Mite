@@ -3,7 +3,7 @@
 
 import { Kernel } from './kernel.js';
 import { Viewer, FAMILY_A, FAMILY_B, FAMILY_G, NEON } from './viewer.js';
-import { diverging, sequential, utilizationColor, legendGradient, cssRgb, UTIL_STOPS } from './colormaps.js';
+import { diverging, sequential, utilizationColor, legendGradient, legendTicks, cssRgb, UTIL_STOPS } from './colormaps.js';
 import { Loft } from './loft.js';
 import { readMeshFile } from './loaders.js';
 import { drawLathPlot, drawUnroll } from './plots.js';
@@ -273,6 +273,7 @@ async function applyMode() {
     }
     v.setColors(res.colors);
     $('legend-bar').style.background = legendGradient(res.stops);
+    $('legend-bar').innerHTML = typeof res.min === 'number' ? legendTicks(res.min, res.max).map((t) => `<em style="left:${(100 * t.pos).toFixed(2)}%"><span>${t.label}</span></em>`).join('') : '';
     $('legend-min').textContent = typeof res.min === 'number' ? fmt(res.min, 2) : res.min;
     $('legend-max').textContent = typeof res.max === 'number' ? fmt(res.max, 2) : res.max;
     $('legend-title').textContent = title;
@@ -415,7 +416,7 @@ function drawNetCurves() {
 
 function showUtilLegend(on, title = 'lath utilization · 1 = limit') {
   $('ulegend').classList.toggle('hidden', !on);
-  if (on) { $('ulegend-bar').style.background = legendGradient(UTIL_STOPS); $('ulegend-title').textContent = title; }
+  if (on) { $('ulegend-bar').style.background = legendGradient(UTIL_STOPS); $('ulegend-bar').innerHTML = legendTicks(0, 1.3).map((t) => `<em style="left:${(100 * t.pos).toFixed(2)}%"><span>${t.label}</span></em>`).join(''); $('ulegend-title').textContent = title; }
 }
 
 function colourLaths(utils, title) {

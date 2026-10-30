@@ -415,7 +415,10 @@ internal static class Tests
             c =>
             {
                 var m = MeshOut(c, 0);
-                return Expect(m != null && m.VertexColors.Count == saddle.Vertices.Count, "one colour per vertex");
+                var legend = MeshOut(c, 3); var ticks = Numbers(c, 4); var labels = Texts(c, 5); var pts = Points(c, 6);
+                return Expect(m != null && m.VertexColors.Count == saddle.Vertices.Count, "one colour per vertex")
+                    && Expect(legend != null && legend.Faces.Count == 64 && legend.VertexColors.Count == legend.Vertices.Count, "legend strip of 64 coloured quads")
+                    && Expect(ticks.Count > 0 && ticks.Any(t => System.Math.Abs(t) < 1e-12) && labels.Count == ticks.Count + 2 && pts.Count == labels.Count, "nice ticks including 0, a label and a point for each tick and both ends");
             });
 
         TestComponent("Geodesic Path",

@@ -8,9 +8,12 @@ special data types required.
 
 1. Add a **Mesh Sphere** (Mesh > Primitive) or reference any mesh.
 2. Wire it into **Gaussian Curvature** (Mite > Curvature).
-3. Wire the mesh and `K` into **Mesh Colour Map** (Mite > Util): blue is
-   negative, white zero, red positive. (Or build your own chain with
-   **Bounds** + **Remap Numbers** + **Gradient** + **Mesh Colours**.)
+3. Wire the mesh and `K` into **Mesh Colour Map** (Mite > Util): neon blue is
+   negative, white zero, neon red positive — the same colours as the web app.
+   `L` is a legend strip standing beside the mesh; wire `Lb` and `Pt` into a
+   **Text Tag** to label its ticks (nice numbers inside the domain, 0 always
+   among them) and both ends. (Or build your own chain with **Bounds** +
+   **Remap Numbers** + **Gradient** + **Mesh Colours**.)
 4. Optional: wire the mesh and `K` into **Mesh Isocurves** with level `0` to
    outline the saddle-shaped regions.
 

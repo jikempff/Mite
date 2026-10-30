@@ -42,9 +42,13 @@ button, input, select { font: inherit; color: inherit; }
 .hud-tr { top: 12px; right: 14px; text-align: right; }
 .hud-bl { bottom: 10px; left: 14px; right: 14px; display: flex; flex-direction: column; gap: 6px; }
 .hint { color: var(--faint); }
-.legend { display: inline-flex; align-items: center; gap: 8px; pointer-events: none; }
-.legend i { display: inline-block; width: 160px; height: 8px; border-radius: 3px; border: 1px solid var(--line); }
-.legend b { font-weight: 400; color: var(--ink); margin-left: 6px; }
+/* colour-bar legends in the viewport (scoped: the panel's marker legend below shares the class and used to shrink this bar to 9 px) */
+.hud-bl .legend { display: inline-flex; align-items: center; gap: 8px; pointer-events: none; }
+.hud-bl .legend i { display: inline-block; position: relative; width: 200px; height: 8px; border-radius: 3px; border: 1px solid var(--line); margin: 0; }
+.hud-bl .legend i em { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--ink); opacity: 0.8; }
+.hud-bl .legend i em span { position: absolute; top: 9px; left: 0; transform: translateX(-50%); font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.hud-bl .legend:has(i em) { margin-bottom: 12px; }
+.hud-bl .legend b { font-weight: 400; color: var(--ink); margin-left: 6px; }
 .hidden { display: none !important; }
 
 .drop { position: absolute; inset: 12px; border: 2px dashed var(--ink); border-radius: 10px; display: grid; place-items: center; font-size: 18px; color: var(--ink); background: color-mix(in srgb, var(--bg) 80%, transparent); pointer-events: none; }
