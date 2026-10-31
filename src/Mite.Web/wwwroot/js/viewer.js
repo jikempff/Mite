@@ -275,6 +275,10 @@ export class Viewer {
     for (const c of rm) { this.overlayGroup.remove(c); c.geometry?.dispose(); }
   }
 
+  setOverlayVisible(tag, visible) {
+    for (const c of this.overlayGroup.children) if (c.userData.tag === tag) c.visible = visible;
+  }
+
   showPoints(tag, flat, color, size, colors = null) {
     this.clearOverlay(tag);
     if (!flat || !flat.length) return;

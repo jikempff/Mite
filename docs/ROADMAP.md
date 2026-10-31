@@ -228,7 +228,40 @@ remains the self-test review page.
 - [x] App: kernel in a Web Worker (stop = restart), seed/direction handle,
       quality card, end markers, family toggles, hover, camera presets
       (1.2.2).
-- [ ] App: lath segmentation, joints and nesting sheet (material %).
+- [x] App: lath segmentation and joints — 2026-10-31 (session 2, C/B): a
+      **Pieces** block (Lath Segment + Net Joints on the current net): stock
+      length, splice, joint margin, kerf, equal pieces, notch solids; the
+      pieces drawn alternately in the family colour with the cuts marked; the
+      boards as a nesting chart. Core `Fabrication/CuttingStock`: first-fit
+      decreasing (Johnson 1973; FFD ≤ 11/9 OPT + 6/9, Dósa 2007) with a kerf
+      per saw cut, the Martello–Toth L₂ lower bound, an exact branch and bound
+      for small lists; `LathSegmentation.Segment(…, balance)`: the fewest
+      pieces that fit the stock made equal, (L + (n − 1)·splice)/n each.
+      Grasshopper Lath Segment: `Balance`, `Kerf` appended; `Board`, `Boards`,
+      `Material`, `Report` appended. Measured: FFD optimal in 60/60 random
+      lath-piece lists (6–15 pieces, exact optimum by branch and bound), at the
+      L₂ bound in 181/200 lists of 20–40 pieces (mean gap 0.10 boards); Dósa's
+      worst case reproduced (8 boards for an optimum of 6). Catenoid web in the
+      app (40 laths of 11.8 m, 6 m stock, 300 mm splice, 150 mm margin, 3 mm
+      kerf): 120 pieces, 80 splices, 300 joints, nearest cut–joint 184 mm,
+      84 boards (L₂ 83, 98.2 %) with 0.52 m stubs; balanced 120 boards
+      (70 %), shortest piece 3.97 m. Finding: equal pieces always cost boards
+      on equal laths — a piece of L/n with n = ⌈L/S⌉ is longer than S/2, so no
+      two share a board; only mixed lath lengths let them pair. Timber
+      practice (Harris & Roynon 2008, Savill; Downland the same): 6 m factory
+      lengths finger-jointed from 0.3–1.4 m pieces, scarf joints 1 : 7 on site,
+      laths up to 37 m — i.e. the splice is a glued joint anywhere and the
+      offcut goes into the next lath, which is the greedy + packing model.
+      Open: (a) a *minimum piece length* rule (move only the last cut so the
+      stub is at least, say, 2 × splice — the practical middle between greedy
+      and balanced); (b) staggered splices: cuts on neighbouring laths of one
+      family should not line up (a weak line across the shell) — measure and
+      stagger; (c) the nesting sheet of the strips (material %) is in the
+      10-20 kit-nesting bundle, not on main; (d) in Grasshopper the boards are
+      a tree of indices — a `Cut List` CSV (board → pieces → lath / ordinal /
+      length) like Flat Kit's would close the loop; (e) Net Joints in the
+      app returns notch solids only for same-orientation crossings (the flat
+      G slats on upright A / B have no lap notch, as in Grasshopper).
 - [ ] App: planarization and Chebyshev angle map; isocurve labels.
 - [x] App: catalogue extended with n-fold Enneper, the bilinear ruled patch,
       Schwarz D and gyroid (nodal form → marching tetrahedra → relaxation);
@@ -659,6 +692,10 @@ Open
 
 ## Done
 
+- [x] 2026-10-31 (session 2, C/B): Pieces — stock lengths, splices, joints and
+      boards in the web app and in Lath Segment (`CuttingStock`, balanced
+      segmentation, boards / material / report; 7 exact tests, 10 web-smoke
+      checks, 2 bench self-tests).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

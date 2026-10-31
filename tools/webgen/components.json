@@ -1314,6 +1314,30 @@
     "desc": "Gap between the surface and the nearest lath face, as in Lath Sweep (default 0)",
     "access": "item",
     "default": "0.0"
+   },
+   {
+    "name": "Align",
+    "nick": "Al",
+    "type": "Integer",
+    "desc": "Where the lath sits along the surface normal: 0 grows from the surface out (default), 1 centred on the surface (its centre line on the curve), 2 grows from the surface in. Offset is the gap to the near face, or the shift of the centre when centred",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Balance",
+    "nick": "Ba",
+    "type": "Boolean",
+    "desc": "False (default): every piece a full stock length and a remainder at the end of the lath. True: the fewest pieces that fit the stock, made equal (a 6.4 m lath on 6 m stock becomes 3.2 + 3.2, not 6 + 0.4), the cuts moved off the joints by Margin; equal pieces cost stock, see Boards",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Kerf",
+    "nick": "Kf",
+    "type": "Number",
+    "desc": "Width of a saw cut between two pieces cut from one board (default 0)",
+    "access": "item",
+    "default": "0.0"
    }
   ],
   "outputs": [
@@ -1355,6 +1379,38 @@
     "type": "Number",
     "desc": "Piece lengths, one branch per input lath",
     "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Board",
+    "nick": "Bd",
+    "type": "Integer",
+    "desc": "Stock board each piece is cut from (first-fit decreasing packing of all pieces into boards of StockLength, Kerf between pieces), one branch per input lath",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Boards",
+    "nick": "Nb",
+    "type": "Integer",
+    "desc": "Number of stock boards needed",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Material",
+    "nick": "Mt",
+    "type": "Number",
+    "desc": "Share of the bought stock that ends up in the laths: Σ piece lengths / (Boards × StockLength)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Pieces, splices, boards against the lower bound, material and offcuts",
+    "access": "item",
     "default": null
    }
   ]

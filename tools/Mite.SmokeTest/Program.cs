@@ -338,6 +338,33 @@ internal static class Tests
             c => Expect(CurveCount(c, 0) >= 4 && Points(c, 1).Count >= 3,
                 $"10-unit lath in 2-unit stock: {CurveCount(c, 0)} segments, {Points(c, 1).Count} cuts"));
 
+        TestComponent("Lath Segment (balanced, boards)",
+            new Mite.Grasshopper.Components.LathSegmentComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-6, -2, 0);
+                plane.Vertices.Add(6, -2, 0);
+                plane.Vertices.Add(6, 2, 0);
+                plane.Vertices.Add(-6, 2, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                // 6.4-unit lath on 6-unit stock, balanced: 3.2 + 3.2 (not 6 + 0.4); two pieces that cannot share a board
+                SetInputs(c, (0, plane), (2, 6.0), (3, 0.05), (5, 0.0), (13, true), (14, 0.01));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-3.2, 0, 0), new Rhino.Geometry.Point3d(3.2, 0, 0)));
+            },
+            c =>
+            {
+                var lengths = Numbers(c, 4);
+                var boards = c.Params.Output[6].VolatileData.AllData(true).OfType<Grasshopper.Kernel.Types.GH_Integer>().Select(i => i.Value).FirstOrDefault();
+                var material = Numbers(c, 7);
+                return Expect(lengths.Count == 2 && System.Math.Abs(lengths[0] - 3.2) < 1e-6 && System.Math.Abs(lengths[1] - 3.2) < 1e-6,
+                        $"balanced pieces {string.Join(", ", lengths.Select(l => l.ToString("F3")))}")
+                    && Expect(boards == 2 && material.Count == 1 && System.Math.Abs(material[0] - 6.4 / 12.0) < 1e-9,
+                        $"{boards} boards, material {(material.Count > 0 ? material[0] : 0):F3}")
+                    && Expect(Texts(c, 8).Count == 1 && Texts(c, 8)[0].Contains("2 boards"), "report names the boards");
+            });
+
         TestComponent("Lath Labels",
             new Mite.Grasshopper.Components.LathLabelsComponent(),
             c =>

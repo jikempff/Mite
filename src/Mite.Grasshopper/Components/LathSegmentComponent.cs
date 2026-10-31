@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Grasshopper;
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Data;
 using Rhino.Geometry;
 using Mite.Core.Fabrication;
 using Mite.Core.Geometry;
@@ -36,6 +38,8 @@ public class LathSegmentComponent : MiteComponent
         pManager.AddNumberParameter("Offset", "O", "Gap between the surface and the nearest lath face, as in Lath Sweep (default 0)", GH_ParamAccess.item, 0.0);
         pManager.AddIntegerParameter("Align", "Al", "Where the lath sits along the surface normal: 0 grows from the surface out (default), 1 centred on the surface (its centre line on the curve), 2 grows from the surface in. Offset is the gap to the near face, or the shift of the centre when centred", GH_ParamAccess.item, 0);
         pManager[4].Optional = true;
+        pManager.AddBooleanParameter("Balance", "Ba", "False (default): every piece a full stock length and a remainder at the end of the lath. True: the fewest pieces that fit the stock, made equal (a 6.4 m lath on 6 m stock becomes 3.2 + 3.2, not 6 + 0.4), the cuts moved off the joints by Margin; equal pieces cost stock, see Boards", GH_ParamAccess.item, false);
+        pManager.AddNumberParameter("Kerf", "Kf", "Width of a saw cut between two pieces cut from one board (default 0)", GH_ParamAccess.item, 0.0);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -45,6 +49,10 @@ public class LathSegmentComponent : MiteComponent
         pManager.AddBoxParameter("NotchesEnd", "Ne", "Splice notches for the upstream piece at each cut", GH_ParamAccess.tree);
         pManager.AddBoxParameter("NotchesStart", "Ns", "Splice notches for the downstream piece at each cut", GH_ParamAccess.tree);
         pManager.AddNumberParameter("Lengths", "L", "Piece lengths, one branch per input lath", GH_ParamAccess.tree);
+        pManager.AddIntegerParameter("Board", "Bd", "Stock board each piece is cut from (first-fit decreasing packing of all pieces into boards of StockLength, Kerf between pieces), one branch per input lath", GH_ParamAccess.tree);
+        pManager.AddIntegerParameter("Boards", "Nb", "Number of stock boards needed", GH_ParamAccess.item);
+        pManager.AddNumberParameter("Material", "Mt", "Share of the bought stock that ends up in the laths: Σ piece lengths / (Boards × StockLength)", GH_ParamAccess.item);
+        pManager.AddTextParameter("Report", "R", "Pieces, splices, boards against the lower bound, material and offcuts", GH_ParamAccess.item);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -68,6 +76,9 @@ public class LathSegmentComponent : MiteComponent
         DA.GetData(11, ref offset);
         int align = 0;
         DA.GetData(12, ref align);
+        bool balance = false; double kerf = 0.0;
+        DA.GetData(13, ref balance);
+        DA.GetData(14, ref kerf);
 
         if (stock <= 0)
         {
@@ -94,22 +105,30 @@ public class LathSegmentComponent : MiteComponent
         var notchesEnd = new DataTree<Box>();
         var notchesStart = new DataTree<Box>();
         var lengths = new DataTree<double>();
-        int skipped = 0;
+        var boardTree = new DataTree<int>();
+        var pieceLengths = new List<double>();
+        var piecePaths = new List<GH_Path>();
+        int skipped = 0, splices = 0, laths = 0;
+        double minClear = double.MaxValue;
 
         for (int c = 0; c < curves.Count; c++)
         {
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
             var path = BranchPath(DA, c);
-            segments.EnsurePath(path); cuts.EnsurePath(path); notchesEnd.EnsurePath(path); notchesStart.EnsurePath(path); lengths.EnsurePath(path);
+            segments.EnsurePath(path); cuts.EnsurePath(path); notchesEnd.EnsurePath(path); notchesStart.EnsurePath(path); lengths.EnsurePath(path); boardTree.EnsurePath(path);
 
             var line = curves[c] == null ? null : CurveSample.ToPolyline(curves[c], chord);
             if (line == null || line.Length < 2) { skipped++; continue; }
+            laths++;
 
             double[]? jointArcs = jointVecs.Count > 0
                 ? LathSegmentation.JointArcLengths(line, jointVecs, jointReach)
                 : null;
 
-            var r = LathSegmentation.Segment(line, stock, margin, jointArcs, spliceLength);
+            var r = LathSegmentation.Segment(line, stock, margin, jointArcs, spliceLength, balance);
+            splices += r.CutArcLengths.Length;
+            if (jointArcs != null && jointArcs.Length > 0)
+                foreach (double cut in r.CutArcLengths) minClear = Math.Min(minClear, jointArcs.Min(j => Math.Abs(j - cut)));
 
             foreach (var seg in r.Segments)
             {
@@ -118,6 +137,7 @@ public class LathSegmentComponent : MiteComponent
                 double len = 0;
                 for (int i = 1; i < seg.Length; i++) len += (seg[i] - seg[i - 1]).Length;
                 lengths.Add(len, path);
+                pieceLengths.Add(len); piecePaths.Add(path);
             }
 
             for (int k = 0; k < r.CutPoints.Length; k++)
@@ -140,11 +160,27 @@ public class LathSegmentComponent : MiteComponent
         if (skipped > 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"{skipped} null or degenerate curve(s) skipped (empty branches).");
 
+        // every piece of every lath cut from stock boards: first-fit decreasing, a kerf per saw cut
+        var pack = CuttingStock.Pack(pieceLengths, stock, Math.Max(0.0, kerf));
+        for (int i = 0; i < pieceLengths.Count; i++) boardTree.Add(pack.BoardOf[i], piecePaths[i]);
+        if (pack.TooLong > 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"{pack.TooLong} piece(s) are longer than StockLength (a piece carries half a splice at each cut: raise StockLength or lower SpliceLength).");
+        string report = $"{laths} laths · {pieceLengths.Count} pieces · {splices} splices" +
+            (minClear < double.MaxValue ? $" (nearest joint {minClear:0.000}, margin {margin:0.000})" : "") +
+            $"\n{pack.Boards.Count} boards of {stock:0.##}" + (pack.Boards.Count > pack.LowerBound ? $" (at least {pack.LowerBound} needed; first-fit decreasing is within 11/9 of the optimum)" : " (the lower bound: no packing does better)") +
+            $" · material {100 * pack.Material:0.0} % · offcuts {pack.Waste:0.00}" + (kerf > 0 ? $" incl. kerfs of {kerf:0.###}" : "") +
+            (pieceLengths.Count > 0 ? $"\npieces {pieceLengths.Min():0.00} … {pieceLengths.Max():0.00}" : "") +
+            (balance ? " · balanced (equal pieces per lath)" : " · full stock lengths with a remainder per lath");
+
         DA.SetDataTree(0, segments);
         DA.SetDataTree(1, cuts);
         DA.SetDataTree(2, notchesEnd);
         DA.SetDataTree(3, notchesStart);
         DA.SetDataTree(4, lengths);
+        DA.SetDataTree(5, boardTree);
+        DA.SetData(6, pack.Boards.Count);
+        DA.SetData(7, pack.Material);
+        DA.SetData(8, report);
     }
 
     private static Vec3d TangentAtArc(Vec3d[] line, double s)
