@@ -16,7 +16,10 @@ namespace Mite.Core.Geometry;
 /// ruled by its iso-lines, which are its asymptotic curves) and patches of
 /// the Schwarz D and gyroid triply periodic minimal surfaces, cut from their
 /// nodal approximations by marching tetrahedra and relaxed with Minimal
-/// Surface so H ≈ 0 (Schling's asymptotic pavilion sits on a Schwarz D).
+/// Surface so H ≈ 0 (Schling's asymptotic pavilion sits on a Schwarz D);
+/// and the rotational CRPC surface (constant ratio of principal curvatures,
+/// Wang &amp; Pottmann 2022) whose asymptotic curves cross at a constant
+/// angle — the surface class of the AGH gridshell's 60° web.
 /// </summary>
 public static class AnalyticShapes
 {
@@ -25,7 +28,7 @@ public static class AnalyticShapes
     {
         "saddle", "sphere", "torus", "hyperboloid", "monkey", "ellipsoid", "catenoid",
         "enneper", "vault", "cone", "dome", "annulus", "wave",
-        "enneper3", "ruled", "schwarzd", "gyroid"
+        "enneper3", "ruled", "schwarzd", "gyroid", "crpc"
     };
 
     /// <summary>
@@ -86,6 +89,18 @@ public static class AnalyticShapes
                 return Parametric((u, v) => new Vec3d(c * Math.Cosh(v / c) * Math.Cos(u), c * Math.Cosh(v / c) * Math.Sin(u), v),
                     0, 2 * Math.PI, -h, h, n, Math.Max(6, n / 2), true, false, false, false);
             }
+            case "crpc":
+            {
+                // surface of revolution with k_meridian = −a · k_parallel (a = p1 > 0,
+                // default 1/3), waist radius 1: r'' = a (1 + r'²) / r, r(0) = 1, r'(0) = 0
+                // (first integral 1 + r'² = r^(2a); a = 1 is the catenoid r = cosh z).
+                // Its asymptotic directions make ±γ with the meridian, tan²γ = a, so they
+                // cross at 2γ = 2 arctan √a: 60° for a = 1/3 (Wang & Pottmann 2022).
+                double a = P(p1, 1.0 / 3.0), hgt = P(p2, 1.2);
+                var prof = CrpcProfile(a, hgt, 4000);
+                return Parametric((u, v) => { double r = CrpcRadius(prof, hgt, v); return new Vec3d(r * Math.Cos(u), r * Math.Sin(u), v); },
+                    0, 2 * Math.PI, -hgt, hgt, n, Math.Max(6, n / 2), true, false, false, false);
+            }
             case "enneper":
             {
                 double r = P(p1, 1.2);
@@ -143,6 +158,40 @@ public static class AnalyticShapes
     }
 
     private static double P(double v, double dflt) => v > 0 ? v : dflt;
+
+    /// <summary>
+    /// Meridian r(z) of the rotational surface with k_meridian / k_parallel = −a
+    /// and waist radius 1, sampled at z = k·h/steps for k = 0 … steps by RK4
+    /// on r'' = a (1 + r'²) / r (the ODE is regular at the waist, the first
+    /// integral is not). <c>CrpcRadius</c> interpolates it (even in z).
+    /// </summary>
+    public static double[] CrpcProfile(double a, double height, int steps)
+    {
+        var r = new double[steps + 1];
+        double dz = height / steps, y = 1.0, yp = 0.0;
+        r[0] = 1.0;
+        double F(double yy, double ypp) => a * (1 + ypp * ypp) / yy;
+        for (int k = 0; k < steps; k++)
+        {
+            double k1y = yp, k1p = F(y, yp);
+            double k2y = yp + 0.5 * dz * k1p, k2p = F(y + 0.5 * dz * k1y, yp + 0.5 * dz * k1p);
+            double k3y = yp + 0.5 * dz * k2p, k3p = F(y + 0.5 * dz * k2y, yp + 0.5 * dz * k2p);
+            double k4y = yp + dz * k3p, k4p = F(y + dz * k3y, yp + dz * k3p);
+            y += dz * (k1y + 2 * k2y + 2 * k3y + k4y) / 6;
+            yp += dz * (k1p + 2 * k2p + 2 * k3p + k4p) / 6;
+            r[k + 1] = y;
+        }
+        return r;
+    }
+
+    /// <summary>Radius of the <see cref="CrpcProfile"/> at height z (linear interpolation, symmetric in z).</summary>
+    public static double CrpcRadius(double[] profile, double height, double z)
+    {
+        double s = Math.Abs(z) / height * (profile.Length - 1);
+        int i = Math.Min(profile.Length - 2, (int)Math.Floor(s));
+        double t = s - i;
+        return profile[i] + t * (profile[i + 1] - profile[i]);
+    }
 
     /// <summary>
     /// n-fold Enneper surface in polar chart coordinates (r, φ):

@@ -719,6 +719,85 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     numbers["projection"] = new { vertices = grid.VertexCount, buildMs = t.ElapsedMilliseconds, queries = 20000, queryMs = t2.ElapsedMilliseconds, exact = ok };
 }
 
+
+// ---------- Asymptotic Web: tri-hex (midpoint) AAG webs and the constant crossing angle ----------
+{
+    AsymptoticWeb.Result WebOf(MeshData mesh, double sp, int seed = -1) => AsymptoticWeb.Build(mesh, PrincipalCurvature.Compute(mesh, 2), seed, new AsymptoticWeb.Options { Spacing = sp });
+    object Scene(string label, MeshData mesh, int wireEvery, AagWeb.Result r, object? view = null) => new
+    {
+        label, view, wire = Edges(mesh, wireEvery),
+        a = r.A.Select(l => Line(l)).ToArray(), b = r.B.Select(l => Line(l)).ToArray(), g = r.G.Select(l => Line(l)).ToArray(),
+        pts = (r.Midpoint ? r.Midpoints : r.Nodes).Select(P).ToArray(),
+    };
+    double PlaneErr(IEnumerable<Vec3d[]> chains)
+    {
+        double worst = 0;
+        foreach (var d in chains)
+        {
+            double sx = d.Sum(p => Math.Cos(Math.Atan2(p.Y, p.X))), sy = d.Sum(p => Math.Sin(Math.Atan2(p.Y, p.X)));
+            double phi = Math.Atan2(sy, sx); var n = new Vec3d(-Math.Sin(phi), Math.Cos(phi), 0);
+            foreach (var p in d) worst = Math.Max(worst, Math.Abs(Vec3d.Dot(p, n)));
+        }
+        return worst;
+    }
+    double? Nz(double v) => double.IsNaN(v) ? null : v;
+    object Row(AagWeb.Result r, double spacing, double plane = double.NaN) => new
+    {
+        spacing, geo0 = R3(r.InitialGeodesicError), geo = Math.Round(r.GeodesicError, 5), star0 = R3(r.InitialStarError), star = Math.Round(r.StarError, 5),
+        asym0 = Nz(R3(r.InitialAsymptoticError)), asym = Nz(Math.Round(r.AsymptoticError, 5)), dev = r.MeanDeviation, devMax = r.MaxDeviation, nodeMove = r.MaxNodeMove,
+        shift = R3(r.MeanMidpointShift), shiftMax = R3(r.MaxMidpointShift), plane = Nz(plane),
+        angle0 = R3(r.InitialAngleMean), angleMin0 = R3(r.InitialAngleMin), angleMax0 = R3(r.InitialAngleMax), angle = R3(r.AngleMean), angleMin = R3(r.AngleMin), angleMax = R3(r.AngleMax),
+        iterations = r.Iterations, midpoints = r.Midpoints.Length, chainsG = r.G.Count,
+    };
+    var t = Stopwatch.StartNew();
+    // catenoid: the mid-chain topology and the tri-hex optimisation
+    var cat = AnalyticShapes.Build("catenoid", 1.0, 1.2, 0, 48).ToTriangulated();
+    var wc = WebOf(cat, 0.3);
+    double midErr = 0; int seg0 = 0, seg1 = 0, chains0 = 0;
+    for (int i = 0; i < wc.MidChains.Count; i++)
+    {
+        for (int k = 0; k < wc.MidChains[i].Length; k++) { var (p, q) = wc.MidChainEdges[i][k]; midErr = Math.Max(midErr, (wc.MidChains[i][k] - 0.5 * (wc.Nodes[p] + wc.Nodes[q])).Length); }
+        if (wc.MidChainFamily[i] == 0) { seg0 += wc.MidChains[i].Length - 1; chains0++; } else seg1 += wc.MidChains[i].Length - 1;
+    }
+    var rcTri = AagWeb.Optimize(cat, wc, new AagWeb.Options { Midpoint = true, Iterations = 24 });
+    var rcNode = AagWeb.Optimize(cat, wc);
+    var rc60 = AagWeb.Optimize(cat, wc, new AagWeb.Options { Midpoint = true, CrossingAngle = 60, Iterations = 40 });
+    scenes["asymWebTri_catenoid"] = Scene("catenoid, tri-hex AAG web (spacing 0.3)", cat, 4, rcTri);
+    scenes["asymWebNode_catenoid"] = Scene("catenoid, node-to-node AAG web (the meridians)", cat, 4, rcNode);
+    // the rotational CRPC surface k1/k2 = −1/3: 60° crossings as traced
+    var crpc = AnalyticShapes.Build("crpc", 1.0 / 3.0, 1.2, 0, 48).ToTriangulated();
+    var pcC = PrincipalCurvature.Compute(crpc, 2);
+    double ratioErr = 0;
+    for (int i = 0; i < crpc.VertexCount; i++)
+    {
+        if (Math.Abs(crpc.Vertices[i].Z) > 0.9) continue;
+        double q = Math.Abs(pcC.K1[i] / pcC.K2[i]); q = Math.Min(q, 1 / q);
+        ratioErr = Math.Max(ratioErr, Math.Abs(q - 1.0 / 3.0));
+    }
+    var wCrpc = WebOf(crpc, 0.3);
+    var rCrpc = AagWeb.Optimize(crpc, wCrpc, new AagWeb.Options { Midpoint = true, CrossingAngle = 60 });
+    scenes["asymWebTri_crpc"] = Scene("rotational CRPC surface k₁/k₂ = −1/3: asymptotic laths cross at 60° (tri-hex AAG, Angle 60)", crpc, 4, rCrpc);
+    // Enneper surfaces
+    var en3 = AnalyticShapes.Build("enneper3", 3, 0.9, 0, 48).ToTriangulated();
+    var w3 = WebOf(en3, 0);
+    var r3 = AagWeb.Optimize(en3, w3, new AagWeb.Options { Midpoint = true });
+    scenes["asymWebTri_enneper3"] = Scene("3-fold Enneper, tri-hex AAG web (singular seed, six rays)", en3, 3, r3, new { yaw = -0.5, pitch = 1.0 });
+    var en = AnalyticShapes.Build("enneper", 1.2, 0, 0, 72).ToTriangulated();
+    var wEn = WebOf(en, 0.25, new MeshProjection(en).NearestVertexGlobal(Vec3d.Zero));
+    var rEn = AagWeb.Optimize(en, wEn, new AagWeb.Options { Midpoint = true, Iterations = 48 });
+    var rEnNode = AagWeb.Optimize(en, wEn, new AagWeb.Options { Iterations = 48 });
+    scenes["asymWebTri_enneper"] = Scene("classical Enneper, tri-hex AAG web (the node web does not converge here)", en, 4, rEn, new { yaw = -0.5, pitch = 1.0 });
+    t.Stop();
+    numbers["triHex"] = new
+    {
+        catQuads = wc.Quads.Count, catLaths = wc.A.Count, catMidErr = midErr, catSeg0 = seg0, catSeg1 = seg1, catChains0 = chains0, catChordKg = R3(wc.MidGeodesicError[0]),
+        cat = Row(rcTri, wc.Spacing, PlaneErr(rcTri.G)), catNode = Row(rcNode, wc.Spacing, PlaneErr(rcNode.G)), cat60 = Row(rc60, wc.Spacing),
+        crpc = new { ratioErr = R3(ratioErr), spacing = wCrpc.Spacing, geo0 = R3(rCrpc.InitialGeodesicError), geo = Math.Round(rCrpc.GeodesicError, 5), star = Math.Round(rCrpc.StarError, 5), asym = Math.Round(rCrpc.AsymptoticError, 5), angle0 = R3(rCrpc.InitialAngleMean), angleMin0 = R3(rCrpc.InitialAngleMin), angleMax0 = R3(rCrpc.InitialAngleMax), angle = R3(rCrpc.AngleMean), angleMin = R3(rCrpc.AngleMin), angleMax = R3(rCrpc.AngleMax), nodeMove = rCrpc.MaxNodeMove },
+        enneper3 = Row(r3, w3.Spacing), enneper = Row(rEn, wEn.Spacing), enneperNode = Row(rEnNode, wEn.Spacing),
+        ms = t.ElapsedMilliseconds,
+    };
+}
+
 numbers["totalMs"] = sw.ElapsedMilliseconds;
 var opt = new JsonSerializerOptions { WriteIndented = false, IncludeFields = true };
 File.WriteAllText(Path.Combine(OutDir, "scenes.json"), JsonSerializer.Serialize(scenes, opt));

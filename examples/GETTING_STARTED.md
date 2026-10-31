@@ -49,9 +49,23 @@ Use a doubly-curved mesh. For asymptotic nets it must have anticlastic
   every node star planar: three families of straight, flat slats, two upright
   and one lying on the surface (Schling, Wang, Hoyer & Pottmann 2022). The
   surface moves slightly; the `R` report says how far and how exact the result is
+- `Gd` (Geodesics) — `1` runs the geodesic family through the midpoints of the
+  asymptotic laths instead of through the nodes: the tri-hex web of the AGH
+  timber gridshell (Wan, D'Acunto & Schling 2024), where every joint takes two
+  laths and the cells alternate triangles and hexagons. Run it with `G` on —
+  the chord midpoints as drawn zigzag by O(Spacing²) and are not geodesic yet;
+  the optimisation places the crossings (`Mp`) a few per cent of the spacing
+  from the chord centres and the laths `A`, `B` come back as polylines through
+  every crossing
+- `An` (Angle) — with `G` on, a constant crossing angle of the two asymptotic
+  families (60° in the AGH gridshell; 90° is what a minimal surface gives). The
+  surface must become one with k1/k2 = −tan²(An/2) (Wang & Pottmann 2022), so
+  asking a minimal surface for 60° cannot keep it asymptotic — the report shows
+  the angle range reached and the warning says so; the `Angles` output has the
+  angle at every node
 
-`A` and `B` are the upright laths, `G` the flat diagonals, `N` the nodes and `Q`
-the net as a quad mesh. A seed on a flat point (the centre of a 3-fold Enneper
+`A` and `B` are the upright laths, `G` the flat diagonals (or mid chains), `N`
+the nodes and `Q` the net as a quad mesh. A seed on a flat point (the centre of a 3-fold Enneper
 surface) is a singular node where six laths meet. Triangulating with `G` is what
 makes the grid stiff: on a 10 m Enneper web of 60 × 6 mm timber the deflection
 under self-weight and 0.5 kN/m² drops from 1.7 m (quads) to 11 mm (AAG).

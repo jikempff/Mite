@@ -2937,5 +2937,163 @@
     "default": null
    }
   ]
+ },
+ {
+  "file": "AsymptoticWebComponent.cs",
+  "name": "Asymptotic Web",
+  "nick": "AsymWeb",
+  "desc": "Schling's asymptotic web: nodes every Spacing along the two asymptotic curves through the seed, every other node the crossing of the curves through them — a quad net with no stubs and no T-junctions that keeps the surface's symmetry. A seed on a flat point (3-fold Enneper, monkey saddle) becomes a singular node where 2n rays meet; a surface of revolution gets the rotational web whose meridian diagonals are geodesics (an AAG web). With AAG on, the web is optimised so that one family of node diagonals is geodesic and every node star stays planar: three families of straight, flat slats (two upright, one lying on the surface). Geodesics = 1 runs the geodesic family through the midpoints of the asymptotic laths instead (the tri-hex web of the AGH timber gridshell: every joint takes two laths, cells alternate triangles and hexagons); Angle asks for a constant crossing angle of the two asymptotic families (60° in the AGH gridshell; 90° is a minimal surface).",
+  "tab": "Gridshells",
+  "icon": "AsymptoticWeb",
+  "guid": "7C1E5A2B-4D3F-4B8E-9A61-2F0C8D7E5B31",
+  "inputs": [
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Surface mesh (negatively curved where the web should run)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Seed",
+    "nick": "S",
+    "type": "Point",
+    "desc": "Seed point (optional: the mesh point nearest the bounding-box centre; a symmetric surface's centre)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Spacing",
+    "nick": "Sp",
+    "type": "Number",
+    "desc": "Node distance along the two curves through the seed (0 = 4 % of the mesh diagonal)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Symmetry",
+    "nick": "Sy",
+    "type": "Integer",
+    "desc": "−1 = detect a rotation about the seed normal or a surface of revolution, 0 = none, n = force n-fold",
+    "access": "item",
+    "default": "-1"
+   },
+   {
+    "name": "AAG",
+    "nick": "G",
+    "type": "Boolean",
+    "desc": "Optimise into an AAG web (geodesic diagonals, planar node stars); the surface moves slightly",
+    "access": "item",
+    "default": "false"
+   },
+   {
+    "name": "Iterations",
+    "nick": "It",
+    "type": "Integer",
+    "desc": "AAG optimisation iterations",
+    "access": "item",
+    "default": "16"
+   },
+   {
+    "name": "Proximity",
+    "nick": "Px",
+    "type": "Number",
+    "desc": "AAG: weight of staying on the reference surface (0 lets it float)",
+    "access": "item",
+    "default": "0.3"
+   },
+   {
+    "name": "Diagonal",
+    "nick": "D",
+    "type": "Integer",
+    "desc": "Which diagonal family becomes geodesic: 0 = the straighter one, 1 = the other",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Geodesics",
+    "nick": "Gd",
+    "type": "Integer",
+    "desc": "Where the geodesic family runs: 0 = node to node (AAG web, valence-6 nodes), 1 = through the midpoints of the asymptotic laths (tri-hex web, every joint two laths)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "Angle",
+    "nick": "An",
+    "type": "Number",
+    "desc": "AAG: target crossing angle (degrees, 0–90) of the two asymptotic families at every node, 0 = free. 60 for the AGH layout; the surface becomes one with k1/k2 = −tan²(Angle/2)",
+    "access": "item",
+    "default": "0.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "A",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Asymptotic laths of the first family (upright strips)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "B",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Asymptotic laths of the second family (upright strips)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "G",
+    "nick": "G",
+    "type": "Curve",
+    "desc": "The geodesic family (flat strips): node diagonals, or with Geodesics = 1 the chains through the lath midpoints; with AAG off, the geodesic candidates",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Nodes",
+    "nick": "N",
+    "type": "Point",
+    "desc": "Web nodes (every A × B crossing)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Quads",
+    "nick": "Q",
+    "type": "Mesh",
+    "desc": "The web as a quad mesh on its nodes",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Rays, symmetry, node count, diagonal geodesic error and — with AAG — star and geodesic errors and how far the surface moved",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Angles",
+    "nick": "An",
+    "type": "Number",
+    "desc": "Crossing angle (degrees) of the two asymptotic laths at every node, in Nodes order",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Midpoints",
+    "nick": "Mp",
+    "type": "Point",
+    "desc": "Geodesics = 1: the crossings of the geodesic laths with the asymptotic laths (one per lath edge; after AAG, where the optimisation put them)",
+    "access": "list",
+    "default": null
+   }
+  ]
  }
 ]

@@ -31,6 +31,44 @@ namespace Mite.Core.Gridshells;
 /// general design surface the optimisation trades a small change of the
 /// surface for the geodesic property; the result reports both.
 /// </para>
+/// <pa/// Tri-hex variant (<see cref="Options.Midpoint"/>): the geodesic family runs
+/// through the midpoints of the asymptotic lath edges instead of the nodes,
+/// so every crossing joins two laths and the cells alternate triangles and
+/// hexagons — the layout built as the AGH timber gridshell (Schling, Wan,
+/// Wang &amp; D'Acunto 2023, AAG 2023; Wan, D'Acunto &amp; Schling 2024,
+/// Engineering Structures 311: "the flat geodesic planks are interlaced at
+/// the midpoint of the asymptotic beams to create a tri-hex pattern", which
+/// "lowers the buckling length"; Schling et al. 2022 §4.2 built the first
+/// module this way, "shifted by half a grid"). Discrete model: the web is
+/// refined by one vertex per lath edge, so every lath is a polyline through
+/// all its crossings — A × B nodes and A × G (or B × G) midpoint vertices
+/// alternate along it — and the two discrete conditions of Schling et al.
+/// 2022 are taken at every vertex with its own auxiliary normal: at a node
+/// the planar star n · (m − v) = 0 towards its edge midpoints (eq. 6), at a
+/// midpoint vertex m of the edge p q the two asymptotic half-edges
+/// n_m · (p − m) = n_m · (q − m) = 0 and the geodesic condition
+/// n_m · ((m₋ − m) × (m₊ − m)) = 0 along the mid chain (eq. 13). The
+/// chord midpoints themselves are only the start: on quads that are not
+/// parallelograms they alternate sides of the smooth mid curve by
+/// O(spacing²), so a polyline through them turns sideways at every vertex
+/// and is far from a discrete geodesic (finding in the tests: 39° on the
+/// catenoid, where the exact G curves are the meridians half a step between
+/// the node meridians). The optimiser moves each midpoint vertex within the
+/// surface by that O(spacing²) amount; a fairness term keeps it central on
+/// its lath (<see cref="Result.MaxMidpointShift"/> reports how far it went).
+/// </para>
+/// <para>
+/// Constant crossing angle (<see cref="Options.CrossingAngle"/>): the AGH
+/// gridshell was optimised for "constant 60° intersection angles between
+/// asymptotic curves" (Wan et al. 2024 §2.2.1). The asymptotic directions of
+/// a surface with principal-curvature ratio a = k₁/k₂ &lt; 0 cross at
+/// 2γ with tan²γ = −a (Wang &amp; Pottmann 2022, "Characteristic
+/// parameterizations of surfaces with a constant ratio of principal
+/// curvatures", CAGD 93): a constant angle therefore turns the surface into a
+/// CRPC surface (90° is the minimal surface, a = −1; 60° is a = −1/3). The
+/// soft residual at every regular node is t_A · t_B − cos θ with the chord
+/// directions of the two laths through the node, sign-aligned per iteration.
+/// </para>
 /// </summary>
 public static class AagWeb
 {
@@ -50,6 +88,19 @@ public static class AagWeb
 
         /// <summary>Levenberg damping (the paper's ε closeness to the current iterate).</summary>
         public double Damping { get; set; } = 1e-3;
+
+        /// <summary>
+        /// Tri-hex web: the geodesic family runs through the midpoints of the
+        /// asymptotic edges (<see cref="AsymptoticWeb.Result.MidChains"/>)
+        /// instead of through the nodes. Default false (node diagonals).
+        /// </summary>
+        public bool Midpoint { get; set; }
+
+        /// <summary>Target angle (degrees, 0–90) between the two asymptotic laths at every node; 0 leaves the angle free.</summary>
+        public double CrossingAngle { get; set; }
+
+        /// <summary>Weight of the crossing-angle residual (the A-net and geodesic residuals have weight 1).</summary>
+        public double AngleWeight { get; set; } = 1.0;
 
         public Func<bool>? ShouldCancel { get; set; }
     }
@@ -71,7 +122,29 @@ public static class AagWeb
         /// <summary>Largest and mean distance from the nodes to the reference surface.</summary>
         public double MaxDeviation { get; set; }
         public double MeanDeviation { get; set; }
+        /// <summary>Largest and mean distance a node moved from where the web put it (including sliding along the surface).</summary>
+        public double MaxNodeMove { get; set; }
+        public double MeanNodeMove { get; set; }
         public int Iterations { get; set; }
+        /// <summary>Angle (degrees, 0–90) between the two asymptotic laths at every node; NaN where a family is missing.</summary>
+        public double[] CrossingAngles { get; set; } = Array.Empty<double>();
+        public double AngleMin { get; set; } = double.NaN;
+        public double AngleMax { get; set; } = double.NaN;
+        public double AngleMean { get; set; } = double.NaN;
+        public double InitialAngleMin { get; set; } = double.NaN;
+        public double InitialAngleMax { get; set; } = double.NaN;
+        public double InitialAngleMean { get; set; } = double.NaN;
+        /// <summary>True when the geodesic family runs through the edge midpoints (tri-hex web).</summary>
+        public bool Midpoint { get; set; }
+        /// <summary>Tri-hex web: the midpoint vertices (A × G and B × G crossings) and the lath edge (node pair) each one sits on.</summary>
+        public Vec3d[] Midpoints { get; set; } = Array.Empty<Vec3d>();
+        public (int, int)[] MidpointEdges { get; set; } = Array.Empty<(int, int)>();
+        /// <summary>Tri-hex web: largest angle (degrees) between a lath half-edge at a midpoint vertex and that vertex's tangent plane — 0 when the refined laths are discrete asymptotic curves.</summary>
+        public double AsymptoticError { get; set; } = double.NaN;
+        public double InitialAsymptoticError { get; set; } = double.NaN;
+        /// <summary>Tri-hex web: how far the midpoint vertices moved from the centres of their chords, as a fraction of the spacing.</summary>
+        public double MaxMidpointShift { get; set; }
+        public double MeanMidpointShift { get; set; }
     }
 
     public static Result Optimize(MeshData reference, AsymptoticWeb.Result web, Options? options = null)
@@ -87,79 +160,177 @@ public static class AagWeb
         // node polylines of the families
         var chainsA = Chains(web.NeighborsA, web.Nodes);
         var chainsB = Chains(web.NeighborsB, web.Nodes);
-        var chainsG = new List<int[]>();
         int famG = options.GeodesicFamily == 1 ? 1 : 0;
-        for (int i = 0; i < web.DiagonalNodes.Count; i++) if (web.DiagonalFamily[i] == famG && web.DiagonalNodes[i].Length >= 2) chainsG.Add(web.DiagonalNodes[i]);
+        bool mid = options.Midpoint;
+        res.Midpoint = mid;
 
         // regular nodes carry the A-net star; the singular seed does not
         var regular = new bool[N];
         for (int i = 0; i < N; i++)
             regular[i] = web.NeighborsA[i].Length <= 2 && web.NeighborsB[i].Length <= 2 && web.NeighborsA[i].Length + web.NeighborsB[i].Length >= 3;
-        // geodesic triples (a, v, c) along the diagonals, interior nodes only
+
+        // vertices: the N nodes, then (tri-hex) one midpoint vertex per lath edge of the quad net
+        var midEdges = new List<(int, int)>();
+        var midOf = new Dictionary<(int, int), int>();
+        (int, int) Key(int a, int b) => a < b ? (a, b) : (b, a);
+        if (mid)
+            foreach (var ch in web.MidChainEdges)
+                foreach (var e in ch)
+                {
+                    var k = Key(e.Item1, e.Item2);
+                    if (!midOf.ContainsKey(k)) { midOf[k] = N + midEdges.Count; midEdges.Add(k); }
+                }
+        int M = midEdges.Count, NV = N + M;
+        bool[] midRegular = midEdges.Select(e => regular[e.Item1] && regular[e.Item2]).ToArray();
+
+        // the geodesic family as vertex chains
+        var chainsG = new List<int[]>();
+        if (mid)
+        {
+            for (int i = 0; i < web.MidChainEdges.Count; i++)
+                if (web.MidChainFamily[i] == famG && web.MidChainEdges[i].Length >= 2)
+                    chainsG.Add(web.MidChainEdges[i].Select(e => midOf[Key(e.Item1, e.Item2)]).ToArray());
+        }
+        else
+        {
+            for (int i = 0; i < web.DiagonalNodes.Count; i++)
+                if (web.DiagonalFamily[i] == famG && web.DiagonalNodes[i].Length >= 2)
+                    chainsG.Add(web.DiagonalNodes[i]);
+        }
+        bool Regular(int v) => v < N ? regular[v] : midRegular[v - N];
+        // geodesic triples (a, v, c) along the chains, interior vertices with constrained normals only
         var triples = new List<(int A, int V, int C)>();
         foreach (var ch in chainsG)
             for (int k = 1; k + 1 < ch.Length; k++)
-                if (regular[ch[k]] && ch[k - 1] != ch[k + 1]) triples.Add((ch[k - 1], ch[k], ch[k + 1]));
+                if (Regular(ch[k]) && ch[k - 1] != ch[k + 1]) triples.Add((ch[k - 1], ch[k], ch[k + 1]));
 
-        // unknowns (in units of h): v (3N), n (3N)
-        int nv = 6 * N;
-        var x = new double[nv];
+        // refined laths (tri-hex): node, midpoint, node, … along every A and B chain
+        List<int[]> Refine(List<int[]> chains)
+        {
+            if (!mid) return chains;
+            var o = new List<int[]>();
+            foreach (var ch in chains)
+            {
+                var r = new List<int> { ch[0] };
+                for (int k = 1; k < ch.Length; k++)
+                {
+                    if (midOf.TryGetValue(Key(ch[k - 1], ch[k]), out int mv)) r.Add(mv);
+                    r.Add(ch[k]);
+                }
+                o.Add(r.ToArray());
+            }
+            return o;
+        }
+        var lathsA = Refine(chainsA); var lathsB = Refine(chainsB);
+        // star neighbours of a node: its edge midpoints (tri-hex) or its node neighbours
+        int[][] star = new int[N][];
         for (int i = 0; i < N; i++)
         {
-            var p = web.Nodes[i] * inv;
-            var hit = proj.ClosestPoint(web.Nodes[i], proj.NearestVertexGlobal(web.Nodes[i]));
+            var nb = web.NeighborsA[i].Concat(web.NeighborsB[i]);
+            star[i] = mid ? nb.Select(j => midOf.TryGetValue(Key(i, j), out int mv) ? mv : -1).Where(v => v >= 0).ToArray() : nb.ToArray();
+        }
+
+        // unknowns (in units of h): per vertex v (3), n (3)
+        int nv = 6 * NV;
+        var x = new double[nv];
+        void Init(int i, Vec3d p)
+        {
+            var hit = proj.ClosestPoint(p, proj.NearestVertexGlobal(p));
             var n = hit.SmoothNormal.Normalized();
-            x[6 * i] = p.X; x[6 * i + 1] = p.Y; x[6 * i + 2] = p.Z;
+            x[6 * i] = p.X * inv; x[6 * i + 1] = p.Y * inv; x[6 * i + 2] = p.Z * inv;
             x[6 * i + 3] = n.X; x[6 * i + 4] = n.Y; x[6 * i + 5] = n.Z;
         }
+        for (int i = 0; i < N; i++) Init(i, web.Nodes[i]);
+        // midpoint vertices start at the chord midpoints pulled onto the surface
+        for (int j = 0; j < M; j++)
+        {
+            var c = 0.5 * (web.Nodes[midEdges[j].Item1] + web.Nodes[midEdges[j].Item2]);
+            Init(N + j, proj.ClosestPoint(c, proj.NearestVertexGlobal(c)).Point);
+        }
         Vec3d V(int i) => new Vec3d(x[6 * i], x[6 * i + 1], x[6 * i + 2]);
+        Vec3d Nrm(int i) => new Vec3d(x[6 * i + 3], x[6 * i + 4], x[6 * i + 5]);
         var start = new Vec3d[N];
         for (int i = 0; i < N; i++) start[i] = web.Nodes[i] * inv;
-        Vec3d Nrm(int i) => new Vec3d(x[6 * i + 3], x[6 * i + 4], x[6 * i + 5]);
 
-        (double star, double geo) Errors()
+        // chord directions of the two laths through a node, for the crossing angle
+        bool Lath(int[] nb, int i, out int from, out int to)
         {
-            double s = 0, g = 0;
+            from = to = -1;
+            if (nb.Length == 0) return false;
+            if (nb.Length >= 2) { from = nb[0]; to = nb[1]; } else { from = i; to = nb[0]; }
+            return true;
+        }
+        double cosTarget = Math.Cos(Math.Max(0, Math.Min(90, options.CrossingAngle)) * Math.PI / 180);
+        bool useAngle = options.CrossingAngle > 0 && options.AngleWeight > 0;
+
+        double TiltDeg(Vec3d n, Vec3d e)
+        {
+            double l = e.Length, ln = n.Length;
+            return l > 1e-12 && ln > 1e-12 ? Math.Asin(Math.Min(1, Math.Abs(Vec3d.Dot(n, e)) / (l * ln))) * 180 / Math.PI : 0;
+        }
+        (double star, double geo, double asym) Errors()
+        {
+            double s = 0, g = 0, a = 0;
             for (int i = 0; i < N; i++)
             {
                 if (!regular[i]) continue;
-                var n = Nrm(i).Normalized();
-                foreach (int j in web.NeighborsA[i].Concat(web.NeighborsB[i]))
-                {
-                    var e = V(j) - V(i); double l = e.Length;
-                    if (l > 1e-12) s = Math.Max(s, Math.Asin(Math.Min(1, Math.Abs(Vec3d.Dot(n, e)) / l)));
-                }
+                foreach (int j in star[i]) s = Math.Max(s, TiltDeg(Nrm(i), V(j) - V(i)));
             }
-            foreach (var (a, v, c) in triples)
+            for (int j = 0; j < M; j++)
             {
-                var m = Vec3d.Cross(V(a) - V(v), V(c) - V(v)); double l = m.Length;
-                if (l > 1e-12) g = Math.Max(g, Math.Asin(Math.Min(1, Math.Abs(Vec3d.Dot(Nrm(v).Normalized(), m)) / l)));
+                if (!midRegular[j]) continue;
+                int v = N + j;
+                a = Math.Max(a, Math.Max(TiltDeg(Nrm(v), V(midEdges[j].Item1) - V(v)), TiltDeg(Nrm(v), V(midEdges[j].Item2) - V(v))));
             }
-            return (s * 180 / Math.PI, g * 180 / Math.PI);
+            foreach (var (pa, v, pc) in triples)
+            {
+                var m = Vec3d.Cross(V(pa) - V(v), V(pc) - V(v));
+                g = Math.Max(g, TiltDeg(Nrm(v), m));
+            }
+            return (s, g, mid ? a : double.NaN);
         }
-        (res.InitialStarError, res.InitialGeodesicError) = Errors();
+        double[] Angles()
+        {
+            var ang = new double[N];
+            for (int i = 0; i < N; i++)
+            {
+                ang[i] = double.NaN;
+                if (!regular[i] || !Lath(web.NeighborsA[i], i, out int a0, out int a1) || !Lath(web.NeighborsB[i], i, out int b0, out int b1)) continue;
+                var ta = V(a1) - V(a0); var tb = V(b1) - V(b0);
+                if (ta.Length < 1e-12 || tb.Length < 1e-12) continue;
+                ang[i] = Math.Acos(Math.Min(1, Math.Abs(Vec3d.Dot(ta, tb)) / (ta.Length * tb.Length))) * 180 / Math.PI;
+            }
+            return ang;
+        }
+        (double min, double max, double mean) AngleStats(double[] ang)
+        {
+            var v = ang.Where(a => !double.IsNaN(a)).ToArray();
+            return v.Length == 0 ? (double.NaN, double.NaN, double.NaN) : (v.Min(), v.Max(), v.Average());
+        }
+        (res.InitialStarError, res.InitialGeodesicError, res.InitialAsymptoticError) = Errors();
+        (res.InitialAngleMin, res.InitialAngleMax, res.InitialAngleMean) = AngleStats(Angles());
 
+        // fairness triples along the (refined) laths and the geodesic chains
         var fairTriples = new List<(int, int, int)>();
-        foreach (var ch in chainsA.Concat(chainsB).Concat(chainsG))
+        foreach (var ch in lathsA.Concat(lathsB).Concat(chainsG))
             for (int k = 1; k + 1 < ch.Length; k++) fairTriples.Add((ch[k - 1], ch[k], ch[k + 1]));
 
         NormalEquations Assemble(double wf)
         {
             var sys = new NormalEquations(nv);
-            // A-net stars and unit normals
-            for (int i = 0; i < N; i++)
+            for (int i = 0; i < NV; i++)
             {
                 var n = Nrm(i);
-                if (regular[i])
+                // A-net stars at the nodes, asymptotic half-edges at the midpoint vertices
+                var edgesTo = i < N ? (regular[i] ? star[i] : Array.Empty<int>())
+                    : (midRegular[i - N] ? new[] { midEdges[i - N].Item1, midEdges[i - N].Item2 } : Array.Empty<int>());
+                foreach (int j in edgesTo)
                 {
-                    foreach (int j in web.NeighborsA[i].Concat(web.NeighborsB[i]))
-                    {
-                        var e = V(j) - V(i);
-                        sys.Row(1.0, Vec3d.Dot(n, e),
-                            (6 * i + 3, e.X), (6 * i + 4, e.Y), (6 * i + 5, e.Z),
-                            (6 * j, n.X), (6 * j + 1, n.Y), (6 * j + 2, n.Z),
-                            (6 * i, -n.X), (6 * i + 1, -n.Y), (6 * i + 2, -n.Z));
-                    }
+                    var e = V(j) - V(i);
+                    sys.Row(1.0, Vec3d.Dot(n, e),
+                        (6 * i + 3, e.X), (6 * i + 4, e.Y), (6 * i + 5, e.Z),
+                        (6 * j, n.X), (6 * j + 1, n.Y), (6 * j + 2, n.Z),
+                        (6 * i, -n.X), (6 * i + 1, -n.Y), (6 * i + 2, -n.Z));
                 }
                 sys.Row(1.0, Vec3d.Dot(n, n) - 1, (6 * i + 3, 2 * n.X), (6 * i + 4, 2 * n.Y), (6 * i + 5, 2 * n.Z));
                 // proximity through the tangent plane at the closest point
@@ -170,6 +341,7 @@ public static class AagWeb
                     var np = hit.SmoothNormal.Normalized();
                     sys.Row(options.Proximity, Vec3d.Dot(V(i) - hit.Point * inv, np), (6 * i, np.X), (6 * i + 1, np.Y), (6 * i + 2, np.Z));
                 }
+                if (i >= N) continue;
                 // border nodes (fewer than four neighbours) are held near their start
                 // so they cannot slide off the reference surface along its tangent plane
                 if (web.NeighborsA[i].Length + web.NeighborsB[i].Length < 4)
@@ -177,8 +349,27 @@ public static class AagWeb
                     var d0 = V(i) - start[i];
                     for (int k = 0; k < 3; k++) sys.Row(0.1, Comp(d0, k), (6 * i + k, 1.0));
                 }
+                // crossing angle: t_A · t_B / (|t_A||t_B|) − ±cos θ with the chords of the two laths
+                if (useAngle && regular[i] && Lath(web.NeighborsA[i], i, out int a0, out int a1) && Lath(web.NeighborsB[i], i, out int b0, out int b1))
+                {
+                    Vec3d ta = V(a1) - V(a0), tb = V(b1) - V(b0);
+                    double la = ta.Length, lb = tb.Length;
+                    if (la > 1e-12 && lb > 1e-12)
+                    {
+                        Vec3d u = ta / la, w = tb / lb;
+                        double c = Vec3d.Dot(u, w);
+                        double sign = c < 0 ? -1 : 1;
+                        var ga = (w - c * u) / la;   // ∂c/∂t_A
+                        var gb = (u - c * w) / lb;   // ∂c/∂t_B
+                        sys.Row(options.AngleWeight, c - sign * cosTarget,
+                            (6 * a1, ga.X), (6 * a1 + 1, ga.Y), (6 * a1 + 2, ga.Z),
+                            (6 * a0, -ga.X), (6 * a0 + 1, -ga.Y), (6 * a0 + 2, -ga.Z),
+                            (6 * b1, gb.X), (6 * b1 + 1, gb.Y), (6 * b1 + 2, gb.Z),
+                            (6 * b0, -gb.X), (6 * b0 + 1, -gb.Y), (6 * b0 + 2, -gb.Z));
+                    }
+                }
             }
-            // geodesic diagonals: n · ((va − v) × (vc − v)) = 0, normalised by
+            // geodesic chains: n · ((va − v) × (vc − v)) = 0, normalised by
             // |va − v||vc − v| (frozen per iteration) so it reads as an angle
             for (int t = 0; t < triples.Count; t++)
             {
@@ -242,11 +433,13 @@ public static class AagWeb
         // keep the better of the last step and the last accepted iterate
         if (prevSys != null && Assemble(lastWf).Cost > prevCost) Array.Copy(prevX, x, nv);
         res.Iterations = it;
-        (res.StarError, res.GeodesicError) = Errors();
+        (res.StarError, res.GeodesicError, res.AsymptoticError) = Errors();
+        res.CrossingAngles = Angles();
+        (res.AngleMin, res.AngleMax, res.AngleMean) = AngleStats(res.CrossingAngles);
 
         res.Nodes = new Vec3d[N];
         res.Normals = new Vec3d[N];
-        double maxDev = 0, sumDev = 0;
+        double maxDev = 0, sumDev = 0, maxMove = 0, sumMove = 0;
         for (int i = 0; i < N; i++)
         {
             res.Nodes[i] = V(i) * h;
@@ -254,11 +447,25 @@ public static class AagWeb
             var hit = proj.ClosestPoint(res.Nodes[i], proj.NearestVertexGlobal(res.Nodes[i]));
             double d = (hit.Point - res.Nodes[i]).Length;
             maxDev = Math.Max(maxDev, d); sumDev += d;
+            double mv = (res.Nodes[i] - web.Nodes[i]).Length;
+            maxMove = Math.Max(maxMove, mv); sumMove += mv;
         }
         res.MaxDeviation = maxDev; res.MeanDeviation = sumDev / N;
-        foreach (var ch in chainsA) res.A.Add(ch.Select(i => res.Nodes[i]).ToArray());
-        foreach (var ch in chainsB) res.B.Add(ch.Select(i => res.Nodes[i]).ToArray());
-        foreach (var ch in chainsG) res.G.Add(ch.Select(i => res.Nodes[i]).ToArray());
+        res.MaxNodeMove = maxMove; res.MeanNodeMove = sumMove / N;
+        res.Midpoints = new Vec3d[M];
+        res.MidpointEdges = midEdges.ToArray();
+        double maxShift = 0, sumShift = 0;
+        for (int j = 0; j < M; j++)
+        {
+            res.Midpoints[j] = V(N + j) * h;
+            double sft = (res.Midpoints[j] - 0.5 * (res.Nodes[midEdges[j].Item1] + res.Nodes[midEdges[j].Item2])).Length / h;
+            maxShift = Math.Max(maxShift, sft); sumShift += sft;
+        }
+        res.MaxMidpointShift = maxShift; res.MeanMidpointShift = M > 0 ? sumShift / M : 0;
+        Vec3d At(int v) => v < N ? res.Nodes[v] : res.Midpoints[v - N];
+        foreach (var ch in lathsA) res.A.Add(ch.Select(At).ToArray());
+        foreach (var ch in lathsB) res.B.Add(ch.Select(At).ToArray());
+        foreach (var ch in chainsG) res.G.Add(ch.Select(At).ToArray());
         return res;
     }
 
