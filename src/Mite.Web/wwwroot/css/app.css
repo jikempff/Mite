@@ -148,6 +148,7 @@ button, input, select { font: inherit; color: inherit; }
 .mini { width: 100%; height: 44px; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; margin-top: 4px; }
 .ends { font-size: 12px; color: var(--muted); line-height: 1.7; }
 .ends i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.boards { width: 100%; height: 120px; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; margin-top: 4px; }
 .buildbar { height: 8px; border-radius: 4px; background: var(--surface2); overflow: hidden; margin-top: 8px; border: 1px solid var(--line); }
 .buildbar i { display: block; height: 100%; background: var(--neon); }
 .btn.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }

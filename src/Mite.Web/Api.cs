@@ -440,6 +440,61 @@ public class PanelPayload
     public double MaxOffSurface { get; set; }
     public int PlanarizeIterations { get; set; }
     public int FixedNodes { get; set; }
+public class PiecesOptions
+{
+    /// <summary>Stock length, joint margin, splice (lap) length and saw kerf in model units.</summary>
+    public double Stock { get; set; }
+    public double Margin { get; set; }
+    public double Splice { get; set; }
+    public double Kerf { get; set; }
+    /// <summary>Equal pieces per lath instead of full stock lengths with a remainder.</summary>
+    public bool Balance { get; set; }
+    public double Width { get; set; }
+    public double Thickness { get; set; }
+    public bool Upright { get; set; } = true;
+    public int Align { get; set; }
+    public int Shape { get; set; }
+    /// <summary>Build the notch solids (lap notches at the crossings, half-lap splice notches at the cuts) as meshes.</summary>
+    public bool Notches { get; set; }
+    public double Lap { get; set; } = 0.5;
+    public double Clearance { get; set; }
+}
+
+public class PiecesPayload
+{
+    public int Laths { get; set; }
+    public int Pieces { get; set; }
+    public int Splices { get; set; }
+    public int Joints { get; set; }
+    public int Boards { get; set; }
+    public int LowerBound { get; set; }
+    public int TooLong { get; set; }
+    public double TotalLength { get; set; }
+    public double LongestPiece { get; set; }
+    public double ShortestPiece { get; set; }
+    /// <summary>Σ piece lengths / (boards × stock).</summary>
+    public double Material { get; set; }
+    public double Waste { get; set; }
+    /// <summary>Smallest distance between a cut and a joint on its lath (model units); −1 when there are no joints or no cuts.</summary>
+    public double MinClearance { get; set; } = -1;
+    /// <summary>Flat xyz of every cut.</summary>
+    public double[] CutPoints { get; set; } = Array.Empty<double>();
+    /// <summary>Every piece as a polyline, with its family (0 A, 1 B, 2 G), its index along the lath and its board.</summary>
+    public double[][][] PiecePolylines { get; set; } = Array.Empty<double[][]>();
+    public int[] PieceFamily { get; set; } = Array.Empty<int>();
+    public int[] PieceOrdinal { get; set; } = Array.Empty<int>();
+    public int[] PieceLath { get; set; } = Array.Empty<int>();
+    public double[] PieceLengths { get; set; } = Array.Empty<double>();
+    public int[] BoardOf { get; set; } = Array.Empty<int>();
+    /// <summary>Per board: the pieces on it, in placement order.</summary>
+    public int[][] BoardPieces { get; set; } = Array.Empty<int[]>();
+    public double[] BoardOffcuts { get; set; } = Array.Empty<double>();
+    /// <summary>Notch solids as one triangle mesh (lap notches then splice notches).</summary>
+    public double[] NotchVertices { get; set; } = Array.Empty<double>();
+    public int[] NotchFaces { get; set; } = Array.Empty<int>();
+    public int LapNotches { get; set; }
+    public int SpliceNotches { get; set; }
+    public int MixedCrossings { get; set; }
     public string? Error { get; set; }
     public long Ms { get; set; }
 }
@@ -447,6 +502,8 @@ public class PanelPayload
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(PanelOptions))]
 [JsonSerializable(typeof(PanelPayload))]
+[JsonSerializable(typeof(PiecesOptions))]
+[JsonSerializable(typeof(PiecesPayload))]
 [JsonSerializable(typeof(MeshStats))]
 [JsonSerializable(typeof(CurvaturePayload))]
 [JsonSerializable(typeof(NetOptions))]
@@ -1296,6 +1353,136 @@ public static partial class MiteApi
         catch (Exception ex) { p.Error = ex.Message; }
         p.Ms = sw.ElapsedMilliseconds;
         return JsonSerializer.Serialize(p, MiteJson.Default.KineticsPayload);
+    }
+
+    // ---- Pieces: stock lengths, splices, joints and boards ------------------------
+
+    /// <summary>
+    /// Cuts every lath of the current net into stock lengths (Lath Segment: cuts
+    /// kept Margin away from the crossings, consecutive pieces lapping by Splice),
+    /// packs the pieces into boards (first-fit decreasing with a kerf per saw cut)
+    /// and, on request, builds the notch solids of Net Joints and Lath Segment.
+    /// </summary>
+    [JSExport]
+    public static string Pieces(string optionsJson)
+    {
+        var sw = Stopwatch.StartNew();
+        var p = new PiecesPayload();
+        var o = JsonSerializer.Deserialize(optionsJson, MiteJson.Default.PiecesOptions) ?? new PiecesOptions();
+        if (_mesh == null || _proj == null || (_famA.Count + _famB.Count) == 0) { p.Error = "Trace a net first."; return JsonSerializer.Serialize(p, MiteJson.Default.PiecesPayload); }
+        if (o.Stock <= 0) { p.Error = "The stock length must be positive."; return JsonSerializer.Serialize(p, MiteJson.Default.PiecesPayload); }
+        if (o.Splice < 0 || o.Splice >= o.Stock) { p.Error = "The splice must be shorter than the stock."; return JsonSerializer.Serialize(p, MiteJson.Default.PiecesPayload); }
+        try
+        {
+            var fams = new[] { _famA, _famB, _famG };
+            LathProfile Profile(bool upright) => o.Shape == 1 ? LathProfile.Round(o.Width, 24) : new LathProfile(o.Width, o.Thickness, upright);
+            var alignAB = o.Align == 1 ? LathAlign.Centred : o.Align == 2 ? LathAlign.Inside : LathAlign.Outside;
+            var ab = Profile(o.Upright).WithAlign(alignAB);
+            double gFloor = Math.Max(0, ab.FaceLow + (ab.NormalHigh - ab.NormalLow));
+            var gProfile = Profile(false).WithOffset(_famG.Count > 0 ? gFloor : 0);
+
+            // joints: every crossing between different families
+            var crossings = new List<(Vec3d point, int famA, int idxA, int famB, int idxB, Vec3d ta, Vec3d tb)>();
+            void Cross(int fa, int fb)
+            {
+                if (fams[fa].Count == 0 || fams[fb].Count == 0) return;
+                foreach (var x in NetIntersections.Find(fams[fa], fams[fb]))
+                {
+                    if (_web != null && _web.Singular && (x.Point - _web.Seed).Length < 0.05 * _web.Spacing) continue;
+                    crossings.Add((x.Point, fa, x.CurveA, fb, x.CurveB, NetIntersections.TangentAt(fams[fa], x, false), NetIntersections.TangentAt(fams[fb], x, true)));
+                }
+            }
+            Cross(0, 1); Cross(0, 2); Cross(1, 2);
+            p.Joints = crossings.Count;
+            var jointPoints = crossings.Select(c => c.point).ToList();
+            double reach = Math.Max(o.Width, _proj.AverageEdgeLength);
+
+            var cutPts = new List<double>();
+            var pieces = new List<Vec3d[]>(); var pieceFam = new List<int>(); var pieceOrd = new List<int>(); var pieceLath = new List<int>(); var pieceLen = new List<double>();
+            var nv = new List<double>(); var nf = new List<int>();
+            void AddBox(NotchSolid s)
+            {
+                int b = nv.Count / 3;
+                for (int k = 0; k < 8; k++)
+                {
+                    double sx = (k & 1) == 0 ? -1 : 1, sy = (k & 2) == 0 ? -1 : 1, sz = (k & 4) == 0 ? -1 : 1;
+                    var q = s.Center + sx * s.HalfX * s.AxisX + sy * s.HalfY * s.AxisY + sz * s.HalfZ * s.AxisZ;
+                    nv.Add(q.X); nv.Add(q.Y); nv.Add(q.Z);
+                }
+                int[][] quads = { new[] { 0, 2, 3, 1 }, new[] { 4, 5, 7, 6 }, new[] { 0, 1, 5, 4 }, new[] { 2, 6, 7, 3 }, new[] { 0, 4, 6, 2 }, new[] { 1, 3, 7, 5 } };
+                foreach (var q in quads) { nf.Add(b + q[0]); nf.Add(b + q[1]); nf.Add(b + q[2]); nf.Add(b + q[0]); nf.Add(b + q[2]); nf.Add(b + q[3]); }
+            }
+            if (o.Notches)
+            {
+                foreach (var c in crossings)
+                {
+                    var hit = _proj.ClosestPoint(c.point, _proj.NearestVertexGlobal(c.point));
+                    var pa = c.famA == 2 ? gProfile : ab; var pb = c.famB == 2 ? gProfile : ab;
+                    if (pa.Upright != pb.Upright) { p.MixedCrossings++; continue; }
+                    if (JointGeometry.TryBuildLapNotches(c.point, c.ta, c.tb, hit.SmoothNormal, pa, pb, o.Lap, o.Clearance, out var na, out var nb))
+                    { AddBox(na); AddBox(nb); p.LapNotches += 2; }
+                }
+            }
+
+            double minClear = double.MaxValue;
+            int lathIndex = 0;
+            for (int f = 0; f < 3; f++)
+            {
+                var profile = f == 2 ? gProfile : ab;
+                foreach (var line in fams[f])
+                {
+                    if (line.Length < 2) { lathIndex++; continue; }
+                    double[]? jointArcs = jointPoints.Count > 0 ? LathSegmentation.JointArcLengths(line, jointPoints, reach) : null;
+                    var r = LathSegmentation.Segment(line, o.Stock, o.Margin, jointArcs, o.Splice, o.Balance);
+                    p.Laths++;
+                    p.Splices += r.CutArcLengths.Length;
+                    if (jointArcs != null && jointArcs.Length > 0)
+                        foreach (double cut in r.CutArcLengths) minClear = Math.Min(minClear, jointArcs.Min(j => Math.Abs(j - cut)));
+                    for (int k = 0; k < r.Segments.Count; k++)
+                    {
+                        pieces.Add(r.Segments[k]); pieceFam.Add(f); pieceOrd.Add(k); pieceLath.Add(lathIndex); pieceLen.Add(ArcLength(r.Segments[k]));
+                    }
+                    var arc = new double[line.Length];
+                    for (int i = 1; i < line.Length; i++) arc[i] = arc[i - 1] + (line[i] - line[i - 1]).Length;
+                    for (int k = 0; k < r.CutPoints.Length; k++)
+                    {
+                        var cut = r.CutPoints[k];
+                        cutPts.Add(cut.X); cutPts.Add(cut.Y); cutPts.Add(cut.Z);
+                        if (o.Notches && o.Splice > 0)
+                        {
+                            var hit = _proj.ClosestPoint(cut, _proj.NearestVertexGlobal(cut));
+                            var tangent = TangentAtArc(line, arc, r.CutArcLengths[k]);
+                            if (JointGeometry.TryBuildSpliceNotches(cut, tangent, hit.SmoothNormal, profile, o.Splice, o.Clearance, out var ne, out var ns))
+                            { AddBox(ne); AddBox(ns); p.SpliceNotches += 2; }
+                        }
+                    }
+                    lathIndex++;
+                }
+            }
+
+            var pack = CuttingStock.Pack(pieceLen, o.Stock, Math.Max(0, o.Kerf));
+            p.Pieces = pieces.Count; p.Boards = pack.Boards.Count; p.LowerBound = pack.LowerBound; p.TooLong = pack.TooLong;
+            p.TotalLength = pieceLen.Sum(); p.LongestPiece = pieceLen.Count > 0 ? pieceLen.Max() : 0; p.ShortestPiece = pieceLen.Count > 0 ? pieceLen.Min() : 0;
+            p.Material = pack.Material; p.Waste = pack.Waste;
+            p.MinClearance = minClear < double.MaxValue ? minClear : -1;
+            p.CutPoints = cutPts.ToArray();
+            p.PiecePolylines = ToJagged(pieces); p.PieceFamily = pieceFam.ToArray(); p.PieceOrdinal = pieceOrd.ToArray(); p.PieceLath = pieceLath.ToArray(); p.PieceLengths = pieceLen.ToArray();
+            p.BoardOf = pack.BoardOf; p.BoardPieces = pack.Boards.Select(b => b.ToArray()).ToArray(); p.BoardOffcuts = pack.Offcuts;
+            p.NotchVertices = nv.ToArray(); p.NotchFaces = nf.ToArray();
+        }
+        catch (Exception ex) { p.Error = ex.Message; }
+        p.Ms = sw.ElapsedMilliseconds;
+        return JsonSerializer.Serialize(p, MiteJson.Default.PiecesPayload);
+    }
+
+    private static Vec3d TangentAtArc(Vec3d[] line, double[] arc, double s)
+    {
+        for (int i = 1; i < line.Length; i++)
+        {
+            double len = arc[i] - arc[i - 1];
+            if (arc[i] >= s && len > 1e-15) return (line[i] - line[i - 1]) / len;
+        }
+        return (line[^1] - line[^2]).Normalized();
     }
 
     // ---- Flat kit: cut, assemble flat, deploy -----------------------------------

@@ -45,6 +45,23 @@ public static class LathSegmentation
     public static Result Segment(
         Vec3d[] polyline, double stockLength, double margin,
         IReadOnlyList<double>? jointArcLengths = null, double overlap = 0.0)
+        => Segment(polyline, stockLength, margin, jointArcLengths, overlap, false);
+
+    /// <summary>
+    /// As <see cref="Segment(Vec3d[], double, double, IReadOnlyList{double}, double)"/>;
+    /// with <paramref name="balance"/> the lath is cut into the fewest pieces
+    /// that fit the stock and those pieces are made (nearly) equal, instead of
+    /// full stock lengths with a short remainder at the end — a 6.4 m lath on
+    /// 6 m stock becomes 3.2 + 3.2 instead of 6 + 0.4. The cuts start at the
+    /// equal split and move to the nearest position that clears every joint by
+    /// the margin; when that would make a piece longer than the stock, the
+    /// greedy cuts are returned instead. Timber practice (the Downland and
+    /// Savill gridshells, Harris &amp; Roynon 2008) joins factory lengths end to
+    /// end on site, so the splices are design decisions, not leftovers.
+    /// </summary>
+    public static Result Segment(
+        Vec3d[] polyline, double stockLength, double margin,
+        IReadOnlyList<double>? jointArcLengths, double overlap, bool balance)
     {
         if (stockLength <= 0)
             throw new ArgumentException("Stock length must be positive.", nameof(stockLength));
@@ -86,6 +103,15 @@ public static class LathSegmentation
 
         // Cut positions
         double spacing = stockLength - overlap;
+        if (balance)
+        {
+            var balanced = BalancedCuts(total, stockLength, overlap, margin, joints);
+            if (balanced != null)
+            {
+                foreach (double c in balanced) { cutArcs.Add(c); cutPoints.Add(PointAtArc(polyline, arc, c, out _)); }
+                return new Result(Pieces(polyline, arc, total, cutArcs, overlap), cutPoints.ToArray(), cutArcs.ToArray());
+            }
+        }
         double start = 0.0;
         while (total - start - 0.5 * overlap > spacing)
         {
@@ -118,7 +144,13 @@ public static class LathSegmentation
             start = end;
         }
 
-        // Pieces between consecutive cuts, extended by the overlap
+        return new Result(Pieces(polyline, arc, total, cutArcs, overlap), cutPoints.ToArray(), cutArcs.ToArray());
+    }
+
+    /// <summary>Pieces between consecutive cuts, each extended by half the overlap past its cuts.</summary>
+    private static List<Vec3d[]> Pieces(Vec3d[] polyline, double[] arc, double total, List<double> cutArcs, double overlap)
+    {
+        var segments = new List<Vec3d[]>();
         for (int c = 0; c <= cutArcs.Count; c++)
         {
             double a = c == 0 ? 0.0 : cutArcs[c - 1] - 0.5 * overlap;
@@ -127,8 +159,55 @@ public static class LathSegmentation
             b = Math.Min(total, b);
             if (b - a > 1e-12) segments.Add(SubPolyline(polyline, arc, a, b));
         }
+        return segments;
+    }
 
-        return new Result(segments, cutPoints.ToArray(), cutArcs.ToArray());
+    /// <summary>
+    /// Equal pieces. A lath of length L cut into n pieces with a splice overlap
+    /// v has piece length P = (L + (n − 1)·v) / n (every cut adds v/2 to both
+    /// neighbours); P ≤ stock gives n = ⌈(L − v) / (stock − v)⌉, the fewest
+    /// pieces that fit. The cuts sit at P − v/2, then every P − v. Each cut then
+    /// moves to the nearest arc position that clears every joint by the margin
+    /// (joint ± margin, or the midpoint between two joints); null when a piece
+    /// would then exceed the stock or the cuts would cross.
+    /// </summary>
+    private static List<double>? BalancedCuts(double total, double stockLength, double overlap, double margin, List<double> joints)
+    {
+        double spacing = stockLength - overlap;
+        if (spacing <= 0) return null;
+        int n = (int)Math.Ceiling((total - overlap) / spacing - 1e-12);
+        if (n < 2) return new List<double>();
+        double piece = (total + (n - 1) * overlap) / n;   // every piece this long
+        var cuts = new List<double>(n - 1);
+        for (int i = 1; i < n; i++)
+        {
+            double c = piece - 0.5 * overlap + (i - 1) * (piece - overlap);
+            double target = c;
+            if (margin > 0 && joints.Count > 0 && Clearance(joints, c) < margin)
+            {
+                var candidates = new List<double>();
+                for (int k = 0; k < joints.Count; k++)
+                {
+                    candidates.Add(joints[k] - margin);
+                    candidates.Add(joints[k] + margin);
+                    if (k + 1 < joints.Count) candidates.Add(0.5 * (joints[k] + joints[k + 1]));
+                }
+                candidates.RemoveAll(p => p <= 0 || p >= total || Clearance(joints, p) < margin - 1e-12);
+                if (candidates.Count == 0) return null;
+                c = candidates.OrderBy(p => Math.Abs(p - target)).First();
+            }
+            cuts.Add(c);
+        }
+        // every piece within the stock (interior gap + overlap, end gap + overlap/2), cuts in order
+        double prev = 0;
+        for (int i = 0; i <= cuts.Count; i++)
+        {
+            double next = i == cuts.Count ? total : cuts[i];
+            double len = next - prev + (i == 0 || i == cuts.Count ? 0.5 * overlap : overlap);
+            if (next <= prev + 1e-9 || len > stockLength + 1e-9) return null;
+            prev = next;
+        }
+        return cuts;
     }
 
     /// <summary>Distance from an arc-length position to the nearest joint (joints sorted ascending).</summary>

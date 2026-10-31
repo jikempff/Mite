@@ -185,6 +185,28 @@
       </div>
     </section>
 
+    <section class="block" id="pieces-block">
+      <h2>Pieces <small>stock lengths, splices, joints</small></h2>
+      <div class="gh"><img src="icons/LathSegment.png" alt="" title="Lath Segment"><img src="icons/NetJoints.png" alt="" title="Net Joints"><span>Grasshopper <b>Lath Segment</b> · <b>Net Joints</b></span></div>
+      <div class="grid2">
+        <div class="row slider"><label for="pstock" title="The length the timber comes in: 6 m factory lengths at the Downland and Savill gridshells, finger-jointed from 0.3–1.4 m pieces (Harris &amp; Roynon 2008)">stock length <span class="unit">m</span></label><input id="pstock" type="range" min="1" max="13" step="0.5" value="6"><output for="pstock">6</output></div>
+        <div class="row slider"><label for="psplice" title="Lath Segment → SpliceLength: consecutive pieces lap over this length, half-lap notched (0 = a plain butt at the cut)">splice <span class="unit">mm</span></label><input id="psplice" type="range" min="0" max="600" step="10" value="300"><output for="psplice">300</output></div>
+        <div class="row slider"><label for="pmargin" title="Lath Segment → Margin: no cut within this distance of a joint on the lath">joint margin <span class="unit">mm</span></label><input id="pmargin" type="range" min="0" max="500" step="10" value="150"><output for="pmargin">150</output></div>
+        <div class="row slider"><label for="pkerf" title="The width a saw cut takes from a board between two pieces">kerf <span class="unit">mm</span></label><input id="pkerf" type="range" min="0" max="10" step="0.5" value="3"><output for="pkerf">3</output></div>
+      </div>
+      <div class="row toggles">
+        <label class="chk" title="Lath Segment → Balance: the fewest pieces that fit the stock, made equal, instead of full stock lengths and a short remainder at the end of each lath. Equal pieces usually cost boards: the material figure tells"><input id="pbalance" type="checkbox"> equal pieces per lath</label>
+        <label class="chk" title="Net Joints → NotchesA / NotchesB and Lath Segment → Ne / Ns as solids in the viewport: the half-lap notch at every crossing, the half-lap splice at every cut"><input id="pnotches" type="checkbox"> show the notches</label>
+      </div>
+      <div class="row"><button id="piecesrun" class="btn" title="Grasshopper: Lath Segment with the Points of Net Joints as its Joints">Cut the laths</button><span class="unit">on the current net, with the Laths section</span></div>
+      <div id="pieces-result" class="hidden">
+        <p id="pieces-stats" class="stats"></p>
+        <div class="q"><div class="q-h">boards <span id="pieces-boards-txt"></span></div><canvas id="pieces-boards" class="boards"></canvas><div class="caption">one row per stock board, pieces in their family colour, kerfs black, offcut grey · first-fit decreasing (Johnson 1973; within 11/9 of the optimum, Dósa 2007)</div></div>
+        <div id="pieces-legend" class="legend"></div>
+      </div>
+      <p class="note">Every lath is cut into pieces no longer than the stock, the cuts kept the margin away from the joints (a splice on a joint is a joint with no timber left); the pieces of the whole net are then cut from boards. At 1 : 1 the stock is the timber you buy; the material figure is what ends up in the laths.</p>
+    </section>
+
     <section class="block" id="structure-block">
       <h2>Structure <small>beam frame of the net</small></h2>
       <div class="gh"><img src="icons/GridshellAnalysis.png" alt="" title="Gridshell Analysis"><span>Grasshopper <b>Gridshell Analysis</b></span></div>

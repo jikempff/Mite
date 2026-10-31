@@ -3,6 +3,7 @@
 
 import { Kernel } from './kernel.js';
 import { Viewer, FAMILY_A, FAMILY_B, FAMILY_G, NEON } from './viewer.js';
+import { Color as THREE_COLOR } from 'three';
 import { diverging, sequential, utilizationColor, legendGradient, legendTicks, cssRgb, UTIL_STOPS } from './colormaps.js';
 import { Loft } from './loft.js';
 import { readMeshFile } from './loaders.js';
@@ -59,7 +60,7 @@ const S = {
   net: 'none', netData: null, seed: -1, seedPoint: null, seedNormal: [0, 0, 1], dir: [1, 0.35, 0],
   loft: null, file: null,
   lath: null, selected: null, lathUtil: null,
-  frame: null, aag: null, kin: null, kit: null, panels: null, kinTimer: null, drive: 'flatten', picked: [], picking: false,
+  frame: null, aag: null, kin: null, kit: null, panels: null, pieces: null, kinTimer: null, drive: 'flatten', picked: [], picking: false,
   busy: 0, gen: 0, loading: false, layout: 3,
 };
 
@@ -191,6 +192,7 @@ async function applyShapeInner(gen, light) {
     (stats.welded ? ` · welded <b>${stats.welded}</b>` : '') + (stats.removedFaces ? ` · removed <b>${stats.removedFaces}</b> faces` : '') + ` · ${stats.ms} ms`;
   $('hud-shape').textContent = `${SHAPES[S.shape].name} · ${stats.vertices} v · size ${fmt(S.size, 2)}`;
   S.curv = null; S.lath = null; S.selected = null; S.frame = null; S.netData = null; S.lathUtil = null; S.aag = null; S.picked = [];
+  clearPieces();
   stopKinetics(true); S.viewer.clearOverlay('picked'); S.viewer.clearOverlay('supports'); S.viewer.clearOverlay('sweepAll');
   S.viewer.clearCurves(); S.viewer.clearOverlay('ends'); S.viewer.clearOverlay('seed');
   $('lath-result').classList.add('hidden');
@@ -350,6 +352,7 @@ async function traceNet() {
   S.lath = null; S.selected = null; S.frame = null; S.lathUtil = null; S.aag = null;
   stopKinetics(true); S.viewer.setMeshOpacity(surfaceOpacity()); showUtilLegend(false);
   S.kit = null; $('kit-result').classList.add('hidden'); $('kitzip').classList.add('hidden');
+  clearPieces();
   $('lath-result').classList.add('hidden');
   $('frame-stats').textContent = ''; $('laths-stats').textContent = ''; $('aag-stats').classList.add('hidden');
   v.clearOverlay('supports'); v.clearOverlay('deformed'); v.clearOverlay('sweepAll');
@@ -897,6 +900,97 @@ function drawKinPlot() {
 }
 
 // ---------------------------------------------------------------------------
+// Pieces: stock lengths, splices, joints and boards
+// ---------------------------------------------------------------------------
+
+function clearPieces() {
+  S.pieces = null;
+  $('pieces-result')?.classList.add('hidden');
+  for (const t of ['pieceA0', 'pieceA1', 'pieceB0', 'pieceB1', 'pieceG0', 'pieceG1', 'cuts', 'notches']) S.viewer?.clearOverlay(t);
+  if (S.viewer && S.netData && !S.kin) S.viewer.setFamilyVisible('A', $('famA').checked), S.viewer.setFamilyVisible('B', $('famB').checked), S.viewer.setFamilyVisible('G', $('famG').checked);
+}
+
+function piecesOptions() {
+  const o = lathOpts();
+  return { stock: +$('pstock').value / toMetres(), margin: mmToModel(+$('pmargin').value), splice: mmToModel(+$('psplice').value), kerf: mmToModel(+$('pkerf').value),
+    balance: $('pbalance').checked, width: o.width, thickness: o.thickness, upright: o.upright, align: o.align, shape: o.section,
+    notches: $('pnotches').checked, lap: 0.5, clearance: 0 };
+}
+
+async function runPieces() {
+  if (!S.netData) { $('pieces-stats').textContent = 'Trace a net first.'; $('pieces-result').classList.remove('hidden'); return; }
+  const gen = S.gen, data = S.netData, aag = S.aag;
+  const opts = piecesOptions();
+  await withBusy('cutting the laths…', async () => {
+    const r = await K('pieces', opts);
+    if (gen !== S.gen || S.netData !== data || S.aag !== aag) return;
+    $('pieces-result').classList.remove('hidden');
+    if (r.error) { $('pieces-stats').innerHTML = `<span class="bad">${r.error}</span>`; return; }
+    S.pieces = r;
+    drawPieces();
+    const m = toMetres(), mm = (x) => fmt(x * m * 1000, 0);
+    const stockM = +$('pstock').value;
+    const bound = r.boards > r.lowerBound ? `at least <b>${r.lowerBound}</b> needed — first-fit decreasing is within 11/9 of the optimum` : 'the lower bound: no packing does better';
+    $('pieces-stats').innerHTML = `<b>${r.laths}</b> laths → <b>${r.pieces}</b> pieces · <b>${r.splices}</b> splices · pieces <b>${fmt(r.shortestPiece * m, 2)} … ${fmt(r.longestPiece * m, 2)} m</b> · <b>${fmt(r.totalLength * m, 1)} m</b> of lath · ${r.ms} ms\n` +
+      `joints <b>${r.joints}</b>` + (r.minClearance >= 0 ? ` · nearest cut to a joint <b>${mm(r.minClearance)} mm</b> (margin ${$('pmargin').value})` : '') +
+      (r.splices ? ` · splice <b>${$('psplice').value} mm</b> half-lap` : '') + '\n' +
+      `<b>${r.boards}</b> boards of ${stockM} m (${bound}) · material <b class="${r.material >= 0.9 ? 'ok' : ''}">${(100 * r.material).toFixed(1)} %</b> · offcuts <b>${fmt(r.waste * m, 1)} m</b>` +
+      (r.tooLong ? ` · <span class="bad">${r.tooLong} pieces longer than the stock (shorten the splice)</span>` : '') +
+      (opts.notches ? `\n${r.lapNotches} lap notches at the crossings · ${r.spliceNotches} splice notches` + (r.mixedCrossings ? ` · ${r.mixedCrossings} flat × upright crossings have no lap notch (the G slats rest on the A / B laths)` : '') : '');
+    $('pieces-boards-txt').textContent = `${r.boards} × ${stockM} m · ${(100 * r.material).toFixed(0)} % used`;
+    drawBoards(r);
+    $('pieces-legend').innerHTML = `<div><i style="background:var(--famA)"></i><i style="background:var(--famA);opacity:.45"></i><b>pieces</b> — consecutive pieces of a lath alternate full and pale in the family colour; <i style="background:var(--ink)"></i><b>cuts</b> — where two pieces meet, lapping over the splice length</div>` +
+      (opts.notches ? `<div><i style="background:#ffb000"></i><b>notches</b> — the half-lap solids Net Joints and Lath Segment subtract from the swept laths</div>` : '');
+    updateRecipe();
+  });
+}
+
+function drawPieces() {
+  const r = S.pieces, v = S.viewer; if (!r) return;
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fam = ['A', 'B', 'G'], col = [css('--famA'), css('--famB'), css('--famG')];
+  // pieces replace the lath curves: full colour and a pale shade alternate along each lath
+  for (let f = 0; f < 3; f++) {
+    for (let parity = 0; parity < 2; parity++) {
+      const curves = [];
+      for (let i = 0; i < r.piecePolylines.length; i++) if (r.pieceFamily[i] === f && (r.pieceOrdinal[i] & 1) === parity) curves.push(r.piecePolylines[i]);
+      const c = new THREE_COLOR(col[f]); if (parity) c.lerp(new THREE_COLOR(v.dark ? '#000000' : '#ffffff'), 0.55);
+      v.showPolylines(`piece${fam[f]}${parity}`, curves, c.getHex(), 2.4);
+    }
+    v.setFamilyVisible(fam[f], false);
+  }
+  for (const [f, id] of [['A', 'famA'], ['B', 'famB'], ['G', 'famG']]) { v.setOverlayVisible(`piece${f}0`, $(id).checked); v.setOverlayVisible(`piece${f}1`, $(id).checked); }
+  v.showPoints('cuts', r.cutPoints, v.ink(), 6);
+  if (r.notchVertices.length) v.showSolid('notches', r.notchVertices, r.notchFaces, 0xffb000); else v.clearOverlay('notches');
+}
+
+function drawBoards(r) {
+  const c = $('pieces-boards'); if (!c) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const col = [css('--famA'), css('--famB'), css('--famG')];
+  const stock = piecesOptions().stock, kerf = piecesOptions().kerf;
+  const n = r.boardPieces.length; if (!n) return;
+  const maxRows = 24, rows = Math.min(n, maxRows), rh = (h - 4) / rows, gap = Math.min(2, rh * 0.25);
+  const X = (len) => 2 + (len / stock) * (w - 4);
+  for (let b = 0; b < rows; b++) {
+    const y = 2 + b * rh;
+    ctx.fillStyle = css('--surface2') || '#eee'; ctx.fillRect(2, y, w - 4, rh - gap);
+    let at = 0;
+    r.boardPieces[b].forEach((i, k) => {
+      if (k > 0) { ctx.fillStyle = css('--ink'); ctx.fillRect(X(at), y, Math.max(1, X(at + kerf) - X(at)), rh - gap); at += kerf; }
+      ctx.fillStyle = col[r.pieceFamily[i]]; ctx.globalAlpha = (r.pieceOrdinal[i] & 1) ? 0.55 : 1;
+      ctx.fillRect(X(at), y, Math.max(1, X(at + r.pieceLengths[i]) - X(at)), rh - gap); ctx.globalAlpha = 1;
+      at += r.pieceLengths[i];
+    });
+  }
+  if (n > rows) { ctx.fillStyle = css('--muted'); ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.fillText(`+ ${n - rows} more boards`, w - 6, h - 5); }
+}
+
+// ---------------------------------------------------------------------------
 // Kit: the flat assembly, the strips and the deployment
 // ---------------------------------------------------------------------------
 
@@ -981,6 +1075,7 @@ function updateRecipe() {
     const f = frameOptions();
     lines.push(`Gridshell Analysis: Supports = ${f.supports === 'border' ? 'lath ends on the border' : f.supports === 'lowest' ? `lath ends in the lowest ${$('band').value} %` : `${S.picked.length} picked points`}, SupportType = ${f.supportType}, JointStiffness = ${f.jointStiffness < 0 ? -1 : f.jointStiffness} N·m/rad, Density = ${f.density}, AreaLoad = ${f.areaLoad} N/m², Load = (0,0,−${f.lineLoad}) N/m`);
   }
+  if (S.pieces && !S.pieces.error) { const o = piecesOptions(); lines.push(`Net Joints: A, B (W, T, Upright as the laths) → Points, Angles, NotchesA / NotchesB; Lath Segment: Curves = A + B (+ G), Joints = Net Joints Points, StockLength = ${fmt(o.stock, 3)} (${$('pstock').value} m), Margin = ${fmt(o.margin, 4)}, SpliceLength = ${fmt(o.splice, 4)}, Balance = ${o.balance}, Kerf = ${fmt(o.kerf, 4)} → Segments, Cuts, Ne / Ns, Board, Boards, Material, Report`); }
   if (S.kit) lines.push(`Flat Kit: A, B from the net, P = the seed, scale 1 : ${$('kscale').value} (W, T in model units), Upright = ${$('upright').checked}, Joint = ${$('kjoint').value}, HubPlates = ${$('khub').value}, SheetWidth = ${$('ksheetw').value}, SheetHeight = ${$('ksheeth').value}, Splice = ${$('ksplit').checked ? 0 : -1} → Folder + Write for the SVG / DXF / CSV`);
   if (S.kin) lines.push(`Net Kinetics: drive ${S.drive}, amplitude ${$('kamp').value}, Stiffness = ${$('kstiff').value}, Steps = ${$('ksteps').value}`);
   $('recipe').textContent = lines.join('\n');
@@ -1005,6 +1100,7 @@ async function main() {
     if (S.lath) { drawLathPlot($('plot'), S.lath); drawUnroll($('unroll'), S.lath); }
     if (S.netData) drawQuality(S.netData, S.stats.boundaryVertices === 0);
     if (S.kin) drawKinPlot();
+    if (S.pieces) { drawPieces(); drawBoards(S.pieces); }
     if (S.frame && !S.frame.error) { S.viewer.showPoints('supports', S.frame.supportPoints, S.viewer.ink(), 10); showDeformed(); }
   });
 
@@ -1103,8 +1199,9 @@ async function main() {
   $('panels').addEventListener('change', () => runPanels(false));
   $('panels-fixborder').addEventListener('change', () => { if (S.panels?.planarized) runPanels(true); });
   $('planarize').addEventListener('click', () => { $('panels').checked = true; runPanels(true); });
-  $('famA').addEventListener('change', () => S.viewer.setFamilyVisible('A', $('famA').checked));
-  $('famB').addEventListener('change', () => S.viewer.setFamilyVisible('B', $('famB').checked));
+  const famToggle = (f, id) => () => { if (S.pieces) { S.viewer.setOverlayVisible(`piece${f}0`, $(id).checked); S.viewer.setOverlayVisible(`piece${f}1`, $(id).checked); } else S.viewer.setFamilyVisible(f, $(id).checked); };
+  $('famA').addEventListener('change', famToggle('A', 'famA'));
+  $('famB').addEventListener('change', famToggle('B', 'famB'));
 
   // laths
   document.querySelectorAll('#lath-block input[type=range]').forEach((inp) => {
@@ -1127,7 +1224,7 @@ async function main() {
   });
   $('aag').addEventListener('click', runAag);
   $('symmetry').addEventListener('change', () => { if (S.net === 'asymptotic') traceNet(); });
-  $('famG').addEventListener('change', () => S.viewer.setFamilyVisible('G', $('famG').checked));
+  $('famG').addEventListener('change', famToggle('G', 'famG'));
 
   // structure
   $('frame').addEventListener('click', runFrame);
@@ -1158,6 +1255,9 @@ async function main() {
   for (const id of ['kamp', 'kstiff', 'ksteps']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
   $('kinrun').addEventListener('click', runKinetics);
   $('kitrun').addEventListener('click', runKit);
+  $('piecesrun').addEventListener('click', runPieces);
+  for (const id of ['pstock', 'psplice', 'pmargin', 'pkerf']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
+  for (const id of ['pstock', 'psplice', 'pmargin', 'pkerf', 'pbalance', 'pnotches']) $(id).addEventListener('change', () => { if (S.pieces) runPieces(); });
   $('kitzip').addEventListener('click', downloadKit);
   for (const id of ['kclear', 'kwidth', 'kthick']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
   $('kscale').addEventListener('change', () => $('kmodel').classList.toggle('hidden', $('kscale').value === '1'));

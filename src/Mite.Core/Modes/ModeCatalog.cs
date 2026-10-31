@@ -232,7 +232,12 @@ public static class ModeCatalog
         ["Lath Sweep"] = new[] { Upright(false), Shape },
         ["Net Joints"] = new[] { Upright(false, "Flat (lap notch)", "Upright (egg-crate slot)") },
         ["Lath Unroll"] = new[] { Upright(false) },
-        ["Lath Segment"] = new[] { Upright(false) },
+        ["Lath Segment"] = new[]
+        {
+            Upright(false),
+            Bool("Balance", false, O(0, "Full stock lengths", "Full lengths", "Every piece a full stock length and a remainder at the end of the lath"),
+                O(1, "Balanced pieces", "Balanced", "The fewest pieces that fit the stock, made equal; the cuts moved off the joints by Margin")),
+        },
         ["Net Kinetics"] = new[]
         {
             Upright(true), Shape,

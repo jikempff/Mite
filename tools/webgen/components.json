@@ -2289,6 +2289,38 @@
     "desc": "Piece lengths, one branch per input lath",
     "access": "tree",
     "default": null
+   },
+   {
+    "name": "Board",
+    "nick": "Bd",
+    "type": "Integer",
+    "desc": "Stock board each piece is cut from (first-fit decreasing packing of all pieces into boards of StockLength, Kerf between pieces), one branch per input lath",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Boards",
+    "nick": "Nb",
+    "type": "Integer",
+    "desc": "Number of stock boards needed",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Material",
+    "nick": "Mt",
+    "type": "Number",
+    "desc": "Share of the bought stock that ends up in the laths: Σ piece lengths / (Boards × StockLength)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Pieces, splices, boards against the lower bound, material and offcuts",
+    "access": "item",
+    "default": null
    }
   ]
  },

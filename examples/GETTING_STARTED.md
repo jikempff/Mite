@@ -406,6 +406,13 @@ warns and cuts nothing: lower `Ob`, or connect them with a block and a bolt.
   `Ma` away from joints. Consecutive pieces overlap by `SL` and the splice
   notch solids (`Ne` for the upstream piece, `Ns` for the downstream one) cut
   a half-lap splice into that overlap. Outputs are one branch per lath.
+  `Ba` Balance cuts each lath into the fewest pieces that fit the stock and
+  makes them equal (3.2 + 3.2 instead of 6 + 0.4) — no stub pieces, but it
+  usually costs boards. `Bd` / `Nb` / `Mt` / `R` pack every piece of every
+  lath into stock boards (first-fit decreasing, `Kf` kerf per saw cut) and
+  report the boards against the lower bound and the share of the bought
+  timber that ends up in the laths. In the web app the **Pieces** block does
+  the same on the current net and draws the boards.
 - **Lath Unroll** — flat cutting patterns per lath, laid out in a row (`G`
   gap). Export the `P` curves for CNC/laser.
 - **Lath Strip** — the strip a thin straight plank (sheet steel, GFRP, plywood

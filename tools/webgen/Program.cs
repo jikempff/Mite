@@ -513,6 +513,25 @@ var sw = Stopwatch.StartNew();
     var arc = new double[longest.Length]; for (int i = 1; i < arc.Length; i++) arc[i] = arc[i - 1] + (longest[i] - longest[i - 1]).Length;
     scenes["segment"] = new { total = R3(arc[^1]), joints = jointArcs.Select(R3).ToArray(), cuts = seg.CutArcLengths.Select(R3).ToArray(), pieces = seg.Segments.Select(s => { double s0 = 0; var a0 = s[0]; int k = Array.FindIndex(longest, p => (p - a0).Length < 1e-9); return new[] { R3(ArcAt(longest, arc, s[0])), R3(ArcAt(longest, arc, s[^1])) }; }).ToArray(), stock = 1.2, margin = 0.08, splice = 0.2 };
     numbers["segment"] = new { pieces = seg.Segments.Count, cuts = seg.CutArcLengths.Length, minJointDist = R3(seg.CutArcLengths.Length == 0 ? 0 : seg.CutArcLengths.Min(c => jointArcs.Length == 0 ? 99 : jointArcs.Min(j => Math.Abs(j - c)))), maxPiece = R3(seg.Segments.Max(ArcLen)) };
+    // every lath of the net cut into 1.2 stock (no joints: the cuts are the stock rule alone), greedy and balanced,
+    // and the pieces packed into boards: first-fit decreasing against the exact optimum (branch and bound)
+    {
+        var allLaths = famA.Concat(famB).ToList();
+        var greedy = allLaths.SelectMany(l => LathSegmentation.Segment(l, 1.2, 0.0, null, 0.1).Segments.Select(ArcLen)).ToList();
+        var balanced = allLaths.SelectMany(l => LathSegmentation.Segment(l, 1.2, 0.0, null, 0.1, true).Segments.Select(ArcLen)).ToList();
+        var pg = CuttingStock.Pack(greedy, 1.2, 0.005);
+        var pb = CuttingStock.Pack(balanced, 1.2, 0.005);
+        int optG = CuttingStock.Optimal(greedy, 1.2, 0.005, out bool exactG, 500_000);
+        numbers["cuttingStock"] = new
+        {
+            laths = allLaths.Count, piecesGreedy = greedy.Count, piecesBalanced = balanced.Count,
+            boardsGreedy = pg.Boards.Count, lowerGreedy = pg.LowerBound, optimumGreedy = optG, exactGreedy = exactG, materialGreedy = R3(pg.Material),
+            boardsBalanced = pb.Boards.Count, lowerBalanced = pb.LowerBound, materialBalanced = R3(pb.Material),
+            shortestGreedy = R3(greedy.Min()), shortestBalanced = R3(balanced.Min()), longestBalanced = R3(balanced.Max()),
+            sumGreedy = R3(greedy.Sum()), sumBalanced = R3(balanced.Sum()), lathLength = R3(allLaths.Sum(ArcLen)), splicesGreedy = greedy.Count - allLaths.Count, splicesBalanced = balanced.Count - allLaths.Count,
+            ffdBound = Math.Floor(11.0 / 9.0 * optG + 6.0 / 9.0 + 1e-9), maxLoadGreedy = R3(pg.Boards.Max(b => b.Sum(i => greedy[i]) + 0.005 * (b.Count - 1)))
+        };
+    }
     // Gridshell analysis of the asymptotic net: supports at curve ends, 1 kN/m
     var laths = famA.Concat(famB).Select(l => Sub(l, 0.05)).ToList();
     var sup = new List<Vec3d>(); foreach (var l in laths) foreach (var e in new[] { l[0], l[^1] }) { var h = proj.ClosestPoint(e, proj.NearestVertexGlobal(e)); if (proj.IsOnBoundary(h, 1e-4)) sup.Add(e); }
