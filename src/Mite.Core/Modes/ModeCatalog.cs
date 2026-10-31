@@ -199,6 +199,11 @@ public static class ModeCatalog
                 O(1, "Refine ×2 (halves)", "Refine ×2", "Every web edge split in two and re-optimised"),
                 O(2, "Refine ×4 (quarters)", "Refine ×4", "The paper's choice, about five times slower"),
             }, "AAG", 1),
+            new ModeInput("Geodesics", ModeKind.Integer, 0, new[]
+            {
+                O(0, "Node to node (AAG web)", "", "Geodesics through the valence-6 nodes"),
+                O(1, "Through the midpoints (tri-hex web)", "Tri-hex", "Every joint two laths; the geodesic family crosses the asymptotic laths at their midpoints"),
+            }),
         },
         ["Geodesic Net"] = new[]
         {
@@ -233,11 +238,28 @@ public static class ModeCatalog
             Upright(true), Shape,
             Bool("Flatten", false, O(0, "Drive the net", ""), O(1, "Press flat", "Flat",
                 "The anchor joint is held and every lath end slides onto its plane as Fold goes 0 → 1")),
+            new ModeInput("Deploy", ModeKind.Integer, 0, new[]
+            {
+                O(0, "Off", ""),
+                O(1, "Open every scissor to Angle", "Scissors", "A hub motor or the hands that open the kit; every lath end rests on a one-sided table"),
+                O(2, "Drivers on the table", "Drivers", "The Move / To and Cable drivers act with the net on the table"),
+            }),
         },
         ["Flat Kit"] = new[]
         {
             Upright(true),
             Bool("Write", false, O(0, "Preview only", ""), O(1, "Write the files to Folder", "Write")),
+            new ModeInput("HubPlates", ModeKind.Integer, 0, new[]
+            {
+                O(0, "Common pin hole", ""),
+                O(1, "One hub plate (inner edge)", "One plate", "A radial slot per strip, the strips notched over a key length"),
+                O(2, "Two hub plates (both edges)", "Two plates", "Bolted through the centre; upright strips only"),
+            }, "Upright", 1),
+        },
+        ["Web Propagation"] = new[]
+        {
+            Bool("AAG", false, O(0, "Propagated web", "Propagated"), O(1, "AAG web (optimised)", "AAG",
+                "Planar stars, geodesic rows and fairness solved globally after the propagation")),
         },
         ["Lath Strip"] = new[] { Upright(false) },
         ["Mite Net"] = new[]

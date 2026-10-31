@@ -25,6 +25,17 @@ namespace Mite.Core.Geometry;
 /// with gradient and Hessian), so the exact K, H, k1, k2, principal and
 /// asymptotic directions are known at every vertex of the mesh that
 /// <see cref="Build"/> returns. The meshes of the parametric shapes are built
+/// from that surface, so the mesh and its truth cannot drift apart;
+/// and the rotational CRPC surface (constant ratio of principal curvatures,
+/// Wang &amp; Pottmann 2022) whose asymptotic curves cross at a constant
+/// angle — the surface class of the AGH gridshell's 60° web.
+///
+/// Every shape is also available as an <see cref="AnalyticSurface"/> through
+/// <see cref="Surface"/>: the same parametrisation with its closed-form first
+/// and second derivatives (or, for the nodal surfaces, the implicit function
+/// with gradient and Hessian), so the exact K, H, k1, k2, principal and
+/// asymptotic directions are known at every vertex of the mesh that
+/// <see cref="Build"/> returns. The meshes of the parametric shapes are built
 /// from that surface, so the mesh and its truth cannot drift apart.
 /// </summary>
 public static class AnalyticShapes
@@ -34,7 +45,7 @@ public static class AnalyticShapes
     {
         "saddle", "sphere", "torus", "hyperboloid", "monkey", "ellipsoid", "catenoid",
         "enneper", "vault", "cone", "dome", "annulus", "wave",
-        "enneper3", "ruled", "schwarzd", "gyroid"
+        "enneper3", "ruled", "schwarzd", "gyroid", "crpc"
     };
 
     /// <summary>
@@ -157,6 +168,24 @@ public static class AnalyticShapes
                     v => c * Math.Cosh(v / c), v => Math.Sinh(v / c), v => Math.Cosh(v / c) / c,
                     v => v, v => 1.0, v => 0.0,
                     -h, h, n => (n, Math.Max(6, n / 2)));
+            }
+            case "crpc":
+            {
+                // surface of revolution with k_meridian = −a · k_parallel (a = p1 > 0,
+                // default 1/3), waist radius 1: r'' = a (1 + r'²) / r, r(0) = 1, r'(0) = 0
+                // (first integral 1 + r'² = r^(2a); a = 1 is the catenoid r = cosh z).
+                // Its asymptotic directions make ±γ with the meridian, tan²γ = a, so they
+                // cross at 2γ = 2 arctan √a: 60° for a = 1/3 (Wang & Pottmann 2022).
+                // The meridian is integrated by RK4 (CrpcProfile) and interpolated; its
+                // second derivative is the ODE itself, so the truth is exact where r, r' are.
+                double a = P(p1, 1.0 / 3.0), hgt = P(p2, 1.2);
+                var (rr, rp) = CrpcProfileAndSlope(a, hgt, 4000);
+                double R(double v) => CrpcRadius(rr, hgt, v);
+                double R1(double v) => Math.Sign(v) * CrpcRadius(rp, hgt, v);
+                return AnalyticSurface.Revolution("crpc",
+                    R, R1, v => a * (1 + R1(v) * R1(v)) / R(v),
+                    v => v, v => 1.0, v => 0.0,
+                    -hgt, hgt, n => (n, Math.Max(6, n / 2)));
             }
             case "enneper":
             {
@@ -376,6 +405,43 @@ public static class AnalyticShapes
         double fxx = -sx * cy - sz * cx, fyy = -sy * cz - sx * cy, fzz = -sz * cx - sy * cz;
         double fxy = -cx * sy, fxz = -cz * sx, fyz = -cy * sz;
         return new Matrix3d(fxx, fxy, fxz, fxy, fyy, fyz, fxz, fyz, fzz);
+    }
+
+    /// <summary>
+    /// Meridian r(z) of the rotational surface with k_meridian / k_parallel = −a
+    /// and waist radius 1, sampled at z = k·h/steps for k = 0 … steps by RK4
+    /// on r'' = a (1 + r'²) / r (the ODE is regular at the waist, the first
+    /// integral is not). <c>CrpcRadius</c> interpolates it (even in z).
+    /// </summary>
+    public static double[] CrpcProfile(double a, double height, int steps) => CrpcProfileAndSlope(a, height, steps).Radius;
+
+    /// <summary>The meridian of <see cref="CrpcProfile"/> with its slope r'(z) at the same samples (z ≥ 0; r' is odd in z).</summary>
+    public static (double[] Radius, double[] Slope) CrpcProfileAndSlope(double a, double height, int steps)
+    {
+        var r = new double[steps + 1]; var rp = new double[steps + 1];
+        double dz = height / steps, y = 1.0, yp = 0.0;
+        r[0] = 1.0; rp[0] = 0.0;
+        double F(double yy, double ypp) => a * (1 + ypp * ypp) / yy;
+        for (int k = 0; k < steps; k++)
+        {
+            double k1y = yp, k1p = F(y, yp);
+            double k2y = yp + 0.5 * dz * k1p, k2p = F(y + 0.5 * dz * k1y, yp + 0.5 * dz * k1p);
+            double k3y = yp + 0.5 * dz * k2p, k3p = F(y + 0.5 * dz * k2y, yp + 0.5 * dz * k2p);
+            double k4y = yp + dz * k3p, k4p = F(y + dz * k3y, yp + dz * k3p);
+            y += dz * (k1y + 2 * k2y + 2 * k3y + k4y) / 6;
+            yp += dz * (k1p + 2 * k2p + 2 * k3p + k4p) / 6;
+            r[k + 1] = y; rp[k + 1] = yp;
+        }
+        return (r, rp);
+    }
+
+    /// <summary>Radius of the <see cref="CrpcProfile"/> at height z (linear interpolation, symmetric in z).</summary>
+    public static double CrpcRadius(double[] profile, double height, double z)
+    {
+        double s = Math.Abs(z) / height * (profile.Length - 1);
+        int i = Math.Min(profile.Length - 2, (int)Math.Floor(s));
+        double t = s - i;
+        return profile[i] + t * (profile[i + 1] - profile[i]);
     }
 
     /// <summary>

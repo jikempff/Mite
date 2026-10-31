@@ -106,6 +106,22 @@ public static class AsymptoticWeb
         public int[][] NeighborsB { get; set; } = Array.Empty<int[]>();
         /// <summary>Per diagonal family: mean |kg| · spacing along its polylines (0 = geodesic).</summary>
         public double[] DiagonalGeodesicError { get; set; } = new double[2];
+        /// <summary>
+        /// Tri-hex (kagome) geodesic candidates: polylines through the midpoints
+        /// of the asymptotic lath edges, cutting one corner off every quad they
+        /// cross, so that every crossing of the web is a two-lath node and the
+        /// cells alternate triangles and hexagons — the layout of the AGH timber
+        /// gridshell (Wan, D'Acunto &amp; Schling 2024: "the flat geodesic planks
+        /// are interlaced at the midpoint of the asymptotic beams to create a
+        /// tri-hex pattern"). Two families, parallel to the two node-diagonal
+        /// families and numbered like them (<see cref="MidChainFamily"/>).
+        /// </summary>
+        public List<Vec3d[]> MidChains { get; } = new List<Vec3d[]>();
+        public List<int> MidChainFamily { get; } = new List<int>();
+        /// <summary>Per mid-chain vertex: the two nodes of the lath edge whose midpoint it is (parallel to <see cref="MidChains"/>).</summary>
+        public List<(int, int)[]> MidChainEdges { get; } = new List<(int, int)[]>();
+        /// <summary>Per mid-chain family: mean |kg| · spacing along its polylines (0 = geodesic), measured at the edge midpoints.</summary>
+        public double[] MidGeodesicError { get; set; } = new double[2];
         public Vec3d Seed { get; set; }
         public int Rays { get; set; }
         public bool Singular { get; set; }
@@ -455,7 +471,8 @@ public static class AsymptoticWeb
                 }
             }
 
-        BuildDiagonals(proj, res, h);
+        var famAC = BuildDiagonals(proj, res, h);
+        BuildMidChains(proj, res, famAC, h);
     }
 
     private static void TrimTails(List<Vec3d[]> curves, List<(int Curve, double S)> params_, double minTail)
@@ -503,9 +520,10 @@ public static class AsymptoticWeb
     /// is the mean |geodesic curvature| of its polylines times the spacing,
     /// measured in the tangent plane of the surface: 0 for an AAG diagonal.
     /// </summary>
-    private static void BuildDiagonals(MeshProjection proj, Result res, double h)
+    private static int[] BuildDiagonals(MeshProjection proj, Result res, double h)
     {
-        if (res.Quads.Count == 0) return;
+        var famAC = new int[res.Quads.Count];
+        if (res.Quads.Count == 0) return famAC;
         // diagonal edges with the quad they come from; edge id per quad: 2q (a–c), 2q + 1 (b–d)
         var edges = new List<(int U, int V)>();
         foreach (var q in res.Quads) { edges.Add((q[0], q[2])); edges.Add((q[1], q[3])); }
@@ -608,13 +626,49 @@ public static class AsymptoticWeb
                 kgErr[i] += Math.Abs(kg) * h; kgN[i]++;
             }
         }
-        // per component, family 0 is the straighter colour (the geodesic candidate)
-        var flip = new bool[nComp];
-        for (int c = 0; c < nComp; c++)
+        // The node diagonals of a quad web form two independent sub-lattices (the
+        // diagonals through the nodes with i + j even and those with i + j odd),
+        // which the quad-sharing graph never connects: the a–c diagonal of every
+        // quad is in one, its b–d diagonal in the other. Their colourings are
+        // tied together by parallelism: the diagonal of a quad through corner a
+        // and the diagonal through corner b of the quad across the edge a b are
+        // the same family (they are the lattice lines u − v = k and k ± 1).
+        // Union–find with parity over the components; edges on the rays of a
+        // singular web are skipped because the families swap there.
+        var parent = Enumerable.Range(0, nComp).ToArray(); var parity = new int[nComp];
+        int Find(int c) { if (parent[c] == c) return c; int r = Find(parent[c]); parity[c] ^= parity[parent[c]]; parent[c] = r; return r; }
+        var quadsOfLathEdge = new Dictionary<(int, int), List<int>>();
+        for (int q = 0; q < res.Quads.Count; q++)
+            for (int k = 0; k < 4; k++)
+            {
+                int u = res.Quads[q][k], v = res.Quads[q][(k + 1) % 4];
+                var key = u < v ? (u, v) : (v, u);
+                (quadsOfLathEdge.TryGetValue(key, out var l) ? l : quadsOfLathEdge[key] = new List<int>()).Add(q);
+            }
+        int DiagThrough(int q, int corner) { int k = Array.IndexOf(res.Quads[q], corner); return polyOfEdge[2 * q + (k & 1)]; }
+        foreach (var kv in quadsOfLathEdge)
         {
+            if (kv.Value.Count != 2) continue;
+            var (u, v) = kv.Key;
+            if (onRay[u] && onRay[v]) continue;
+            int q1 = kv.Value[0], q2 = kv.Value[1];
+            // the diagonal through u in q1 is parallel to the diagonal through v in q2
+            int p1 = DiagThrough(q1, u), p2 = DiagThrough(q2, v);
+            int c1 = Find(comp[p1]), c2 = Find(comp[p2]);
+            int want = colour[p1] ^ parity[comp[p1]] ^ colour[p2] ^ parity[comp[p2]]; // 0 when the colours already agree
+            if (c1 != c2) { parent[c1] = c2; parity[c1] = want; }
+        }
+        // per merged component, family 0 is the straighter colour (the geodesic candidate)
+        var root = new int[nComp]; var par = new int[nComp];
+        for (int c = 0; c < nComp; c++) { root[c] = Find(c); par[c] = parity[c]; }
+        var flip = new bool[nComp];
+        for (int r = 0; r < nComp; r++)
+        {
+            if (root[r] != r) continue;
             double[] e = new double[2]; int[] n = new int[2];
-            for (int i = 0; i < polys.Count; i++) if (comp[i] == c) { e[colour[i]] += kgErr[i]; n[colour[i]] += kgN[i]; }
-            flip[c] = n[0] > 0 && n[1] > 0 && e[1] / n[1] < e[0] / n[0];
+            for (int i = 0; i < polys.Count; i++) if (root[comp[i]] == r) { int col = colour[i] ^ par[comp[i]]; e[col] += kgErr[i]; n[col] += kgN[i]; }
+            bool f = n[0] > 0 && n[1] > 0 && e[1] / n[1] < e[0] / n[0];
+            for (int c = 0; c < nComp; c++) if (root[c] == r) flip[c] = f ^ (par[c] == 1);
         }
         var errSum = new double[2]; var errN = new int[2];
         for (int i = 0; i < polys.Count; i++)
@@ -627,6 +681,100 @@ public static class AsymptoticWeb
             errSum[fam] += kgErr[i]; errN[fam] += kgN[i];
         }
         for (int c = 0; c < 2; c++) res.DiagonalGeodesicError[c] = errN[c] > 0 ? errSum[c] / errN[c] : double.NaN;
+        // the family of the a–c diagonal of every quad, for the mid chains parallel to it
+        for (int q = 0; q < res.Quads.Count; q++) { int p = polyOfEdge[2 * q]; famAC[q] = flip[comp[p]] ? 1 - colour[p] : colour[p]; }
+        return famAC;
+    }
+
+    /// <summary>
+    /// Tri-hex geodesic candidates (see <see cref="Result.MidChains"/>). In the
+    /// quad a b c d the two chains parallel to the diagonal a–c cut off the
+    /// corners b and d: they join the midpoints of the two lath edges at that
+    /// corner. Through the midpoint of an edge a chain continues into the quad
+    /// on the other side, where it cuts off the other end of that edge — a
+    /// purely topological walk, so every chain is one straight line
+    /// u + v = const + ½ in the web's lattice coordinates and the whole family
+    /// has exactly two segments per quad. Chains end at border edges (one
+    /// quad) and where the two-colouring of the diagonals breaks (the rays of
+    /// a singular web). The geodesic error is the mean turning of the chain
+    /// in the surface's tangent plane at each edge midpoint, × spacing — the
+    /// same measure as <see cref="Result.DiagonalGeodesicError"/>.
+    /// </summary>
+    private static void BuildMidChains(MeshProjection proj, Result res, int[] famAC, double h)
+    {
+        int Q = res.Quads.Count;
+        if (Q == 0) return;
+        // lath edges of the quads: (min, max) → the quads holding them
+        var quadsOfEdge = new Dictionary<(int, int), List<int>>();
+        (int, int) EdgeKey(int u, int v) => u < v ? (u, v) : (v, u);
+        for (int q = 0; q < Q; q++)
+            for (int k = 0; k < 4; k++)
+            {
+                var key = EdgeKey(res.Quads[q][k], res.Quads[q][(k + 1) % 4]);
+                (quadsOfEdge.TryGetValue(key, out var l) ? l : quadsOfEdge[key] = new List<int>()).Add(q);
+            }
+        // segment (q, k): joins the midpoints of edges k−1 and k of quad q (the two edges at corner k)
+        int Family(int q, int k) => (k & 1) == 1 ? famAC[q] : 1 - famAC[q];
+        (int, int) EdgeBefore(int q, int k) => EdgeKey(res.Quads[q][(k + 3) % 4], res.Quads[q][k]);
+        (int, int) EdgeAfter(int q, int k) => EdgeKey(res.Quads[q][k], res.Quads[q][(k + 1) % 4]);
+        // the segment reached through edge e from segment (q, k): the other quad on e, at the other end of e
+        bool Next(int q, int k, (int, int) e, out int q2, out int k2)
+        {
+            q2 = -1; k2 = -1;
+            if (!quadsOfEdge.TryGetValue(e, out var l) || l.Count != 2) return false;
+            q2 = l[0] == q ? l[1] : l[0];
+            int corner = res.Quads[q][k];
+            int other = e.Item1 == corner ? e.Item2 : e.Item1;
+            k2 = Array.IndexOf(res.Quads[q2], other);
+            return k2 >= 0 && Family(q2, k2) == Family(q, k);
+        }
+        var done = new bool[Q, 4];
+        var errSum = new double[2]; var errN = new int[2];
+        (int, int) OtherEdge(int q, int k, (int, int) e) => e.Equals(EdgeBefore(q, k)) ? EdgeAfter(q, k) : EdgeBefore(q, k);
+        for (int q0 = 0; q0 < Q; q0++)
+            for (int k0 = 0; k0 < 4; k0++)
+            {
+                if (done[q0, k0]) continue;
+                int fam = Family(q0, k0);
+                // walk backwards through the edge before the corner to the chain's
+                // start, always leaving a segment through the edge it was not entered by
+                int q = q0, k = k0, guard = 0; bool closed = false;
+                var exit = EdgeBefore(q0, k0);
+                while (Next(q, k, exit, out int qb, out int kb) && guard++ < 4 * Q)
+                {
+                    if (qb == q0 && kb == k0) { closed = true; break; }
+                    q = qb; k = kb; exit = OtherEdge(q, k, exit);
+                }
+                // forward from the start segment (q, k): its first vertex is the edge
+                // the backward walk could not cross, then on through the other one
+                var first = closed ? EdgeBefore(q0, k0) : exit;
+                if (closed) { q = q0; k = k0; }
+                var edges = new List<(int, int)> { first };
+                var through = OtherEdge(q, k, first);
+                guard = 0;
+                while (true)
+                {
+                    done[q, k] = true;
+                    edges.Add(through);
+                    if (!Next(q, k, through, out int qn, out int kn) || done[qn, kn] || guard++ > 4 * Q) break;
+                    q = qn; k = kn; through = OtherEdge(q, k, through);
+                }
+                var pts = edges.Select(e => 0.5 * (res.Nodes[e.Item1] + res.Nodes[e.Item2])).ToArray();
+                res.MidChains.Add(pts);
+                res.MidChainEdges.Add(edges.ToArray());
+                res.MidChainFamily.Add(fam);
+                for (int i = 1; i + 1 < pts.Length; i++)
+                {
+                    var hit = proj.ClosestPoint(pts[i], proj.NearestVertexGlobal(pts[i]));
+                    var n = hit.SmoothNormal.Normalized();
+                    Vec3d a = pts[i] - pts[i - 1], b = pts[i + 1] - pts[i];
+                    double la = a.Length, lb = b.Length;
+                    if (la < 1e-12 || lb < 1e-12) continue;
+                    double kg = Vec3d.Dot(Vec3d.Cross(a / la, b / lb), n) * 2.0 / (la + lb);
+                    errSum[fam] += Math.Abs(kg) * h; errN[fam]++;
+                }
+            }
+        for (int c = 0; c < 2; c++) res.MidGeodesicError[c] = errN[c] > 0 ? errSum[c] / errN[c] : double.NaN;
     }
 
     // ---- helpers ---------------------------------------------------------------

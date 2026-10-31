@@ -368,6 +368,14 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       the flat point, which carry family A on one side and B on the other —
       a sharper statement of the "one family globally" note above.
 - [x] Bench: a typology switcher on every demo (done on Asymptotic Net and
+- [x] Rotational CRPC surface (constant ratio of principal curvatures,
+      k_m / k_p = −a) — 2026-10-31: `AnalyticShapes.Build("crpc", a, h)` by
+      RK4 on r″ = a(1 + r′²)/r (first integral 1 + r′² = r^(2a)); a = 1 gives
+      cosh z to 1e-14, a = 1/3 the closed form to 1e-14; the discrete ratio
+      |k₁/k₂| is within 0.004 of 1/3 and the asymptotic web crosses at
+      60.5–60.8° (theory 60°, Wang & Pottmann 2022). The surface class of a
+      constant-angle asymptotic gridshell (the AGH gridshell's 60°).
+- [ ] Bench: a typology switcher on every demo (done on Asymptotic Net and
       Geodesic Net), with the analytic truth and the measured error side by
       side; reuse the unified shape generator — 2026-10-23 (session 1) for
       the curvature cards: Principal / Gaussian / Mean Curvature, Umbilics,
@@ -1080,6 +1088,17 @@ remains the self-test review page.
       the catenoid has A upright / B flat with kn(B) ≠ 0 and kg(B) = 0 —
       done 2026-10-27 (Net Joints and Gridshell Analysis cards, catenoid ·
       hybrid shape, four self-tests; the numbers are in B above).
+      B started orthogonal to A at the seeds), per-family profiles (B above),
+      a joint rotational-stiffness parameter in Gridshell Analysis, and a
+      bench check that the AGH net on the catenoid has A upright / B flat
+      with kn(B) ≠ 0 and kg(B) = 0.
+      Done 2026-10-31 (session 1), the layout itself: the AGH gridshell's web
+      is an AAG web whose geodesic planks are "interlaced at the midpoint of
+      the asymptotic beams to create a tri-hex pattern" (Wan, D'Acunto &
+      Schling 2024 §2.2.1; Schling et al. 2022 §4.2 built the first module
+      "shifted by half a grid"), with "constant 60° intersection angles
+      between asymptotic curves". See G below (tri-hex AAG web, constant
+      crossing angle, the rotational CRPC test surface).
 - [ ] Geodesic gridshells: Pirazzi & Weinand 2006 (Geodesic lines on
       free-form surfaces — optimized grids for timber rib shells); Pottmann
       et al. 2010 (Geodesic patterns) — geodesic strip patterns with
@@ -1904,6 +1923,20 @@ Literature
   (§3.3: the new vertex on the ruling L_i of the rectifying strip, foot points
   on its medial line, descent on the scalar r). Code:
   github.com/wangbolun300/WebsViaPropagation.
+- Wang, Schling, Pottmann et al. 2024, Computational design of asymptotic
+  geodesic hybrid gridshells via propagation algorithms (CAD 2024): webs grown
+  from a boundary strip of two neighbouring polylines, row by row, with a
+  global optimisation that may adjust the strip; GGG / AGG / AAG.
+- Schling, Wan, Wang & D'Acunto 2023, Asymptotic Geodesic Hybrid Timber
+  Gridshell (AAG 2023) and Wan, D'Acunto & Schling 2024, Structural behaviour
+  of asymptotic geodesic hybrid timber gridshells (Engineering Structures
+  311, 118094): the built AGH web — flat geodesic planks interlaced at the
+  midpoints of the upright asymptotic beams (tri-hex), constant 60°
+  intersection angles, geodesic boundaries, concentric A–A nodes; 60 m²,
+  12 × 100 mm ash planks, live-load capacity 7.0 kN/m² in FE. Wang &
+  Pottmann 2022, Characteristic parameterizations of surfaces with a constant
+  ratio of principal curvatures (CAGD 93): asymptotic curves cross at 2γ with
+  tan²γ = −k₁/k₂, so a constant node angle makes the surface CRPC.
 - Schling, Hitrec & Barthel 2017 and Schling 2018 (Repetitive Structures):
   asymptotic networks drawn by alternating curves through each other's
   intersections; on minimal surfaces the families cross at 90° (identical
@@ -2092,9 +2125,71 @@ Open
       `Proximity`) so the drawn strip can come from a surface; a Mite Net
       output; the web app; the paper's "approximate the first strip" (make
       a drawn first row geodesic before propagating).
+- [ ] Propagation from a boundary strip (Wang et al. 2024) as a second way to
+      start a web: two neighbouring polylines drawn by the user.
+- [x] Tri-hex (midpoint) AAG web and constant crossing angle — 2026-10-31
+      (session 1): `AsymptoticWeb.Result.MidChains` (the geodesic candidates
+      through the lath midpoints: a topological walk that cuts one corner off
+      every quad it crosses — two segments per quad per family, numbered like
+      the node diagonals), `AagWeb.Options.Midpoint` (the web refined by one
+      vertex per lath edge; planar stars at the nodes towards the midpoints,
+      asymptotic half-edges n_m · (p − m) = n_m · (q − m) = 0 at the midpoint
+      vertices, the geodesic condition along the mid chains — Schling et al.
+      2022 eqs. 6 / 13 at every vertex with its own normal), `CrossingAngle`
+      (t_A · t_B = cos θ at every node, sign-aligned per iteration),
+      `Geodesics` and `Angle` inputs, `Angles` and `Midpoints` outputs on
+      Asymptotic Web; `AnalyticShapes.Build("crpc", a, h)` — the rotational
+      surface with k_m / k_p = −a (r″ = a(1 + r′²)/r; a = 1/3 in closed form
+      r = t³, z = 3/2(t√(t² − 1) + arcosh t)), whose asymptotic curves cross
+      at 2 arctan √a (Wang & Pottmann 2022, CRPC surfaces). Measured: catenoid
+      tri-hex 39.8° → 0.0013°, stars 0.006°, asymptotic at the midpoints
+      0.005°, nodes 9e-4 off the surface, crossings shifted 2.5 % (6.6 % max)
+      of the spacing, G chains in the quarter-step meridian planes to 3e-3;
+      3-fold Enneper 76.5° → 0.025° (stars 0.12°); classical Enneper, where
+      the node web fails (63.6° → 10.7°), 75.4° → 0.33°; CRPC web 60.5–60.8°
+      as traced, 60.00–60.12° after AAG with Angle 60 (geodesic 0.03°).
+      Findings:
+      - The chord midpoints are not a discrete geodesic: on quads that are
+        not parallelograms they alternate sides of the smooth mid curve by
+        O(spacing²), and the polyline through them turns sideways at every
+        vertex (39° osculating-plane tilt on the catenoid, where the smooth
+        answer is a plane through the axis). Any fixed "midpoint" rule (chord,
+        arc length) zigzags; the midpoint vertices have to be unknowns, which
+        is the refinement item below for the G family.
+      - The two node-diagonal families were labelled per sub-lattice by
+        straightness (the diagonals through the even and the odd nodes never
+        share a quad-adjacency), so on the hyperbolic paraboloid, where both
+        directions are plane sections of equal curvature, `G` mixed x = const
+        and y = const chains. Fixed by tying the sub-lattices with parallelism
+        across every lath edge (union–find with parity; rays of a singular web
+        skipped because the families swap there).
+      - With the midpoint vertices as extra freedom the classical Enneper
+        surface, which carries no node-to-node AAG web near it (1.3.0
+        finding), carries a tri-hex one with nodes 1e-3 off the surface — but
+        the nodes slide along the surface by up to 0.11 (44 % of the spacing)
+        and the crossing angles open from 83–90° to 66–90°: the proximity term
+        is a tangent-plane distance and does not hold the web's parameter
+        lines. A node-anchoring or "stay on the traced curve" option would.
+      - A constant angle other than 90° needs a non-minimal surface
+        (k₁/k₂ = −tan²γ): the catenoid web asked for 60° reaches 59–62° at
+        every node but the AAG conditions blow up (44° / 12°) and the nodes
+        move 0.62 (2 spacings) — correctly reported, not hidden. Designing an
+        AGH-like 60° web therefore starts from a CRPC surface (the new shape,
+        or Wang & Pottmann's construction), not from a minimal surface.
+      Open: the hyperbolic paraboloid web does not converge in either mode
+      (node 53° → 13–21°, tri-hex diverges to 70°) — both plane-section
+      diagonal families are far from geodesic and the LM steps lower the cost
+      while the worst triple grows; a continuation in the proximity weight or
+      the paper's vertex-control term would be the next thing to try. The
+      midpoint vertices are not yet carried into the lath tools as crossings
+      (Net Joints / Lath Segment see only A × B; the `Midpoints` output is
+      there for a Mite Net). The "equal intersection angles" of Wan et al.
+      also cover the G–A angle (120° / 60° in a regular kagome): not imposed.
 - [ ] Refinement: subdivide the AAG web and re-optimise so the laths between
-      nodes are smooth (now straight node-to-node chords after AAG); then the
-      strip boundaries from the rectifying developables (quintic splines).
+      nodes are smooth (now straight node-to-node chords after AAG; the
+      tri-hex mode already refines every lath by its midpoint vertex, with
+      the asymptotic condition there); then the strip boundaries from the
+      rectifying developables (quintic splines).
 - [ ] Choose the seed spacing per ray (e.g. uniform in the asymptotic
       parameter instead of arc length) for more homogeneous cells.
 - [x] Cookie-cut: trace on a larger surface, trim to a boundary — 2026-10-21
@@ -2401,6 +2496,11 @@ Open
       lightness equalisation, Heckbert 1990 ticks), Mesh Colour Map legend
       outputs, Lath Preview and the web app on the same tables, bench colour
       bars with ticks, 21 tests, five bench self-tests (81 PASS).
+- [x] 2026-10-31 (session 1, G/D): tri-hex (midpoint) AAG webs — the AGH
+      gridshell layout — and a constant crossing angle on Asymptotic Web; the
+      rotational CRPC surface as a test typology; the diagonal-family
+      labelling fixed across sub-lattices; six exact tests, bench Asymptotic
+      Web card with five shapes and five self-tests (80 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

@@ -227,6 +227,11 @@ internal static class Tests
             },
             c => Expect(CurveCount(c, 0) == 7 && CurveCount(c, 2) == 8 && MeshOut(c, 4) != null && MeshOut(c, 4)!.Faces.Count == 36,
                 $"web: U={CurveCount(c, 0)}, rows={CurveCount(c, 2)}, quads={MeshOut(c, 4)?.Faces.Count ?? 0}"));
+        TestComponent("Asymptotic Web (tri-hex, 60°)",
+            new Mite.Grasshopper.Components.AsymptoticWebComponent(),
+            c => SetInputs(c, (0, saddle.DuplicateMesh()), (2, 0.25), (4, true), (5, 8), (9, 1), (10, 60.0)),
+            c => Expect(CurveCount(c, 2) >= 3 && Numbers(c, 7).Count > 10 && Points(c, 8).Count > 10,
+                $"mid-chain geodesics: {CurveCount(c, 2)}, angles: {Numbers(c, 7).Count}, midpoints: {Points(c, 8).Count}"));
 
         TestComponent("Geodesic Net",
             new Mite.Grasshopper.Components.GeodesicNetComponent(),
