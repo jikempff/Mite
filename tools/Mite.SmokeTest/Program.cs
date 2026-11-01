@@ -418,6 +418,30 @@ internal static class Tests
                     && Expect(report.Contains("eccentricity 20 mm"), $"report names the stack: {report.Replace('\n', ' ')}");
             });
 
+        TestComponent("Mesh Cleanup (crack: two patches with different vertex counts, Cracks 1e-6)",
+            new Mite.Grasshopper.Components.MeshCleanupComponent(),
+            c =>
+            {
+                // left 2 × 2 cells, right 4 × 4 cells on [1, 2]: the seam x = 1 has T-vertices at y = 0.25 and 0.75
+                var cracked = new Rhino.Geometry.Mesh();
+                var left = Rhino.Geometry.Mesh.CreateFromPlane(new Rhino.Geometry.Plane(new Rhino.Geometry.Point3d(0.5, 0.5, 0), Rhino.Geometry.Vector3d.ZAxis),
+                    new Rhino.Geometry.Interval(-0.5, 0.5), new Rhino.Geometry.Interval(-0.5, 0.5), 2, 2);
+                var right = Rhino.Geometry.Mesh.CreateFromPlane(new Rhino.Geometry.Plane(new Rhino.Geometry.Point3d(1.5, 0.5, 0), Rhino.Geometry.Vector3d.ZAxis),
+                    new Rhino.Geometry.Interval(-0.5, 0.5), new Rhino.Geometry.Interval(-0.5, 0.5), 4, 4);
+                cracked.Append(left);
+                cracked.Append(right);
+                SetInputs(c, (0, cracked), (1, 0.0), (2, true), (3, 0.0), (4, 1e-6));
+            },
+            c =>
+            {
+                var m = MeshOut(c, 0);
+                int cracks = c.Params.Output[8].VolatileData.AllData(true)
+                    .OfType<Grasshopper.Kernel.Types.GH_Integer>().Select(i => i.Value).FirstOrDefault();
+                int naked = m == null ? -1 : m.GetNakedEdges()?.Length ?? -1;
+                return Expect(m != null && cracks == 2 && naked == 1 && m.IsManifold(true, out bool oriented, out _) && oriented,
+                    $"seam welded: {cracks} T-vertices joined, {naked} naked edge loop, manifold and oriented; faces {m?.Faces.Count}");
+            });
+
         TestComponent("Conjugate Net",
             new Mite.Grasshopper.Components.ConjugateNetComponent(),
             c => SetInputs(c, (0, saddle.DuplicateMesh()), (1, 0.25), (2, 0.05), (3, 300)),

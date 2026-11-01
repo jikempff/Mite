@@ -59,7 +59,13 @@ For dirty meshes (booleans, imports, joined pieces) put **Mesh Cleanup**
 elements and turns closed meshes outward, so the sign of Mean Curvature is
 right. Read its `Report`: if it says triangles are below 1°, set `Sliver` to
 `1` to collapse those needles and flip those caps (no vertex moves); edges it
-lists on `NonManifold` must be fixed in Rhino.
+lists on `NonManifold` must be fixed in Rhino. If it says border vertices lie
+within some distance of another border edge, the mesh has cracks or
+T-junctions — a meshed polysurface whose patches meet with different vertex
+counts, two meshes joined but not welded — and every net and every curvature
+map stops at that seam: set `Cracks` to the distance it names and the seam
+becomes ordinary interior edges (each such vertex is joined to the edge it
+lies on, which is split there; nothing else moves).
 
 ## 2. Trace a gridshell net (5 minutes)
 

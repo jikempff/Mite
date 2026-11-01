@@ -1916,6 +1916,101 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         capVerts = capFix.Mesh.VertexCount, capVertsIn = capped.VertexCount,
         report = sphFix.Info.Report,
     };
+    // (e) cracks and T-junctions: a sphere from two hemispheres with 24 and 48 meridians (the odd
+    // upper equator vertices sit the sagitta 1 − cos 7.5° outside the lower chords), and a
+    // hyperboloid from two bands rotated half a step against each other
+    static MeshData JoinMeshes(MeshData a, MeshData b) => new MeshData(a.Vertices.Concat(b.Vertices).ToArray(),
+        a.Faces.Concat(b.Faces.Select(x => x.Select(i => i + a.VertexCount).ToArray())).ToArray());
+    static MeshData Hemi(bool upper, int segments, int rings)
+    {
+        var hv = new List<Vec3d>(); var hf = new List<int[]>();
+        for (int j = 0; j < rings; j++)
+        {
+            double phi = 0.5 * Math.PI * j / rings, z = Math.Sin(phi), r = Math.Cos(phi); if (!upper) z = -z;
+            for (int i = 0; i < segments; i++) { double th = 2.0 * Math.PI * i / segments; hv.Add(new Vec3d(r * Math.Cos(th), r * Math.Sin(th), z)); }
+        }
+        int pole = hv.Count; hv.Add(new Vec3d(0, 0, upper ? 1 : -1));
+        for (int j = 0; j < rings - 1; j++)
+            for (int i = 0; i < segments; i++)
+            {
+                int a = j * segments + i, b = j * segments + (i + 1) % segments, c = b + segments, d = a + segments;
+                if (upper) { hf.Add(new[] { a, b, c }); hf.Add(new[] { a, c, d }); } else { hf.Add(new[] { a, c, b }); hf.Add(new[] { a, d, c }); }
+            }
+        int last = (rings - 1) * segments;
+        for (int i = 0; i < segments; i++) { int a = last + i, b = last + (i + 1) % segments; hf.Add(upper ? new[] { a, b, pole } : new[] { a, pole, b }); }
+        return new MeshData(hv.ToArray(), hf.ToArray());
+    }
+    static MeshData Band(Func<double, double> radius, double z0, double z1, int segments, int rows, double phase)
+    {
+        var bv = new List<Vec3d>(); var bf = new List<int[]>();
+        for (int j = 0; j <= rows; j++)
+        {
+            double z = z0 + (z1 - z0) * j / rows, r = radius(z);
+            for (int i = 0; i < segments; i++) { double th = 2.0 * Math.PI * (i + phase) / segments; bv.Add(new Vec3d(r * Math.Cos(th), r * Math.Sin(th), z)); }
+        }
+        for (int j = 0; j < rows; j++)
+            for (int i = 0; i < segments; i++)
+            {
+                int a = j * segments + i, b = j * segments + (i + 1) % segments, c = b + segments, d = a + segments;
+                bf.Add(new[] { a, b, c }); bf.Add(new[] { a, c, d });
+            }
+        return new MeshData(bv.ToArray(), bf.ToArray());
+    }
+    static int Euler(MeshData m) { var set = new HashSet<long>(); foreach (var f in m.Faces) for (int i = 0; i < f.Length; i++) { int a = f[i], b = f[(i + 1) % f.Length]; set.Add(a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a); } return m.VertexCount - set.Count + m.FaceCount; }
+    static double Deficit(MeshData m)
+    {
+        var tm = m.ToTriangulated(); var sum = new double[tm.VertexCount];
+        foreach (var f in tm.Faces) for (int i = 0; i < 3; i++) { Vec3d u = tm.Vertices[f[(i + 1) % 3]] - tm.Vertices[f[i]], w = tm.Vertices[f[(i + 2) % 3]] - tm.Vertices[f[i]]; sum[f[i]] += Math.Atan2(Vec3d.Cross(u, w).Length, Vec3d.Dot(u, w)); }
+        return sum.Sum(x => 2 * Math.PI - x);
+    }
+    var twoHemi = JoinMeshes(Hemi(false, 24, 6), Hemi(true, 48, 12));
+    double sagitta = 1 - Math.Cos(Math.PI / 24);
+    var hemiOff = MeshCleanup.Compute(twoHemi);
+    t.Restart();
+    var hemiOn = MeshCleanup.Compute(twoHemi, new MeshCleanup.Options { CrackTolerance = 0.01 });
+    t.Stop();
+    long hemiMs = t.ElapsedMilliseconds;
+    var kHemi = GaussianCurvature.Compute(hemiOn.Mesh);
+    var equator = Enumerable.Range(0, hemiOn.Mesh.VertexCount).Where(i => Math.Abs(hemiOn.Mesh.Vertices[i].Z) < 1e-9).ToArray();
+    var kHemiOff = GaussianCurvature.Compute(hemiOff.Mesh);
+    var equatorOff = Enumerable.Range(0, hemiOff.Mesh.VertexCount).Where(i => Math.Abs(hemiOff.Mesh.Vertices[i].Z) < 1e-9).ToArray();
+    Func<double, double> hypR = z => Math.Sqrt(1 + z * z);
+    var twoBands = JoinMeshes(Band(hypR, -1, 0, 64, 16, 0), Band(hypR, 0, 1, 64, 16, 0.5));
+    var bandRows = new List<object>();
+    long hypMs = 0;
+    foreach (double ck in new[] { 0.0, 0.005 })
+    {
+        t.Restart();
+        var bm = MeshCleanup.Compute(twoBands, new MeshCleanup.Options { CrackTolerance = ck });
+        t.Stop(); if (ck > 0) hypMs = t.ElapsedMilliseconds;
+        var bpc = PrincipalCurvature.Compute(bm.Mesh); var bfield = AsymptoticCurves.ComputeDirections(bpc);
+        int total = 0, through = 0; double bow = 0, ang = 0;
+        foreach (var (fam, other) in new[] { (bfield.Family1, bfield.Family2), (bfield.Family2, bfield.Family1) })
+            foreach (var line in EvenlySpacedNet.TraceField(bm.Mesh, fam, bfield.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.25 }, other))
+            {
+                total++;
+                if (line.Min(q => q.Z) < -0.999 && line.Max(q => q.Z) > 0.999) through++;
+                Vec3d chord = line[line.Length - 1] - line[0]; double L = chord.Length;
+                foreach (var q in line) bow = Math.Max(bow, Vec3d.Cross(q - line[0], chord).Length / L);
+                var (plus, minus) = TestMeshes.HyperboloidRulings(line[line.Length / 2], 1.0, 1.0);
+                double Ang(Vec3d u, Vec3d w) => Math.Acos(Math.Min(1, Math.Abs(Vec3d.Dot(u.Normalized(), w.Normalized())))) * 180 / Math.PI;
+                ang = Math.Max(ang, Math.Min(Ang(chord, plus), Ang(chord, minus)));
+            }
+        bandRows.Add(new { cracks = ck, curves = total, through, bow = R3(bow), angle = R3(ang), closed = bm.Info.CracksClosed, loops = bm.Info.BorderLoops, candidates = bm.Info.CrackCandidates });
+    }
+    numbers["cleanupCracks"] = new
+    {
+        sagitta = Math.Round(sagitta, 6),
+        candidates = hemiOff.Info.CrackCandidates, candidateDistance = Math.Round(hemiOff.Info.CrackCandidateDistance, 6),
+        loopsOff = hemiOff.Info.BorderLoops, partsOff = hemiOff.Info.Components, equatorKOffMax = equatorOff.Max(i => Math.Abs(kHemiOff[i])),
+        closed = hemiOn.Info.CracksClosed, merged = hemiOn.Info.CrackVerticesMerged, left = hemiOn.Info.CracksLeft, maxGap = Math.Round(hemiOn.Info.CrackMaxGap, 6),
+        loops = hemiOn.Info.BorderLoops, closedParts = hemiOn.Info.ClosedComponents, nonManifold = hemiOn.Info.NonManifoldEdges.Length,
+        euler = Euler(hemiOn.Mesh), deficitError = Math.Abs(Deficit(hemiOn.Mesh) - 4 * Math.PI),
+        offSphere = hemiOn.Mesh.Vertices.Max(q => Math.Abs(q.Length - 1)), facesAdded = hemiOn.Mesh.FaceCount - twoHemi.FaceCount,
+        equatorK = Math.Round(equator.Average(i => kHemi[i]), 3), equatorKMin = Math.Round(equator.Min(i => kHemi[i]), 3), equatorKMax = Math.Round(equator.Max(i => kHemi[i]), 3),
+        ms = hemiMs, hyperboloid = bandRows, hypMs, hypFaces = twoBands.FaceCount,
+        report = hemiOff.Info.Report,
+    };
     // pull a floating circle onto the sphere
     var proj = new MeshProjection(TestMeshes.CreateUnitSphere(32));
     var circ = new List<Vec3d>(); for (int i = 0; i <= 60; i++) { double a = 2 * Math.PI * i / 60; circ.Add(new Vec3d(0.9 * Math.Cos(a), 0.9 * Math.Sin(a), 0.9)); }

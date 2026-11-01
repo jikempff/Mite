@@ -2739,7 +2739,7 @@
   "file": "MeshCleanupComponent.cs",
   "name": "Mesh Cleanup",
   "nick": "Cleanup",
-  "desc": "Heals a mesh for analysis: welds coincident vertices (within a tolerance), removes degenerate and duplicate faces, reduces collapsed faces, drops isolated vertices, and unifies face winding (closed parts outward, open parts keep the winding most of their area had). Sliver > 0 collapses needles and flips caps below that angle. Reports non-manifold edges, non-orientable parts and holes. Mite components weld exactly coincident vertices on their own; run this first on meshes with near-coincident vertices, slivers or mixed winding (joins, booleans, imports).",
+  "desc": "Heals a mesh for analysis: welds coincident vertices (within a tolerance), removes degenerate and duplicate faces, reduces collapsed faces, drops isolated vertices, and unifies face winding (closed parts outward, open parts keep the winding most of their area had). Sliver > 0 collapses needles and flips caps below that angle. Reports non-manifold edges, non-orientable parts and holes. Cracks > 0 closes cracks and T-junctions between joined patches (a border vertex within that distance of another border edge is joined to it, the edge split there), so nets and curvature run through the seam. Mite components weld exactly coincident vertices on their own; run this first on meshes with near-coincident vertices, slivers or mixed winding (joins, booleans, imports).",
   "tab": "Util",
   "icon": "MeshCleanup",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF0",
@@ -2773,6 +2773,14 @@
     "nick": "S",
     "type": "Number",
     "desc": "Triangles with an angle below this (degrees) are slivers: needles (longest edge ≥ 4 × shortest) are collapsed, caps (one angle near 180°) have their long edge flipped, border caps are dropped. No vertex is moved. 0 = leave slivers (default); 1 is a good start",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Cracks",
+    "nick": "Ck",
+    "type": "Number",
+    "desc": "Close cracks and T-junctions: a border vertex within this distance of a border edge it does not belong to is joined to it — merged into the nearer end when that is within the distance, otherwise the edge's face is split at the vertex (triangle → 2, quad → 3 triangles). Nothing moves but merged vertices (by at most this distance); a split edge bends through the vertex by at most this distance. Seams between joined patches with different vertex counts become ordinary interior edges, so nets and curvature run through them. 0 = off (default); the Report then says how many such vertices exist and which value welds them. Use the gap width, say 1e-3 of the span; a large value on a double wall zips the walls at their rim.",
     "access": "item",
     "default": "0.0"
    }
@@ -2839,6 +2847,14 @@
     "nick": "Rp",
     "type": "Text",
     "desc": "What was repaired and what is left, one finding per line",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Cracks",
+    "nick": "Ck",
+    "type": "Integer",
+    "desc": "Border vertices joined to another border edge or vertex by the crack pass (T-junctions, seams with different vertex counts)",
     "access": "item",
     "default": null
    }
