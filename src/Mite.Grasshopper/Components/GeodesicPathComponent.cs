@@ -58,15 +58,18 @@ public class GeodesicPathComponent : MiteComponent
         {
             var fromV = from.ConvertAll(MeshConvert.ToVec3d);
             var toV = to.ConvertAll(MeshConvert.ToVec3d);
-            var exact = FlipGeodesic.Compute(input.Data, fromV, toV, out string? reason);
+            var flipOpts = new FlipGeodesic.Options { ShouldCancel = Cancelled, Progress = Progress("geodesics") };
+            var exact = FlipGeodesic.Compute(input.Data, fromV, toV, out string? reason, flipOpts);
             if (exact != null)
             {
                 var curvesE = new List<Curve?>();
                 var lengthsE = new List<double>();
                 int missing = 0;
+                if (flipOpts.Cancelled)
+                    AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial.");
                 foreach (var r in exact)
                 {
-                    if (r == null) { missing++; curvesE.Add(null); lengthsE.Add(double.NaN); continue; }
+                    if (r == null) { if (!flipOpts.Cancelled) missing++; curvesE.Add(null); lengthsE.Add(double.NaN); continue; }
                     if (r.Points.Length < 2) curvesE.Add(null);
                     else if (sampling > 0)
                         curvesE.Add(MeshConvert.ToCurve(ShortestPath.Resample(r.Points, sampling)));
@@ -95,6 +98,7 @@ public class GeodesicPathComponent : MiteComponent
         for (int i = 0; i < count; i++)
         {
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
+            ReportProgress("shortening", i, count);
             var a = from[Math.Min(i, from.Count - 1)];
             var b = to[Math.Min(i, to.Count - 1)];
             var r = ShortestPath.Compute(proj, MeshConvert.ToVec3d(a), MeshConvert.ToVec3d(b), opts);

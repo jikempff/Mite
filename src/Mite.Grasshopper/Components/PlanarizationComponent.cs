@@ -92,9 +92,12 @@ public class PlanarizationComponent : MiteComponent
         {
             var opts = new Planarization.Options
             {
-                MaxIterations = Math.Max(0, maxIter), Tolerance = tol, Strength = Math.Min(1.0, strength)
+                MaxIterations = Math.Max(0, maxIter), Tolerance = tol, Strength = Math.Min(1.0, strength),
+                ShouldCancel = Cancelled, Progress = Progress("planarizing")
             };
             var result = Planarization.Compute(data, fixedVerts, opts);
+            if (opts.Cancelled)
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, the mesh is not fully planarized.");
             double moved = 0;
             for (int i = 0; i < data.VertexCount; i++) moved = Math.Max(moved, (result.Vertices[i] - data.Vertices[i]).Length);
             DA.SetData(0, input.WithVertices(mesh, result.Vertices));
@@ -116,7 +119,7 @@ public class PlanarizationComponent : MiteComponent
         var r = PlanarizationOptimizer.Optimize(data, fixedVerts, reference, new PlanarizationOptimizer.Options
         {
             Iterations = Math.Max(0, maxIter), Tolerance = tol, Fairness = Math.Max(0, fairness), Closeness = Math.Max(0, closeness),
-            ShouldCancel = Cancelled,
+            ShouldCancel = Cancelled, Progress = Progress("planarizing"),
         });
 
         DA.SetData(0, input.WithVertices(mesh, r.Vertices));

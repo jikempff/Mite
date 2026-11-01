@@ -83,6 +83,7 @@ public class LathSweepComponent : MiteComponent
         {
             var curve = curves[ci];
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
+            ReportProgress("sweeping", centerlines.Count, curves.Count);
             var line = curve == null ? null : CurveSample.ToPolyline(curve, chord);
             var lathProfile = NetProfile(netIn, fromNet ? ci : 0, 2, 3, 4, 5, 7, 8) ?? profile;
             var result = line == null ? null : StripSweep.Sweep(proj, line, lathProfile);

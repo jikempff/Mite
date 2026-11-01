@@ -281,6 +281,7 @@ public class GridshellAnalysisComponent : MiteComponent
                     PointLoads = pointLoads,
                     AxisOffsets = axisOffsets,
                     BucklingModes = Math.Max(0, buckling),
+                    Progress = Progress(),
                 });
         }
         catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)

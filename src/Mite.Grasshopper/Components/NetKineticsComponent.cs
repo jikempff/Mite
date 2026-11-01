@@ -257,6 +257,7 @@ public class NetKineticsComponent : MiteComponent
             Fairness = Math.Max(0, stiffness),
             MaxIterations = Math.Max(1, iterations),
             Cancel = Cancelled,
+            Progress = Progress("folding", flatten ? 0.3 : 0, 1),
         };
         int anchor = fixedIdx.Count > 0 ? fixedIdx[0] : net.NearestNode(net.Nodes.Aggregate(Vec3d.Zero, (a, b) => a + b) / net.Nodes.Length);
         var normal = MeshConvert.ToVec3d(slideNormal);
@@ -274,6 +275,7 @@ public class NetKineticsComponent : MiteComponent
                     Fairness = Math.Max(0, stiffness), MaxIterations = Math.Max(1, iterations), Cancel = Cancelled,
                 };
             }
+            ReportProgress("pressing flat", 1, 100);
             net.PressFlat(pressOpt, anchor, normal);
             if (deploy == 0) { slideIdx = pressOpt.Sliding.ToList(); fixedIdx = pressOpt.Fixed.ToList(); }
             else

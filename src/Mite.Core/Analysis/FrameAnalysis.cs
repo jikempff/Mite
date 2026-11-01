@@ -160,6 +160,12 @@ public static class FrameAnalysis
         /// the change when the spectrum is dense).
         /// </summary>
         public double BucklingTolerance { get; set; } = 1e-6;
+        /// Optional progress sink by stage: "joints" (lath polylines with
+        /// the joints inserted), "assembling" (element stiffness), "solving"
+        /// (factorisation of the free stiffness matrix, the costly step on a
+        /// large net), "results", "buckling" (with <see cref="BucklingModes"/>); 1 when done.
+        /// </summary>
+        public ProgressHandler? Progress { get; set; }
     }
 
     public readonly struct Result
@@ -386,6 +392,8 @@ public static class FrameAnalysis
                 throw new ArgumentException("Profile width and thickness must be positive.", nameof(profiles));
         if (options.E <= 0)
             throw new ArgumentException("Young's modulus must be positive.", nameof(options));
+        var progress = new ProgressScope(options.Progress, "joints");
+        progress.Report(0.02);
 
         // ---- Lath polylines with the joints inserted ----------------------
         double avgSeg = 0, maxSeg = 0;
@@ -721,6 +729,8 @@ public static class FrameAnalysis
         Vec3d QOf(int c) => options.Density > 0 ? q + new Vec3d(0, 0, -options.Density * A[c] * options.Gravity) : q;
 
         // ---- Assemble -----------------------------------------------------
+        progress.Stage = "assembling";
+        progress.Report(0.2);
         var K = new Dictionary<long, double>();
         var F = new double[ndof];
         void AddK(int r, int c, double v)
@@ -884,6 +894,8 @@ public static class FrameAnalysis
             throw new ArgumentException("Every node is fixed; nothing to solve.", nameof(supports));
 
         int nfree = freeDofs.Count;
+        progress.Stage = "solving";
+        progress.Report(0.4);
         var Kff = new SparseSymmetricSolver.Builder(nfree);
         foreach (var kv in K)
         {
@@ -902,6 +914,8 @@ public static class FrameAnalysis
                 "(unsupported or under-connected). Add supports at enough joints, use fixed supports, or stiffen the joints.");
 
         double[] u = solver.Solve(Ff);
+        progress.Stage = "results";
+        progress.Report(0.9);
 
         // Scale-aware consistency check: residual relative to |K||u| + |F|
         double res = 0, uMax = 0, fMax = 0;
@@ -1020,6 +1034,8 @@ public static class FrameAnalysis
         bool bucklingConverged = false;
         if (options.BucklingModes > 0)
         {
+            progress.Stage = "buckling";
+            progress.Report(0.95);
             // B = −K_g on the free degrees of freedom: compression (N < 0) makes it positive
             var Bff = new SparseSymmetricSolver.Builder(nfree);
             bool anyCompression = false;
@@ -1108,6 +1124,7 @@ public static class FrameAnalysis
             else bucklingConverged = true; // nothing in compression: no Euler buckling under this load
         }
 
+        progress.Done();
         return new Result(nodes.ToArray(), nodeMap.ToArray(), displacements, maxDisp,
             elemSrc.ToArray(), axial, bendY, bendZ, utilization, maxUtil, supportNodes.Count,
             torsion, supportNodes.ToArray(), reactions, totalLoad, eqErr, lathsW, jointCount, floatingCurves.OrderBy(c => c).ToArray(),

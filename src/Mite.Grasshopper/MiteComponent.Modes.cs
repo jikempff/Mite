@@ -31,10 +31,9 @@ public abstract partial class MiteComponent
 
     private IGH_Param? FindInput(string name) => Params.Input.FirstOrDefault(p => p.Name == name);
 
-    /// <summary>Shows the active modes under the component after every solution.</summary>
-    protected override void AfterSolveInstance()
+    /// <summary>The mode line shown under the component after every solution (called from AfterSolveInstance, once the progress text is cleared).</summary>
+    private void ShowModes()
     {
-        base.AfterSolveInstance();
         if (Modes.Count > 0) Message = ModeCatalog.Message(_modeKey, CurrentValue);
     }
 

@@ -113,6 +113,11 @@ public static class DynamicRelaxation
         /// cases and slower on three.
         /// </summary>
         public bool PeakFit { get; set; } = false;
+        /// Optional progress sink (stage "relaxing"): the larger of the
+        /// iteration fraction and the residual's decay on a log scale from
+        /// its first value to the tolerance (<see cref="ProgressScope.Converging"/>).
+        /// </summary>
+        public ProgressHandler? Progress { get; set; }
     }
 
     public readonly struct Result
@@ -218,6 +223,8 @@ public static class DynamicRelaxation
         // velocity reset alone does not (measured: 35 000 steps against 186 on
         // a 20 × 20 net), so without the peak reset the masses are doubled.
         double lambda = Math.Max(options.MassFactor, 1e-3) * (options.ResetToPeak ? 1.0 : 2.0);
+        var progress = new ProgressScope(options.Progress, "relaxing");
+        double firstResidual = 0;
 
         Vec3d[] Residual()
         {
@@ -265,6 +272,11 @@ public static class DynamicRelaxation
         for (iter = 0; iter < options.MaxIterations; iter++)
         {
             if ((iter & 15) == 0 && options.ShouldCancel?.Invoke() == true) break;
+            if (progress.Active && (iter & 7) == 0 && residual < double.MaxValue)
+            {
+                if (firstResidual <= 0) firstResidual = residual;
+                progress.Report(ProgressScope.Converging(firstResidual, residual, options.Tolerance * Math.Max(residualScale, 1e-300), iter, options.MaxIterations));
+            }
 
             var forces = Residual();
             residual = 0;
@@ -319,6 +331,7 @@ public static class DynamicRelaxation
             }
         }
 
+        if (converged || iter >= options.MaxIterations) progress.Done();
         var edgeForces = new double[edges.Length];
         for (int e = 0; e < edges.Length; e++)
         {

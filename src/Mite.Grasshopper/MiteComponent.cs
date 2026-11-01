@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
+using Grasshopper;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
 using Rhino;
 using Rhino.Geometry;
 using Mite.Core.Diagnostics;
+using Mite.Core;
 using Mite.Core.Geometry;
 using System.Linq;
 using Mite.Core.Fabrication;
@@ -43,6 +46,96 @@ public abstract partial class MiteComponent : GH_Component
 
     /// <summary>True while the user holds Esc (the core solvers poll this between curves / iterations).</summary>
     protected static bool Cancelled() => GH_Document.IsEscapeKeyDown();
+
+    // ---- progress in the Message line ------------------------------------
+    //
+    // A solve runs on the UI thread, so nothing repaints by itself until it
+    // ends. The core solvers report their progress between units of work;
+    // the handler below writes it into the component's Message ("tracing A
+    // 42 %") and paints the canvas at once with Instances.RedrawCanvas(),
+    // which "immediately invalidates and paints the canvas" (David Rutten,
+    // McNeel forum, "A very difficult problem for UI", 2019) — throttled to
+    // one paint per PaintInterval so a tight loop does not spend its time
+    // painting. Following Nielsen's response-time limits (Usability
+    // Engineering, 1993: nothing under 1 s, percent-done past 10 s; Myers
+    // 1985 for the percentage itself) nothing is shown during the first
+    // second, so quick solves never flicker. The Message the component had
+    // when the first report arrived (a mode word set before or during the
+    // solve, say) is put back afterwards.
+
+    /// <summary>Milliseconds between two canvas paints while a solve reports progress.</summary>
+    public static int PaintInterval { get; set; } = 250;
+
+    /// <summary>Milliseconds a solve must have run before its progress is shown.</summary>
+    public static int ShowAfter { get; set; } = 1000;
+
+    private string? _messageBeforeSolve;
+    private bool _progressShown;
+    private readonly Stopwatch _solveClock = new Stopwatch();
+    private long _lastPaint = -1;
+    private string _lastShown = "";
+
+    protected override void BeforeSolveInstance()
+    {
+        base.BeforeSolveInstance();
+        _progressShown = false;
+        _lastPaint = -1;
+        _lastShown = "";
+        _solveClock.Restart();
+    }
+
+    protected override void AfterSolveInstance()
+    {
+        if (_progressShown)
+        {
+            Message = _messageBeforeSolve;
+            _progressShown = false;
+            try { Attributes?.ExpireLayout(); } catch { }
+        }
+        _solveClock.Stop();
+        base.AfterSolveInstance();
+        ShowModes();
+    }
+
+    /// <summary>
+    /// A progress handler for one stage of this solve, covering the window
+    /// [from, to] of the whole. <paramref name="stage"/> replaces the stage
+    /// word the core sends (null keeps it). Pass it as the Progress option
+    /// of a core solver.
+    /// </summary>
+    protected ProgressHandler Progress(string? stage = null, double from = 0.0, double to = 1.0)
+    {
+        double a = Math.Min(from, to), b = Math.Max(from, to);
+        return (f, coreStage) => ShowProgress(a + (b - a) * Math.Max(0, Math.Min(1, f)), stage ?? coreStage);
+    }
+
+    /// <summary>Progress of a per-item loop in the component itself: <paramref name="done"/> of <paramref name="total"/> items.</summary>
+    protected void ReportProgress(string stage, int done, int total) =>
+        ShowProgress(total > 0 ? (double)done / total : 1.0, stage);
+
+    private void ShowProgress(double fraction, string stage)
+    {
+        long now = _solveClock.ElapsedMilliseconds;
+        if (now < ShowAfter) return;
+        if (_lastPaint >= 0 && now - _lastPaint < PaintInterval && fraction < 1) return;
+        string text = ProgressScope.Text(fraction, stage);
+        if (text == _lastShown) return;
+        if (!_progressShown) _messageBeforeSolve = Message;
+        _lastShown = text;
+        _lastPaint = now;
+        Message = text;
+        _progressShown = true;
+        try
+        {
+            Attributes?.ExpireLayout();
+            if (Instances.ActiveCanvas != null) Instances.RedrawCanvas();
+        }
+        catch
+        {
+            // no canvas (headless Rhino.Compute, a closed document): the
+            // message is still set and shows when the canvas next paints
+        }
+    }
 
     /// <summary>
     /// Appends the shared Shape / Section inputs (see <see cref="SectionInput"/>)

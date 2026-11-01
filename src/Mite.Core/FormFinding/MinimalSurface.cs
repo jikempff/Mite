@@ -25,6 +25,13 @@ public static class MinimalSurface
 
         /// <summary>Optional cancellation probe checked between outer iterations.</summary>
         public Func<bool>? ShouldCancel { get; set; }
+
+        /// <summary>
+        /// Optional progress sink (stage "relaxing"): the larger of the
+        /// iteration fraction and the decay of the vertex displacement on a
+        /// log scale from its first value to the tolerance.
+        /// </summary>
+        public ProgressHandler? Progress { get; set; }
     }
 
     public readonly struct Result
@@ -99,9 +106,17 @@ public static class MinimalSurface
         // models converge to the same visual accuracy
         double tolerance = options.Tolerance * Math.Max(triMesh.BoundingBoxDiagonal(), 1e-300);
 
+        var progress = new ProgressScope(options.Progress, "relaxing");
+        double firstResidual = 0;
+        bool finished = false;
         for (iter = 0; iter < options.MaxIterations; iter++)
         {
             if (options.ShouldCancel?.Invoke() == true) break;
+            if (residual < double.MaxValue)
+            {
+                if (firstResidual <= 0) firstResidual = residual;
+                progress.Report(ProgressScope.Converging(firstResidual, residual, tolerance, iter, options.MaxIterations));
+            }
 
             // Cotangent weights from the current geometry. Negative weights
             // (obtuse opposite angles) are clamped to a small positive floor:
@@ -148,9 +163,10 @@ public static class MinimalSurface
                 verts[i] = next;
             }
 
-            if (residual < tolerance) { iter++; break; }
+            if (residual < tolerance) { iter++; finished = true; break; }
         }
 
+        if (finished || iter >= options.MaxIterations) progress.Done();
         return new Result(verts, iter, residual);
     }
 

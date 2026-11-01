@@ -72,10 +72,12 @@ public class LathUnrollComponent : MiteComponent
 
         double cursor = 0;
         int failed = 0;
+        int unrolled = 0;
         for (int ci = 0; ci < curves.Count; ci++)
         {
             var curve = curves[ci];
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
+            ReportProgress("unrolling", unrolled++, curves.Count);
             var line = curve == null ? null : CurveSample.ToPolyline(curve, chord);
             // the pattern is the strip's outline: the net profile's width and orientation
             var np = NetProfile(netIn, fromNet ? ci : 0, 2, 3);

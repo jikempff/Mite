@@ -66,6 +66,7 @@ public class StreamlinesComponent : MiteComponent
         var data = input.Data;
         var proj = new MeshProjection(data);
         var seeds = ResolveSeeds(input, proj, seedIdx, seedPts);
+        ReportProgress("directions", 1, 50);
         var curvature = PrincipalCurvature.Compute(data);
         var dirs = maxDir ? curvature.D1 : curvature.D2;
         var guide = ReadGuide(DA, 11, proj);
@@ -78,7 +79,8 @@ public class StreamlinesComponent : MiteComponent
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps, ShouldCancel = Cancelled,
                 MaxCurves = Math.Max(1, maxCurves), Continuous = continuous,
                 Layout = ToNetLayout(layout),
-                Guide = guide
+                Guide = guide,
+                Progress = Progress("tracing", 0.02, 1)
             };
             lines = EvenlySpacedNet.TraceField(data, dirs, null, seeds.Count > 0 ? seeds[0] : -1, opts);
             ReportTracing(opts, "Streamlines", proj);
@@ -100,7 +102,8 @@ public class StreamlinesComponent : MiteComponent
 
             var opts = new CurvatureStreamlines.Options
             {
-                StepSize = stepSize, MaxSteps = maxSteps, UseMaxCurvature = maxDir, ShouldCancel = Cancelled
+                StepSize = stepSize, MaxSteps = maxSteps, UseMaxCurvature = maxDir, ShouldCancel = Cancelled,
+                Progress = Progress("tracing", 0.02, 1)
             };
             lines = CurvatureStreamlines.Trace(data, seeds.ToArray(), curvature, opts);
             if (Cancelled())

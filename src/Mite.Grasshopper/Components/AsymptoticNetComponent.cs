@@ -72,6 +72,7 @@ public class AsymptoticNetComponent : MiteComponent
         var proj = new MeshProjection(data);
         var guide = ReadGuide(DA, 11, proj);
         var seeds = ResolveSeeds(input, proj, seedIdx, seedPts);
+        ReportProgress("directions", 1, 50);
         var curvature = PrincipalCurvature.Compute(data);
         var field = AsymptoticCurves.ComputeDirections(curvature, data, minAngle);
 
@@ -95,7 +96,8 @@ public class AsymptoticNetComponent : MiteComponent
             var opts = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
-                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous, Layout = netLayout, Guide = guide
+                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous, Layout = netLayout, Guide = guide,
+                Progress = Progress("tracing A", 0.02, 0.5)
             };
             int firstSeed = -1;
             foreach (int s in seeds) if (field.Exists[s]) { firstSeed = s; break; }
@@ -108,7 +110,8 @@ public class AsymptoticNetComponent : MiteComponent
             var optsB = new EvenlySpacedNet.Options
             {
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
-                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous, Layout = netLayout, Guide = guide
+                MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous, Layout = netLayout, Guide = guide,
+                Progress = Progress("tracing B", 0.5, 1)
             };
             familyB = EvenlySpacedNet.TraceField(data, field.Family2, field.Exists, firstSeed, optsB, field.Family1);
             ReportTracing(optsB, "Family B", proj, field.Exists);
@@ -132,7 +135,9 @@ public class AsymptoticNetComponent : MiteComponent
                     "Press Esc to cancel. For a full, evenly spaced net use AutoSpace with a single seed instead.");
 
             var opts = new AsymptoticCurves.Options { StepSize = stepSize, MaxSteps = maxSteps, ShouldCancel = Cancelled, MinCrossingAngle = minAngle };
+            opts.Progress = Progress("tracing A", 0.02, 0.5);
             familyA = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, false, opts);
+            opts.Progress = Progress("tracing B", 0.5, 1);
             familyB = AsymptoticCurves.Trace(data, seeds.ToArray(), curvature, true, opts);
             if (Cancelled())
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial.");

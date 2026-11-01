@@ -67,7 +67,8 @@ public class ConjugateNetComponent : MiteComponent
             Spacing = spacing, StepSize = step, MaxSteps = maxSteps,
             MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous,
             Layout = ToNetLayout(layout),
-            Guide = guide
+            Guide = guide,
+            Progress = Progress()
         };
 
         var net = ConjugateNet.Trace(data, firstSeed, opts);

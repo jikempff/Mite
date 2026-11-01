@@ -42,6 +42,8 @@ public static class GeodesicCurves
         /// </summary>
         public Func<bool>? ShouldCancel { get; set; }
 
+        /// <summary>Optional progress sink: seeds traced over seeds given (stage "tracing"), 1 at the end.</summary>
+        public ProgressHandler? Progress { get; set; }
     }
 
     /// <summary>
@@ -61,9 +63,11 @@ public static class GeodesicCurves
         double step = TraceDefaults.ResolveStep(options.StepSize, 0, proj);
         int maxSteps = TraceDefaults.ResolveMaxSteps(options.MaxSteps, step, proj);
 
+        var progress = new ProgressScope(options.Progress, "tracing");
         for (int i = 0; i < seedVertices.Length; i++)
         {
-            if (options.ShouldCancel?.Invoke() == true) break;
+            if (options.ShouldCancel?.Invoke() == true) return result;
+            progress.Report((double)i / seedVertices.Length);
             int seed = seedVertices[i];
             if (seed < 0 || seed >= proj.Mesh.VertexCount) continue;
 
@@ -80,6 +84,7 @@ public static class GeodesicCurves
                 result.Add(CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses));
         }
 
+        progress.Done();
         return result;
     }
 

@@ -90,8 +90,13 @@ public class AsymptoticWebComponent : MiteComponent
         var data = input.Data;
         var proj = new MeshProjection(data);
         int seed = seedPt.IsValid ? proj.NearestVertexGlobal(MeshConvert.ToVec3d(seedPt)) : -1;
+        ReportProgress("directions", 1, 50);
         var pc = PrincipalCurvature.Compute(data);
-        var web = AsymptoticWeb.Build(data, pc, seed, new AsymptoticWeb.Options { Spacing = spacing, Symmetry = symmetry, ShouldCancel = Cancelled });
+        var web = AsymptoticWeb.Build(data, pc, seed, new AsymptoticWeb.Options
+        {
+            Spacing = spacing, Symmetry = symmetry, ShouldCancel = Cancelled,
+            Progress = Progress("web", 0.02, aag ? 0.4 : 1)
+        });
         foreach (var n in web.Notes) AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, n);
         if (web.Nodes.Count == 0)
         {
@@ -129,7 +134,7 @@ public class AsymptoticWebComponent : MiteComponent
         Mesh? fineMesh = null;
         if (aag)
         {
-            var r = AagWeb.Optimize(data, web, new AagWeb.Options { Iterations = Math.Max(1, iterations), Proximity = Math.Max(0, proximity), GeodesicFamily = fam, Midpoint = midpoint, CrossingAngle = angle, ShouldCancel = Cancelled });
+            var r = AagWeb.Optimize(data, web, new AagWeb.Options { Iterations = Math.Max(1, iterations), Proximity = Math.Max(0, proximity), Progress = Progress("AAG", 0.4, 1), GeodesicFamily = fam, Midpoint = midpoint, CrossingAngle = angle, ShouldCancel = Cancelled });
             a = r.A; b = r.B; g = r.G; nodes = r.Nodes;
             angles.AddRange(r.CrossingAngles);
             if (midpoint) { mids.Clear(); mids.AddRange(r.Midpoints); }

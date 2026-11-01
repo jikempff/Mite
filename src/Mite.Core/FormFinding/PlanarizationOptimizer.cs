@@ -116,6 +116,8 @@ public static class PlanarizationOptimizer
         public double Regularisation { get; set; } = 1e-3;
 
         public Func<bool>? ShouldCancel { get; set; }
+        /// <summary>Optional progress sink ("planarizing"): the deviation's way from its start to the tolerance, logarithmically.</summary>
+        public ProgressHandler? Progress { get; set; }
 
         /// <summary>Receives one line per iteration (deviation, residual, step, weights) for diagnostics.</summary>
         public Action<string>? Log { get; set; }
@@ -269,6 +271,8 @@ public static class PlanarizationOptimizer
         bool converged = false;
         double maxDev = MaxDeviationOf(v, mesh.Faces);
         if (maxDev < tol) converged = true;
+        var progress = new ProgressScope(options.Progress, "planarizing");
+        double firstDev = maxDev;
 
         // Assembles J, r at the current (v, normal): hard rows at weight 1, soft rows at the given weights;
         // the raw (unweighted) soft costs are kept so the cost can be re-weighted without reassembly.
@@ -429,6 +433,7 @@ public static class PlanarizationOptimizer
             Array.Copy(v, vK, nv); Array.Copy(normal, nK, nf);
             sysK = sysNext;
             maxDev = MaxDeviationOf(v, mesh.Faces);
+            progress.Report(ProgressScope.Converging(firstDev, maxDev, tol, it, options.Iterations));
             if (options.Log != null)
             {
                 double mv = 0; for (int i = 0; i < nv; i++) mv = Math.Max(mv, (v[i] - v0[i]).Length);
@@ -462,6 +467,7 @@ public static class PlanarizationOptimizer
         res.FaceNormals = new Vec3d[nf];
         for (int f = 0; f < nf; f++) res.FaceNormals[f] = nIdx[f] >= 0 ? normal[f].Normalized() : Newell(v, mesh.Faces[f]);
         var outMesh = new MeshData(res.Vertices, mesh.Faces);
+        progress.Done();
         res.FaceDeviations = Planarization.ComputeDeviation(outMesh);
         res.MaxDeviation = res.FaceDeviations.Length > 0 ? res.FaceDeviations.Max() : 0;
         double maxRes = 0;

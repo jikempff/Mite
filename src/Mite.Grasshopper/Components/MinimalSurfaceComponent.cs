@@ -77,7 +77,7 @@ public class MinimalSurfaceComponent : MiteComponent
         MinimalSurface.Result result;
         try
         {
-            var opts = new MinimalSurface.Options { MaxIterations = Math.Max(1, maxIter), Tolerance = tol, ShouldCancel = Cancelled };
+            var opts = new MinimalSurface.Options { MaxIterations = Math.Max(1, maxIter), Tolerance = tol, ShouldCancel = Cancelled, Progress = Progress("relaxing") };
             result = MinimalSurface.Compute(data, fixedVerts, opts);
         }
         catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)

@@ -155,6 +155,11 @@ round-off; a warning names the row where the strip could not continue).
 Try it on two neighbouring meridians of a catenoid web from **Asymptotic Web**
 (`Sy` = −1 on a catenoid; two adjacent `G` diagonals with the same node count):
 the web grows on from the strip and stays an AAG web wherever it goes.
+While a net is traced the component's Message reads `tracing A 42 %` — the
+share of the anticlastic region the curves cover so far — and hold **Esc** to
+stop at the next curve and keep what is traced (a warning says the output is
+partial). Every long Mite component does the same: `AAG 63 %`, `relaxing 80 %`,
+`folding 40 %`, `solving …`.
 
 **Asymptotic Net** (Mite > Gridshells) — the older evenly spaced layouts:
 
