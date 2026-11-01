@@ -116,7 +116,8 @@ public class DynamicRelaxationComponent : MiteComponent
             Smoothness = Math.Max(0.0, smooth),
             MaxIterations = Math.Max(1, iterations),
             Tolerance = Math.Max(0.0, tol),
-            ShouldCancel = Cancelled
+            ShouldCancel = Cancelled,
+            Progress = Progress("relaxing")
         };
 
         DynamicRelaxation.Result result;

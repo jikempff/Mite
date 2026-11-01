@@ -63,7 +63,8 @@ public class ConjugateNetComponent : MiteComponent
         {
             Spacing = spacing, StepSize = step, MaxSteps = maxSteps,
             MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous,
-            Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
+            Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill,
+            Progress = Progress()
         };
 
         var net = ConjugateNet.Trace(data, firstSeed, opts);

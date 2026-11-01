@@ -36,6 +36,8 @@ public static class CurvatureStreamlines
         /// </summary>
         public Func<bool>? ShouldCancel { get; set; }
 
+        /// <summary>Optional progress sink: seeds traced over seeds given (stage "tracing"), 1 at the end.</summary>
+        public ProgressHandler? Progress { get; set; }
     }
 
     /// <summary>
@@ -53,9 +55,12 @@ public static class CurvatureStreamlines
         double step = TraceDefaults.ResolveStep(options.StepSize, 0, proj);
         int maxSteps = TraceDefaults.ResolveMaxSteps(options.MaxSteps, step, proj);
 
+        var progress = new ProgressScope(options.Progress, "tracing");
+        int done = 0, total = seedVertices.Length;
         foreach (int seed in seedVertices)
         {
-            if (options.ShouldCancel?.Invoke() == true) break;
+            if (options.ShouldCancel?.Invoke() == true) return result;
+            progress.Report((double)done++ / Math.Max(1, total));
             if (seed < 0 || seed >= proj.Mesh.VertexCount) continue;
 
             var line = FieldTracer.TraceBoth(proj, proj.Mesh.Vertices[seed], seed,
@@ -65,6 +70,7 @@ public static class CurvatureStreamlines
                 result.Add(CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses));
         }
 
+        progress.Done();
         return result;
     }
 }

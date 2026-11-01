@@ -48,6 +48,13 @@ public static class DynamicRelaxation
 
         /// <summary>Optional cancellation probe checked every few iterations.</summary>
         public Func<bool>? ShouldCancel { get; set; }
+
+        /// <summary>
+        /// Optional progress sink (stage "relaxing"): the larger of the
+        /// iteration fraction and the residual's decay on a log scale from
+        /// its first value to the tolerance (<see cref="ProgressScope.Converging"/>).
+        /// </summary>
+        public ProgressHandler? Progress { get; set; }
     }
 
     public readonly struct Result
@@ -113,10 +120,17 @@ public static class DynamicRelaxation
         double residual = double.MaxValue;
         int iter = 0;
         bool converged = false;
+        var progress = new ProgressScope(options.Progress, "relaxing");
+        double firstResidual = 0;
 
         for (iter = 0; iter < options.MaxIterations; iter++)
         {
             if ((iter & 15) == 0 && options.ShouldCancel?.Invoke() == true) break;
+            if (progress.Active && (iter & 7) == 0 && residual < double.MaxValue)
+            {
+                if (firstResidual <= 0) firstResidual = residual;
+                progress.Report(ProgressScope.Converging(firstResidual, residual, options.Tolerance * Math.Max(residualScale, 1e-300), iter, options.MaxIterations));
+            }
 
             var forces = physics.ComputeSpringForces(options.Stiffness, options.RestScale);
             if (options.Gravity.LengthSquared > 0)
@@ -148,6 +162,7 @@ public static class DynamicRelaxation
             else prevKinetic = kinetic;
         }
 
+        if (converged || iter >= options.MaxIterations) progress.Done();
         var edgeForces = new double[edges.Length];
         for (int e = 0; e < edges.Length; e++)
         {

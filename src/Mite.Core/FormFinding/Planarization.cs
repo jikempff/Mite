@@ -10,6 +10,15 @@ public static class Planarization
         public int MaxIterations { get; set; } = 100;
         public double Tolerance { get; set; } = 1e-6;
         public double Strength { get; set; } = 1.0;
+
+        /// <summary>Optional cancellation probe checked between iterations; true stops and returns the current geometry.</summary>
+        public Func<bool>? ShouldCancel { get; set; }
+
+        /// <summary>Optional progress sink (stage "planarizing"): iteration fraction or the deviation's log decay to the tolerance.</summary>
+        public ProgressHandler? Progress { get; set; }
+
+        /// <summary>Set after a run: true when ShouldCancel stopped the iterations.</summary>
+        public bool Cancelled { get; internal set; }
     }
 
     public readonly struct Result
@@ -37,9 +46,14 @@ public static class Planarization
 
         double[] deviations = new double[mesh.FaceCount];
         int iter = 0;
+        var progress = new ProgressScope(options.Progress, "planarizing");
+        double firstDev = 0;
+        bool finished = false;
+        options.Cancelled = false;
 
         for (iter = 0; iter < options.MaxIterations; iter++)
         {
+            if (options.ShouldCancel?.Invoke() == true) { options.Cancelled = true; break; }
             var targets = new Vec3d[mesh.VertexCount];
             var weights = new double[mesh.VertexCount];
             double maxDev = 0;
@@ -64,7 +78,9 @@ public static class Planarization
                 maxDev = Math.Max(maxDev, dev);
             }
 
-            if (maxDev < options.Tolerance) { iter++; break; }
+            if (firstDev <= 0) firstDev = maxDev;
+            progress.Report(ProgressScope.Converging(firstDev, maxDev, options.Tolerance, iter, options.MaxIterations));
+            if (maxDev < options.Tolerance) { iter++; finished = true; break; }
 
             for (int i = 0; i < mesh.VertexCount; i++)
             {
@@ -80,6 +96,7 @@ public static class Planarization
         // Report the deviation of the geometry actually returned (the loop
         // measures before it moves vertices, so its last values are stale)
         deviations = ComputeDeviation(new MeshData(verts, mesh.Faces));
+        if (finished || iter >= options.MaxIterations) progress.Done();
         return new Result(verts, deviations, iter);
     }
 

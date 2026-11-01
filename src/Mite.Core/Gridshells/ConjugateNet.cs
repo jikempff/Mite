@@ -38,9 +38,17 @@ public static class ConjugateNet
     {
         options ??= new EvenlySpacedNet.Options();
         var curvature = PrincipalCurvature.Compute(mesh);
+        // progress: family A is the first half, family B the second
+        var whole = new ProgressScope(options.Progress, "tracing");
+        var progress = options.Progress;
+        var scopeA = whole.Sub("tracing A", 0, 0.5);
+        var scopeB = whole.Sub("tracing B", 0.5, 1);
+        if (progress != null) options.Progress = (f, _) => scopeA.Report(f);
         var familyA = EvenlySpacedNet.TraceField(mesh, curvature.D1, null, firstSeed, options);
         bool capA = options.ReachedMaxCurves, cancelA = options.Cancelled;
+        if (progress != null) options.Progress = (f, _) => scopeB.Report(f);
         var familyB = EvenlySpacedNet.TraceField(mesh, curvature.D2, null, firstSeed, options);
+        options.Progress = progress;
         // Report the run status over both families
         options.ReachedMaxCurves |= capA;
         options.Cancelled |= cancelA;

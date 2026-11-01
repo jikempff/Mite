@@ -77,6 +77,7 @@ public class LathSweepComponent : MiteComponent
         foreach (var curve in curves)
         {
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
+            ReportProgress("sweeping", centerlines.Count, curves.Count);
             var line = curve == null ? null : CurveSample.ToPolyline(curve, chord);
             var result = line == null ? null : StripSweep.Sweep(proj, line, profile);
             if (result.HasValue)

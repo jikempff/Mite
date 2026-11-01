@@ -108,7 +108,8 @@ public class GeodesicNetComponent : MiteComponent
                 Spacing = spacing, StepSize = stepSize, MaxSteps = maxSteps,
                 MaxCurves = Math.Max(1, maxCurves), ShouldCancel = Cancelled, Continuous = continuous,
                 FromBorder = fromBorder, BorderAngle = borderAngle,
-                Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill
+                Layout = layout == 1 ? NetLayout.WebBorder : layout == 2 ? NetLayout.WebCross : NetLayout.Fill,
+                Progress = Progress("tracing")
             };
             lines = EvenlySpacedNet.TraceGeodesics(data, seeds[0], dirs[0], opts);
             ReportTracing(opts, "Geodesics");
@@ -122,7 +123,7 @@ public class GeodesicNetComponent : MiteComponent
                     $"{seeds.Count} seeds = {seeds.Count} traced geodesics - this can take a long time. " +
                     "Press Esc to cancel. For a full, evenly spaced net use AutoSpace with a single seed instead.");
 
-            var opts = new GeodesicCurves.Options { StepSize = stepSize, MaxSteps = maxSteps, ShouldCancel = Cancelled };
+            var opts = new GeodesicCurves.Options { StepSize = stepSize, MaxSteps = maxSteps, ShouldCancel = Cancelled, Progress = Progress("tracing") };
             lines = GeodesicCurves.Trace(data, seeds.ToArray(), dirs.ToArray(), opts);
             if (Cancelled())
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial.");

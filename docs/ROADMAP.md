@@ -205,8 +205,44 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 - [ ] Replace boolean switches that are really modes (AutoSpace,
       Continuous, Upright, MaxDir, Shape) by a right-click mode menu or an
       auto-attached value list; keep the inputs for compatibility.
-- [ ] Progress and cancellation feedback: percentage in the component
-      message while tracing / solving, Esc already cancels.
+- [x] Progress and cancellation feedback: percentage in the component
+      message while tracing / solving, Esc already cancels — 2026-11-01
+      (session 2). `Mite.Core/Progress.cs`: `ProgressHandler(fraction,
+      stage)` and `ProgressScope` (window [from, to], clamped, never
+      backwards, `Sub` for nested stages, `Converging` = max of the iteration
+      fraction and the residual's log decay to the tolerance); a `Progress`
+      option on EvenlySpacedNet (all three tracers), AsymptoticCurves,
+      GeodesicCurves, CurvatureStreamlines, ConjugateNet (A then B),
+      AsymptoticWeb (rays), AagWeb, ScissorNet (states × iterations),
+      DynamicRelaxation, MinimalSurface, Planarization, FrameAnalysis (stages)
+      and FlipGeodesic (pairs). `MiteComponent`: `Progress(stage, from, to)`
+      and `ReportProgress(stage, i, n)` write "tracing A 42 %" into Message
+      and paint with `Instances.RedrawCanvas()` (Rutten: it paints at once),
+      at most every 250 ms and only after the first second (Nielsen's 1 / 10 s
+      limits, Myers 1985 for the percentage); the previous Message is put back
+      in AfterSolveInstance. Esc added to Planarize, the exact Geodesic Path
+      and the kinetic iterations; the net tracers now poll Esc per candidate
+      instead of per source curve. Findings:
+      - The tracers' fraction is coverage: Σ L × ¾ Spacing / area of the
+        masked region. Curves of a finished family are ½ … 1 Spacing apart
+        (seeded at d_sep, stopped at ½ d_sep: Jobard & Lefer 1997), so with a
+        full Spacing per strip the estimate ran to 1.2 … 1.35 and the bar sat
+        at 100 % for the last fifth of every trace; with ¾ it ends at 0.87 …
+        1.03 on the asymptotic fills and webs (saddle, catenoid, hyperboloid,
+        Enneper), 0.90 … 0.97 on the sphere's geodesics, 0.72 on a cylinder's
+        helices (exactly a Spacing apart: finishes early) and 1.37 for
+        geodesics converging from a saddle's border.
+      - Cancellation was only polled per dequeued source curve in the
+        Jobard–Lefer loop: a source spawns up to 2 L / Spacing candidates, so
+        Esc on a fine net could take seconds to land (9 curves after a probe
+        that fired at the third; now 3).
+      - Not verified in Rhino (no Rhino here): that `Instances.RedrawCanvas()`
+        paints synchronously on the Mac build too, and the width of the Message
+        box with the longest words ("planarizing 100 %").
+      Open: Chebyshev Net, Force Density Method, Mesh Cleanup and the Flat Kit's
+      press-flat solve have no progress (quick, or files other bundles rewrite);
+      a `Cancel` button in the component menu for people without an Esc habit;
+      the web app's worker could forward the same reports to its status line.
 - [ ] Runtime messages with the fix in the message ("spacing 0.02 is below
       the mesh edge 0.05: raise Spacing or subdivide").
 - [ ] Interactive seed picking (Rhino point pick button on the component)
@@ -659,6 +695,11 @@ Open
 
 ## Done
 
+- [x] 2026-11-01 (session 2, B): progress in the Message line and Esc on every
+      long component — `ProgressHandler` / `ProgressScope` in the core, a
+      `Progress` option on fourteen solvers, coverage-based progress for the
+      nets, residual-decay progress for the iterative solvers; 13 tests, two
+      bench self-tests (77 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

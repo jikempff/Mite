@@ -67,9 +67,11 @@ public class LathUnrollComponent : MiteComponent
 
         double cursor = 0;
         int failed = 0;
+        int unrolled = 0;
         foreach (var curve in curves)
         {
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
+            ReportProgress("unrolling", unrolled++, curves.Count);
             var line = curve == null ? null : CurveSample.ToPolyline(curve, chord);
             var r = line != null ? StripUnroll.Unroll(proj, line, profile) : null;
             if (r == null)

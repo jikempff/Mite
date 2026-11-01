@@ -99,6 +99,7 @@ public class LathSegmentComponent : MiteComponent
         for (int c = 0; c < curves.Count; c++)
         {
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
+            ReportProgress("segmenting", c, curves.Count);
             var path = BranchPath(DA, c);
             segments.EnsurePath(path); cuts.EnsurePath(path); notchesEnd.EnsurePath(path); notchesStart.EnsurePath(path); lengths.EnsurePath(path);
 

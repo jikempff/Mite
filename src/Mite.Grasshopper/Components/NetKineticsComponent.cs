@@ -238,10 +238,12 @@ public class NetKineticsComponent : MiteComponent
             Fairness = Math.Max(0, stiffness),
             MaxIterations = Math.Max(1, iterations),
             Cancel = Cancelled,
+            Progress = Progress("folding", flatten ? 0.3 : 0, 1),
         };
         if (flatten)
         {
             int anchor = fixedIdx.Count > 0 ? fixedIdx[0] : net.NearestNode(net.Nodes.Aggregate(Vec3d.Zero, (a, b) => a + b) / net.Nodes.Length);
+            ReportProgress("pressing flat", 1, 100);
             net.PressFlat(opt, anchor, MeshConvert.ToVec3d(slideNormal));
             slideIdx = opt.Sliding.ToList();
             fixedIdx = opt.Fixed.ToList();

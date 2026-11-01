@@ -180,6 +180,13 @@ public sealed class ScissorNet
         /// <summary>Polled between iterations; true stops the solve (partial states are returned).</summary>
         public Func<bool>? Cancel { get; set; }
 
+        /// <summary>
+        /// Optional progress sink (stage "folding"): states solved over
+        /// states asked for, with the running state's share taken from its
+        /// iteration fraction; 1 when the last state is solved.
+        /// </summary>
+        public ProgressHandler? Progress { get; set; }
+
         /// <summary>Optional per-iteration trace (cost, damping) for debugging.</summary>
         public Action<string>? Log { get; set; }
     }
@@ -550,8 +557,12 @@ public sealed class ScissorNet
         double wC = opt.CableWeight / Scale;
 
         int steps = Math.Max(1, opt.Steps);
+        _progress = new ProgressScope(opt.Progress, "folding");
+        _progressStates = steps + 1;
         for (int k = 0; k <= steps; k++)
         {
+            _progressState = k;
+            if (opt.Cancel != null && opt.Cancel()) { result.Cancelled = true; break; }
             double t = opt.Fold * k / steps;
             var targets = opt.TargetsAt != null && opt.Driven.Count > 0 ? opt.TargetsAt(t) : Array.Empty<Vec3d>();
             var cableLen = opt.CableLengthsAt != null && opt.Cables.Count > 0 ? opt.CableLengthsAt(t) : Array.Empty<double>();
@@ -561,8 +572,13 @@ public sealed class ScissorNet
             result.States.Add(st);
             if (opt.Cancel != null && opt.Cancel()) { result.Cancelled = true; break; }
         }
+        if (!result.Cancelled) _progress.Done();
+        _progress = null;
         return result;
     }
+
+    private ProgressScope? _progress;
+    private int _progressState, _progressStates;
 
     private double[]? _slideOffsets;
     private double SlideOffset(int k) => _slideOffsets != null && k < _slideOffsets.Length ? _slideOffsets[k] : 0.0;
@@ -592,9 +608,13 @@ public sealed class ScissorNet
         var newPos = new Vec3d[pos.Length];
         var newNrm = new Vec3d[nrm.Length];
 
+        double firstResidual = MaxAbs(r);
         while (!converged && it < opt.MaxIterations)
         {
             it++;
+            if (opt.Cancel != null && (it & 3) == 0 && opt.Cancel()) break;
+            if (_progress != null && _progress.Active)
+                _progress.Report((_progressState + ProgressScope.Converging(firstResidual, MaxAbs(r), opt.Tolerance, it, opt.MaxIterations)) / Math.Max(1, _progressStates));
             // normal equations
             var builder = new SparseSymmetricSolver.Builder(freeCount);
             var g = new double[freeCount];

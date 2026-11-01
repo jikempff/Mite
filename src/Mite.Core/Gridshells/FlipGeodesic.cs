@@ -49,6 +49,15 @@ public static partial class FlipGeodesic
 
         /// <summary>Cap on FlipOut steps per path (0 = automatic: a safety cap of one million; Sharp &amp; Crane prove termination).</summary>
         public int MaxSteps { get; set; } = 0;
+
+        /// <summary>Optional cancellation probe checked between pairs; true stops and leaves the remaining pairs null.</summary>
+        public Func<bool>? ShouldCancel { get; set; }
+
+        /// <summary>Optional progress sink (stage "geodesics"): the preparation (projection, Steiner start paths, intrinsic triangulation) is the first fifth, then pairs solved over pairs given.</summary>
+        public ProgressHandler? Progress { get; set; }
+
+        /// <summary>Set after a run: true when ShouldCancel stopped the pairs.</summary>
+        public bool Cancelled { get; internal set; }
     }
 
     public sealed class Result
@@ -86,8 +95,11 @@ public static partial class FlipGeodesic
     {
         options ??= new Options();
         reason = null;
+        options.Cancelled = false;
+        var progress = new ProgressScope(options.Progress, "geodesics");
         int count = Math.Max(from.Count, to.Count);
         if (count == 0 || from.Count == 0 || to.Count == 0) return Array.Empty<Result?>();
+        progress.Report(0.02);
         var tri = mesh.ToTriangulated();
         if (tri.FaceCount == 0) { reason = "the mesh has no faces"; return null; }
 
@@ -126,6 +138,7 @@ public static partial class FlipGeodesic
             }
 
         // start paths: shortest paths of the Steiner graph, inserted as chains of mesh vertices
+        progress.Report(0.08);
         var starts = new List<int>?[count];
         int m = options.SteinerPoints;
         if (m > 0)
@@ -151,6 +164,8 @@ public static partial class FlipGeodesic
             var vertexFaces = tri.BuildVertexFaces();
             for (int i = 0; i < count; i++)
             {
+                if (options.ShouldCancel?.Invoke() == true) { options.Cancelled = true; break; }
+                progress.Report(0.08 + 0.07 * i / count);
                 int a = endpoints[i, 0], b = endpoints[i, 1];
                 if (a < 0 || b < 0 || a == b) continue;
                 var ha = hits[from[Math.Min(i, from.Count - 1)]];
@@ -176,12 +191,15 @@ public static partial class FlipGeodesic
             }
         }
 
+        progress.Report(0.15);
         var it = IntrinsicTriangulation.Build(refiner.V, refiner.F, out reason);
         if (it == null) return null;
 
         var results = new Result?[count];
         for (int i = 0; i < count; i++)
         {
+            if (options.Cancelled || options.ShouldCancel?.Invoke() == true) { options.Cancelled = true; break; }
+            progress.Report(0.2 + 0.8 * i / count);
             int a = endpoints[i, 0], b = endpoints[i, 1];
             if (a < 0 || b < 0) continue;
             // every pair starts from the input triangulation: the long, thin edges left by an
@@ -203,6 +221,7 @@ public static partial class FlipGeodesic
             }
             results[i] = best;
         }
+        if (!options.Cancelled) progress.Done();
         return results;
     }
 

@@ -56,6 +56,12 @@ surface) is a singular node where six laths meet. Triangulating with `G` is what
 makes the grid stiff: on a 10 m Enneper web of 60 × 6 mm timber the deflection
 under self-weight and 0.5 kN/m² drops from 1.7 m (quads) to 11 mm (AAG).
 
+While a net is traced the component's Message reads `tracing A 42 %` — the
+share of the anticlastic region the curves cover so far — and hold **Esc** to
+stop at the next curve and keep what is traced (a warning says the output is
+partial). Every long Mite component does the same: `AAG 63 %`, `relaxing 80 %`,
+`folding 40 %`, `solving …`.
+
 **Asymptotic Net** (Mite > Gridshells) — the older evenly spaced layouts:
 
 - `M` — your mesh

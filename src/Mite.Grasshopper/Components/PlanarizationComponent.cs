@@ -70,9 +70,12 @@ public class PlanarizationComponent : MiteComponent
 
         var opts = new Planarization.Options
         {
-            MaxIterations = Math.Max(0, maxIter), Tolerance = tol, Strength = Math.Min(1.0, strength)
+            MaxIterations = Math.Max(0, maxIter), Tolerance = tol, Strength = Math.Min(1.0, strength),
+            ShouldCancel = Cancelled, Progress = Progress("planarizing")
         };
         var result = Planarization.Compute(data, fixedVerts, opts);
+        if (opts.Cancelled)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, the mesh is not fully planarized.");
 
         DA.SetData(0, input.WithVertices(mesh, result.Vertices));
         DA.SetDataList(1, result.FaceDeviations);

@@ -133,6 +133,29 @@ public static class EvenlySpacedNet
         /// </summary>
         public Func<bool>? ShouldCancel { get; set; }
 
+        /// <summary>
+        /// Optional progress sink (fraction 0..1, stage "tracing"). The
+        /// fraction is the surface covered so far: every accepted curve of
+        /// length L claims a strip of area L × <see cref="CoverageSpacingFactor"/> × S,
+        /// and a family is complete when the strips add up to the (masked)
+        /// mesh area — the saturation criterion of evenly spaced placement
+        /// (Jobard &amp; Lefer 1997: seeds d_sep apart, traces stopped at
+        /// d_test = ½ d_sep; Mebarki, Alliez &amp; Devillers 2005: the
+        /// placement ends when no cavity wider than the separating distance
+        /// is left) read as an area budget. It is clamped to 1 and reported
+        /// once more as 1 when tracing ends.
+        /// </summary>
+        public ProgressHandler? Progress { get; set; }
+
+        /// <summary>
+        /// Set after a run: Σ curve length × <see cref="CoverageSpacingFactor"/> × spacing / masked
+        /// area, unclamped — about 1 for a saturated family (0.87 … 1.03 on the
+        /// asymptotic test shapes), below 1 where curves stay a full Spacing
+        /// apart or the field leaves parts of the region without curves, above
+        /// 1 where curves converge.
+        /// </summary>
+        public double CoverageEstimate { get; internal set; }
+
         /// <summary>Set after a run: true when the MaxCurves cap stopped growth with candidates left.</summary>
         public bool ReachedMaxCurves { get; internal set; }
 
@@ -150,6 +173,82 @@ public static class EvenlySpacedNet
         double len = 0;
         for (int i = 1; i < line.Length; i++) len += (line[i] - line[i - 1]).Length;
         return len;
+    }
+
+    /// <summary>
+    /// Mean distance between neighbouring curves of a saturated family, as a
+    /// fraction of Spacing: new curves are seeded one Spacing from an
+    /// existing one and stopped at half a Spacing (Jobard &amp; Lefer 1997),
+    /// and a continuous curve keeps running where its neighbour converges,
+    /// so the curves of a finished family are between ½ and 1 Spacing apart.
+    /// With this factor the estimate at the end of a trace is 0.87 … 1.03 on
+    /// the asymptotic fills and webs of the saddle, catenoid, hyperboloid and
+    /// Enneper surface and 0.90 … 0.97 on the sphere's geodesics; 0.72 … 0.75
+    /// on a cylinder's helices (parallel, exactly a Spacing apart: the bar
+    /// jumps from 72 to 100 at the end, an early finish) and 1.37 for
+    /// geodesics seeded from a saddle's border (they converge: 100 is reached
+    /// a quarter before the end). Without it the estimate ran to 1.2 … 1.35
+    /// and the bar stalled at 100 % for the last fifth of every trace — the
+    /// one thing a percent-done indicator must not do (Harrison et al. 2007;
+    /// Nielsen).
+    /// </summary>
+    public const double CoverageSpacingFactor = 0.75;
+
+    /// <summary>
+    /// Area of the faces whose vertices are all inside the mask (faces cut by
+    /// the mask count half): the region a family has to cover.
+    /// </summary>
+    public static double MaskedArea(MeshData mesh, bool[]? mask)
+    {
+        double area = 0;
+        var V = mesh.Vertices;
+        foreach (var f in mesh.Faces)
+        {
+            if (f.Length < 3) continue;
+            double a = 0;
+            for (int k = 1; k + 1 < f.Length; k++)
+                a += 0.5 * Vec3d.Cross(V[f[k]] - V[f[0]], V[f[k + 1]] - V[f[0]]).Length;
+            if (mask != null)
+            {
+                int inside = 0;
+                foreach (int v in f) if (mask[v]) inside++;
+                if (inside == 0) continue;
+                if (inside < f.Length) a *= 0.5;
+            }
+            area += a;
+        }
+        return area;
+    }
+
+    /// <summary>
+    /// Progress by coverage (see <see cref="Options.Progress"/>): the swept
+    /// area of the accepted curves against the area to cover.
+    /// </summary>
+    private sealed class Coverage
+    {
+        private readonly Options _opts;
+        private readonly ProgressScope _scope;
+        private readonly double _perLength;
+        private double _length;
+
+        public Coverage(Options opts, MeshData mesh, bool[]? mask, double spacing)
+        {
+            _opts = opts;
+            _scope = new ProgressScope(opts.Progress, "tracing");
+            opts.CoverageEstimate = 0;
+            double area = MaskedArea(mesh, mask);
+            _perLength = area > 1e-300 ? CoverageSpacingFactor * spacing / area : 0;
+        }
+
+        public void Add(Vec3d[] line)
+        {
+            _length += ArcLength(line);
+            _opts.CoverageEstimate = _perLength * _length;
+            _scope.Report(_opts.CoverageEstimate);
+        }
+
+        /// <summary>Reports 1 unless the run was cancelled (a cancelled run is not finished).</summary>
+        public void Done() { if (!_opts.Cancelled) _scope.Done(); }
     }
 
     /// <summary>
@@ -181,6 +280,7 @@ public static class EvenlySpacedNet
         var registry = new PointRegistry(spacing);
         double dtest = StopDistance(options, spacing);
         Func<Vec3d, bool> stop = p => registry.HasPointWithin(p, dtest);
+        var coverage = new Coverage(options, mesh, mask, spacing);
 
         Vec3d[] TraceFrom(Vec3d pos, int hint, Vec3d? initialDir)
         {
@@ -220,8 +320,9 @@ public static class EvenlySpacedNet
 
         Grow(proj, results, registry, options, spacing,
             TraceFrom, CandidateBlocked, null,
-            proj.Mesh.Vertices[seed], seed, default, Refill);
+            proj.Mesh.Vertices[seed], seed, default, Refill, coverage: coverage);
 
+        coverage.Done();
         return results;
     }
 
@@ -262,6 +363,7 @@ public static class EvenlySpacedNet
         Resolve(options, proj, out double spacing, out double step, out int maxSteps);
         var registry = new PointRegistry(spacing);
         double minLen = options.MinCurveLength > 0 ? options.MinCurveLength : 2.0 * spacing;
+        var coverage = new Coverage(options, mesh, mask, spacing);
 
         // seed lines
         var seedLines = new List<Vec3d[]>();
@@ -303,6 +405,7 @@ public static class EvenlySpacedNet
             curve = CurveFairing.SmoothOnSurface(proj, curve, options.SmoothingPasses);
             results.Add(curve);
             registry.AddLine(curve, 0.02 * spacing);
+            coverage.Add(curve);
             return true;
         }
 
@@ -388,6 +491,7 @@ public static class EvenlySpacedNet
                 (h, _, _) => full ? -1 : SeedCross(h.NearestVertex, h.Point));
         }
         options.ResolvedSpacing = spacing;
+        coverage.Done();
         return results;
     }
 
@@ -415,6 +519,7 @@ public static class EvenlySpacedNet
         var registry = new PointRegistry(spacing);
         double dtest = StopDistance(options, spacing);
         Func<Vec3d, bool> stop = p => registry.HasPointWithin(p, dtest);
+        var coverage = new Coverage(options, mesh, null, spacing);
 
         Vec3d[] TraceFrom(Vec3d pos, int hint, Vec3d dir)
         {
@@ -479,6 +584,7 @@ public static class EvenlySpacedNet
                 line = CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses);
                 results.Add(line);
                 registry.AddLine(line, 0.02 * spacing);
+                coverage.Add(line);
             }
             // Gap filling: a geodesic through the farthest uncovered point,
             // parallel to the nearest curve there (its tangent carried into the
@@ -508,9 +614,11 @@ public static class EvenlySpacedNet
                         line = CurveFairing.SmoothOnSurface(proj, line, options.SmoothingPasses);
                         results.Add(line);
                         registry.AddLine(line, 0.02 * spacing);
+                        coverage.Add(line);
                         return 1;
                     });
             }
+            coverage.Done();
             return results;
         }
         if (border != null && border.Count > 0)
@@ -527,19 +635,22 @@ public static class EvenlySpacedNet
                 results.Add(line);
                 registry.AddLine(line, thinGap);
                 queueSeeds.Add(line);
+                coverage.Add(line);
             }
             if (results.Count > 0)
             {
                 Grow(proj, results, registry, options, spacing, null, null, TraceFrom,
-                    default, -1, default, null, seedAngle, queueSeeds);
+                    default, -1, default, null, seedAngle, queueSeeds, coverage);
+                coverage.Done();
                 return results;
             }
         }
 
         Grow(proj, results, registry, options, spacing,
             null, null, TraceFrom,
-            proj.Mesh.Vertices[firstSeed], firstSeed, firstDir.Normalized(), null, seedAngle);
+            proj.Mesh.Vertices[firstSeed], firstSeed, firstDir.Normalized(), null, seedAngle, coverage: coverage);
 
+        coverage.Done();
         return results;
     }
 
@@ -857,7 +968,8 @@ public static class EvenlySpacedNet
         Func<MeshProjection.Hit, bool>? candidateBlocked,
         Func<Vec3d, int, Vec3d, Vec3d[]>? traceDirected,
         Vec3d firstPos, int firstHint, Vec3d firstDir = default, Func<int>? refill = null,
-        Func<Vec3d[], int, Vec3d, Vec3d, Vec3d, double>? seedAngle = null, List<Vec3d[]>? initialQueue = null)
+        Func<Vec3d[], int, Vec3d, Vec3d, Vec3d, double>? seedAngle = null, List<Vec3d[]>? initialQueue = null,
+        Coverage? coverage = null)
     {
         double thinGap = Math.Max(0.5 * StopDistance(opts, spacing), 0.02 * spacing);
         double minLen = opts.MinCurveLength > 0 ? opts.MinCurveLength : 2.0 * spacing;
@@ -881,11 +993,12 @@ public static class EvenlySpacedNet
             results.Add(first);
             registry.AddLine(first, thinGap);
             queue.Enqueue(first);
+            coverage?.Add(first);
         }
 
         while (true)
         {
-        while (queue.Count > 0 && results.Count < opts.MaxCurves)
+        while (queue.Count > 0 && results.Count < opts.MaxCurves && !opts.Cancelled)
         {
             if (opts.ShouldCancel?.Invoke() == true) { opts.Cancelled = true; break; }
             var source = queue.Dequeue();
@@ -894,6 +1007,9 @@ public static class EvenlySpacedNet
             foreach (var sample in SampleAlong(source, spacing))
             {
                 if (results.Count >= opts.MaxCurves) break;
+                // polled per candidate, not only per source curve: a source
+                // spawns up to 2 L / spacing curves, which is what Esc waited for
+                if (opts.ShouldCancel?.Invoke() == true) { opts.Cancelled = true; break; }
 
                 var hit = proj.ClosestPoint(sample.Point, hint);
                 hint = hit.NearestVertex;
@@ -942,6 +1058,7 @@ public static class EvenlySpacedNet
                         results.Add(line);
                         registry.AddLine(line, thinGap);
                         queue.Enqueue(line);
+                        coverage?.Add(line);
                         if (results.Count >= opts.MaxCurves) break;
                     }
                 }
@@ -963,6 +1080,7 @@ public static class EvenlySpacedNet
             results.Add(extra);
             registry.AddLine(extra, thinGap);
             queue.Enqueue(extra);
+            coverage?.Add(extra);
         }
         else
         {

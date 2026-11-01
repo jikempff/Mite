@@ -93,9 +93,11 @@ public class NetJointsComponent : MiteComponent
         var indexB = new List<int>();
         int parallel = 0;
 
+        int crossingsDone = 0;
         foreach (var crossing in crossings)
         {
             if (Cancelled()) { AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cancelled with Esc, output is partial."); break; }
+            ReportProgress("joints", crossingsDone++, crossings.Count);
 
             Vec3d ta = NetIntersections.TangentAt(familyA, crossing, false);
             Vec3d tb = selfMode

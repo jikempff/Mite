@@ -87,6 +87,14 @@ public static class FrameAnalysis
 
         /// <summary>Concentrated forces (N) attached to the nearest node.</summary>
         public IReadOnlyList<(Vec3d Point, Vec3d Force)>? PointLoads { get; set; }
+
+        /// <summary>
+        /// Optional progress sink by stage: "joints" (lath polylines with
+        /// the joints inserted), "assembling" (element stiffness), "solving"
+        /// (factorisation of the free stiffness matrix, the costly step on a
+        /// large net), "results"; 1 when done.
+        /// </summary>
+        public ProgressHandler? Progress { get; set; }
     }
 
     public readonly struct Result
@@ -211,6 +219,8 @@ public static class FrameAnalysis
             throw new ArgumentException("Profile width and thickness must be positive.", nameof(profile));
         if (options.E <= 0)
             throw new ArgumentException("Young's modulus must be positive.", nameof(options));
+        var progress = new ProgressScope(options.Progress, "joints");
+        progress.Report(0.02);
 
         // ---- Lath polylines with the joints inserted ----------------------
         double avgSeg = 0, maxSeg = 0;
@@ -516,6 +526,8 @@ public static class FrameAnalysis
         }
 
         // ---- Assemble -----------------------------------------------------
+        progress.Stage = "assembling";
+        progress.Report(0.2);
         var proj = new MeshProjection(mesh);
         var K = new Dictionary<long, double>();
         var F = new double[ndof];
@@ -659,6 +671,8 @@ public static class FrameAnalysis
             throw new ArgumentException("Every node is fixed; nothing to solve.", nameof(supports));
 
         int nfree = freeDofs.Count;
+        progress.Stage = "solving";
+        progress.Report(0.4);
         var Kff = new SparseSymmetricSolver.Builder(nfree);
         foreach (var kv in K)
         {
@@ -677,6 +691,8 @@ public static class FrameAnalysis
                 "(unsupported or under-connected). Add supports at enough joints, use fixed supports, or stiffen the joints.");
 
         double[] u = solver.Solve(Ff);
+        progress.Stage = "results";
+        progress.Report(0.9);
 
         // Scale-aware consistency check: residual relative to |K||u| + |F|
         double res = 0, uMax = 0, fMax = 0;
@@ -758,6 +774,7 @@ public static class FrameAnalysis
             if (utilization[e] > maxUtil) maxUtil = utilization[e];
         }
 
+        progress.Done();
         return new Result(nodes.ToArray(), nodeMap.ToArray(), displacements, maxDisp,
             elemSrc.ToArray(), axial, bendY, bendZ, utilization, maxUtil, supportNodes.Count,
             torsion, supportNodes.ToArray(), reactions, totalLoad, eqErr, lathsW, jointCount, floatingCurves.OrderBy(c => c).ToArray());

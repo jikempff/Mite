@@ -81,6 +81,13 @@ public static class AsymptoticWeb
         public double MinFieldMagnitude { get; set; } = 0.3;
 
         public Func<bool>? ShouldCancel { get; set; }
+
+        /// <summary>
+        /// Optional progress sink (stage "web"): rays traced over rays to
+        /// trace (the transversals of a ray are traced with it), then the
+        /// nodes, tails and quads; 1 when the web is finished.
+        /// </summary>
+        public ProgressHandler? Progress { get; set; }
     }
 
     public sealed class Result
@@ -149,7 +156,11 @@ public static class AsymptoticWeb
                 if (IsRotationallySymmetric(proj, mesh, c, axis, 7, symTol) && IsRotationallySymmetric(proj, mesh, c, axis, 11, symTol)
                     && IsRotationallySymmetric(proj, mesh, c, axis, 13, symTol))
                 {
-                    if (BuildRotational(proj, f1, f2, exists, seed, c, axis, h, step, maxSteps, options, res)) return res;
+                    if (BuildRotational(proj, f1, f2, exists, seed, c, axis, h, step, maxSteps, options, res))
+                    {
+                        new ProgressScope(options.Progress, "web").Done();
+                        return res;
+                    }
                     break;
                 }
             }
@@ -246,9 +257,13 @@ public static class AsymptoticWeb
         // ---- trace the fundamental rays and their transversals --------------
         var rayLines = new Vec3d[R][];
         var trans = new List<(int Ray, int Index, Vec3d[] Line)>();
+        var progress = new ProgressScope(options.Progress, "web");
+        int toTrace = order > 1 ? fund : R;
+        bool cancelled = false;
         for (int k = 0; k < fund; k++)
         {
-            if (options.ShouldCancel?.Invoke() == true) break;
+            if (options.ShouldCancel?.Invoke() == true) { cancelled = true; break; }
+            progress.Report(0.9 * k / toTrace);
             var ray = TraceRay(proj, f1, f2, exists, P, rays[k].Start, rays[k].Dir, seed, step, maxSteps, options);
             ray = CurveFairing.SmoothOnSurface(proj, ray, options.SmoothingPasses);
             rayLines[k] = ray;
@@ -278,8 +293,10 @@ public static class AsymptoticWeb
         }
         else
         {
-            for (int k = fund; k < R; k++)
+            for (int k = fund; k < R && !cancelled; k++)
             {
+                if (options.ShouldCancel?.Invoke() == true) { cancelled = true; break; }
+                progress.Report(0.9 * k / toTrace);
                 var ray = TraceRay(proj, f1, f2, exists, P, rays[k].Start, rays[k].Dir, seed, step, maxSteps, options);
                 ray = CurveFairing.SmoothOnSurface(proj, ray, options.SmoothingPasses);
                 rayLines[k] = ray;
@@ -322,8 +339,10 @@ public static class AsymptoticWeb
         }
         foreach (var (k, _, line) in trans) (k % 2 == 0 ? res.B : res.A).Add(line);
 
+        progress.Report(0.9);
         FinishNet(proj, res, h, options);
         if (order > 1) res.SymmetryError = SymmetryResidual(res.Nodes, P, nP, order);
+        if (!cancelled) progress.Done();
         return res;
     }
 

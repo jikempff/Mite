@@ -176,6 +176,7 @@ public class GridshellAnalysisComponent : MiteComponent
                     JointRotationalStiffness = jointK < 0 ? double.PositiveInfinity : jointK,
                     Density = Math.Max(0, density), AreaLoad = areaLoad,
                     PointLoads = pointLoads,
+                    Progress = Progress(),
                 });
         }
         catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)

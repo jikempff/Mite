@@ -210,6 +210,54 @@ var sw = Stopwatch.StartNew();
     var famB2 = EvenlySpacedNet.TraceField(saddle, field.Family2, field.Exists, -1, new EvenlySpacedNet.Options { Spacing = 0.15, Continuous = false }, field.Family1);
     var endsA2 = Ends(famA2.Concat(famB2).ToList(), proj);
     numbers["asymClassic"] = new { a = famA2.Count, b = famB2.Count, ends = endsA2.ends, boundaryEnds = endsA2.boundary, tEnds = endsA2.onCurve, floatingEnds = endsA2.floating };
+
+    // ---------- progress reports (the Message line of the components) ----------
+    {
+        // every long solver reports its progress between units of work: in [0, 1],
+        // never backwards, 1 at the end; the tracers report the covered area
+        // (Σ length × spacing / area), the solvers the residual's log decay
+        var progressRows = new List<object>();
+        static (List<double> f, List<string> stages) Rec(out Mite.Core.ProgressHandler h)
+        {
+            var f = new List<double>(); var st = new List<string>();
+            h = (x, s) => { f.Add(x); st.Add(s); };
+            return (f, st);
+        }
+        static object Row(string name, List<double> f, List<string> st, double coverage, long ms)
+        {
+            bool mono = true; for (int i = 1; i < f.Count; i++) if (f[i] <= f[i - 1]) mono = false;
+            return new { name, reports = f.Count, monotone = mono, first = f.Count > 0 ? Math.Round(f[0], 4) : -1, last = f.Count > 0 ? f[^1] : -1, coverage = double.IsNaN(coverage) ? (double?)null : Math.Round(coverage, 3), stages = string.Join(" → ", st.Distinct()), ms };
+        }
+        var (fA, sA) = Rec(out var hA);
+        var tp = Stopwatch.StartNew();
+        var oA = new EvenlySpacedNet.Options { Spacing = 0.15, Progress = hA };
+        EvenlySpacedNet.TraceField(saddle, field.Family1, field.Exists, -1, oA, field.Family2);
+        progressRows.Add(Row("Asymptotic Net, saddle fill (family A)", fA, sA, oA.CoverageEstimate, tp.ElapsedMilliseconds));
+        var (fW, sW) = Rec(out var hW); tp.Restart();
+        var oW = new EvenlySpacedNet.Options { Spacing = 0.15, Layout = NetLayout.WebBorder, Progress = hW };
+        EvenlySpacedNet.TraceField(saddle, field.Family1, field.Exists, -1, oW, field.Family2);
+        progressRows.Add(Row("Asymptotic Net, saddle web from the border (family A)", fW, sW, oW.CoverageEstimate, tp.ElapsedMilliseconds));
+        var sphereP = TestMeshes.CreateUnitSphere(24);
+        var (fG, sG) = Rec(out var hG); tp.Restart();
+        var oG = new EvenlySpacedNet.Options { Spacing = 0.2, Progress = hG };
+        EvenlySpacedNet.TraceGeodesics(sphereP, 1 + 11 * 48, new Vec3d(0, 0, 1), oG);
+        progressRows.Add(Row("Geodesic Net, sphere fill", fG, sG, oG.CoverageEstimate, tp.ElapsedMilliseconds));
+        var catP = TestMeshes.CreateCatenoid(1.0, 2.0, 64, 32);
+        var webP = AsymptoticWeb.Build(catP, PrincipalCurvature.Compute(catP), -1, new AsymptoticWeb.Options { Spacing = 0.3 });
+        var (fO, sO) = Rec(out var hO); tp.Restart();
+        AagWeb.Optimize(catP, webP, new AagWeb.Options { Iterations = 40, Progress = hO });
+        progressRows.Add(Row("Asymptotic Web, AAG on the catenoid", fO, sO, double.NaN, tp.ElapsedMilliseconds));
+        var gridP = TestMeshes.CreateQuadGrid(20, 20, 1.0);
+        var (fD, sD) = Rec(out var hD); tp.Restart();
+        DynamicRelaxation.Compute(gridP, gridP.BuildBoundaryVertexFlags(), new DynamicRelaxation.Options { Stiffness = 10, Gravity = new Vec3d(0, 0, -1), MaxIterations = 5000, Progress = hD });
+        progressRows.Add(Row("Dynamic Relaxation, hanging net", fD, sD, double.NaN, tp.ElapsedMilliseconds));
+        // Esc: a cancel probe that fires after the third report stops the fill at the next candidate
+        var (fC, sC) = Rec(out var hC); tp.Restart();
+        var oC = new EvenlySpacedNet.Options { Spacing = 0.15, Progress = hC, ShouldCancel = () => fC.Count >= 3 };
+        var cut = EvenlySpacedNet.TraceField(saddle, field.Family1, field.Exists, -1, oC, field.Family2);
+        tp.Stop();
+        numbers["progress"] = new { rows = progressRows, cancelled = new { curves = cut.Count, full = famA.Count, cancelled = oC.Cancelled, last = fC.Count > 0 ? fC[^1] : -1, ms = tp.ElapsedMilliseconds, fullMs = t.ElapsedMilliseconds } };
+    }
     // conjugate net on saddle
     var conj = ConjugateNet.Trace(saddle, -1, new EvenlySpacedNet.Options { Spacing = 0.2 });
     scenes["conj"] = new { wire = SaddleWire(40, 2.0, 5), a = conj.FamilyA.Select(l => Line(l, 3)).ToArray(), b = conj.FamilyB.Select(l => Line(l, 3)).ToArray() };

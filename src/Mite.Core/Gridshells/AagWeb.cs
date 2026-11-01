@@ -52,6 +52,13 @@ public static class AagWeb
         public double Damping { get; set; } = 1e-3;
 
         public Func<bool>? ShouldCancel { get; set; }
+
+        /// <summary>
+        /// Optional progress sink (stage "optimising"): the larger of the
+        /// iteration fraction and the decay of the Levenberg–Marquardt step
+        /// on a log scale towards the 1e-10 stopping step.
+        /// </summary>
+        public ProgressHandler? Progress { get; set; }
     }
 
     public sealed class Result
@@ -212,9 +219,13 @@ public static class AagWeb
         var prevX = (double[])x.Clone();
         NormalEquations? prevSys = null;
         double lastWf = 0.1 * options.Fairness;
+        var progress = new ProgressScope(options.Progress, "optimising");
+        double firstStep = 0;
+        bool cancelled = false;
         for (it = 0; it < options.Iterations; it++)
         {
-            if (options.ShouldCancel?.Invoke() == true) break;
+            if (options.ShouldCancel?.Invoke() == true) { cancelled = true; break; }
+            progress.Report((double)it / options.Iterations);
             double wf = it < options.Iterations / 2 ? options.Fairness : 0.1 * options.Fairness;
             if (wf != prevWf) { prevCost = double.MaxValue; prevWf = wf; }
             var sys = Assemble(wf);
@@ -237,8 +248,11 @@ public static class AagWeb
             if (dx == null) break;
             double step = 0;
             for (int k = 0; k < nv; k++) { x[k] += dx[k]; step = Math.Max(step, Math.Abs(dx[k])); }
+            if (firstStep <= 0) firstStep = step;
+            progress.Report(ProgressScope.Converging(firstStep, step, 1e-10, it + 1, options.Iterations));
             if (step < 1e-10) { it++; break; }
         }
+        if (!cancelled) progress.Done();
         // keep the better of the last step and the last accepted iterate
         if (prevSys != null && Assemble(lastWf).Cost > prevCost) Array.Copy(prevX, x, nv);
         res.Iterations = it;

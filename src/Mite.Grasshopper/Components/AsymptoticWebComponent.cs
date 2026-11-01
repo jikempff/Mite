@@ -67,8 +67,13 @@ public class AsymptoticWebComponent : MiteComponent
         var data = input.Data;
         var proj = new MeshProjection(data);
         int seed = seedPt.IsValid ? proj.NearestVertexGlobal(MeshConvert.ToVec3d(seedPt)) : -1;
+        ReportProgress("directions", 1, 50);
         var pc = PrincipalCurvature.Compute(data);
-        var web = AsymptoticWeb.Build(data, pc, seed, new AsymptoticWeb.Options { Spacing = spacing, Symmetry = symmetry, ShouldCancel = Cancelled });
+        var web = AsymptoticWeb.Build(data, pc, seed, new AsymptoticWeb.Options
+        {
+            Spacing = spacing, Symmetry = symmetry, ShouldCancel = Cancelled,
+            Progress = Progress("web", 0.02, aag ? 0.4 : 1)
+        });
         foreach (var n in web.Notes) AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, n);
         if (web.Nodes.Count == 0)
         {
@@ -90,7 +95,11 @@ public class AsymptoticWebComponent : MiteComponent
         for (int i = 0; i < web.Diagonals.Count; i++) if (web.DiagonalFamily[i] == fam) g.Add(web.Diagonals[i]);
         if (aag)
         {
-            var r = AagWeb.Optimize(data, web, new AagWeb.Options { Iterations = Math.Max(1, iterations), Proximity = Math.Max(0, proximity), GeodesicFamily = fam, ShouldCancel = Cancelled });
+            var r = AagWeb.Optimize(data, web, new AagWeb.Options
+            {
+                Iterations = Math.Max(1, iterations), Proximity = Math.Max(0, proximity), GeodesicFamily = fam, ShouldCancel = Cancelled,
+                Progress = Progress("AAG", 0.4, 1)
+            });
             a = r.A; b = r.B; g = r.G; nodes = r.Nodes;
             lines.Add($"AAG: geodesic {r.InitialGeodesicError:0.##}° → {r.GeodesicError:0.###}° · stars {r.InitialStarError:0.##}° → {r.StarError:0.###}° · surface moved {r.MeanDeviation:G3} mean, {r.MaxDeviation:G3} max · {r.Iterations} iterations");
             if (r.GeodesicError > 1 || r.StarError > 1)
