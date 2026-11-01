@@ -25,6 +25,38 @@
 //   Garland & Heckbert 1997, "Surface simplification using quadric error metrics" (SIGGRAPH):
 //     the error of a position is the sum of squared distances to the planes of the faces it
 //     leaves; "if the normal flips, that contraction can be ... disallowed".
+//   Borodin, Novotni & Klein 2002, "Progressive gap closing for mesh repairing" (CGI 2002), as
+//     described in Botsch, Pauly, Kobbelt, Alliez, Lévy, Bischoff & Rössl 2007, "Geometric
+//     modeling based on polygonal meshes" (SIGGRAPH course notes §4.4.4; Botsch et al. 2010,
+//     Polygon Mesh Processing §8.2): the vertex–vertex contraction of a decimation is replaced
+//     by a VERTEX–EDGE contraction — for a boundary vertex v and a boundary edge e with closest
+//     point c, "if c is interior, c is inserted into e by splitting the adjacent triangle in
+//     two", then v and c are merged; "the cost of a vertex-edge collapse is defined as the
+//     distance of v to c" and "the algorithm maintains a priority queue of vertex/edge pairs and
+//     snaps them in order of increasing distance". This is the crack / T-junction weld below.
+//   Barequet & Sharir 1995, "Filling gaps in the boundary of a polyhedron" (CAGD 12): border
+//     edges are the edges "incident to only one face"; the tolerance ε "is our a priori
+//     estimation of the physical size of the gaps"; the result must stay orientable, every edge
+//     used in two opposite directions. Barequet & Kumar 1997 ("Repairing CAD models", VIS):
+//     geometrically close boundary edges are snapped onto each other in order of a distance score.
+//   Guéziec, Taubin, Lazarus & Horn 2001, "Cutting and stitching" (IEEE TVCG 7): stitching may
+//     not create new complex (non-manifold) edges or singular vertices — the check applied to
+//     every snap here. Rhino's MatchMeshEdge (independent implementation): "first, the command
+//     will try to match vertices, then it will try to split edges to make the edges match. No
+//     part of the mesh is moved more than the specified tolerance."
+//
+// Cracks (CrackTolerance > 0): border vertices within the tolerance of a border edge they do not
+// belong to are joined to it — to the nearer END when that end is within the tolerance (vertex–
+// vertex merge onto that end, Rhino's "match vertices first"), otherwise the edge's face is split
+// at the vertex (triangle → 2, quad → 3 triangles, n-gon → (n+1)-gon). The vertex is NOT moved
+// onto the chord: it is a sample of the surface and the chord is not, so the edge bends through it
+// by at most the tolerance (Borodin merges v with the foot point c; where the merged vertex sits is
+// free, and on a curved seam the chord position would flatten the surface there — measured on the
+// two-hemisphere sphere in CrackWeldTests). Pairs are taken in order of increasing distance from a
+// priority queue; a stale pair (its edge was split meanwhile) is re-measured against the current
+// border. A snap is refused when it would give an edge a third face, collapse a face, or turn a
+// face normal by 90° or more. Afterwards the two sides of a seam share their edges, so winding is
+// unified across it and the tracers run through it.
 //
 // What is implemented (triangle with angles α ≤ β ≤ γ, shortest edge s opposite α, longest edge
 // L opposite γ): a triangle with α below the Sliver angle is a NEEDLE when L ≥ 4·s (CGAL's default
@@ -76,6 +108,14 @@ public static class MeshCleanup
 
         /// <summary>Drop vertices that no face uses (default true).</summary>
         public bool RemoveIsolatedVertices { get; set; } = true;
+
+        /// <summary>
+        /// Close cracks and T-junctions: a border vertex within this distance of a
+        /// border edge it does not belong to is snapped onto it (onto the nearer end
+        /// when that is within the distance, else onto the edge, which is split there).
+        /// 0 = off (default); the report then says whether such vertices exist.
+        /// </summary>
+        public double CrackTolerance { get; set; }
     }
 
     /// <summary>What the cleanup found and did beyond the weld / face counts.</summary>
@@ -107,6 +147,21 @@ public static class MeshCleanup
         public double MinAngleBefore { get; internal set; } = double.NaN;
         /// <summary>Smallest triangle angle of the output, in degrees (NaN without triangles).</summary>
         public double MinAngleAfter { get; internal set; } = double.NaN;
+        /// <summary>Border vertices snapped onto a border edge (the edge split there): T-junctions and seams with different vertex counts.</summary>
+        public int CracksClosed { get; internal set; }
+        /// <summary>Border vertices merged into another border vertex within the crack tolerance (their Map entry is the survivor).</summary>
+        public int CrackVerticesMerged { get; internal set; }
+        /// <summary>Largest gap closed: the distance between a snapped vertex and the edge (or vertex) it was joined to.</summary>
+        public double CrackMaxGap { get; internal set; }
+        /// <summary>Border vertices still within the crack tolerance of a border edge after the pass (a snap would make a non-manifold edge or fold a face).</summary>
+        public int CracksLeft { get; internal set; }
+        /// <summary>
+        /// With the crack pass off: border vertices within <see cref="CrackProbeFraction"/> of the
+        /// average edge length of a border edge they do not belong to (T-junctions, cracks).
+        /// </summary>
+        public int CrackCandidates { get; internal set; }
+        /// <summary>The largest of those distances — the Cracks value that would weld them all.</summary>
+        public double CrackCandidateDistance { get; internal set; }
         /// <summary>One line per finding, with the fix where there is one.</summary>
         public string Report { get; internal set; } = "";
     }
@@ -264,14 +319,20 @@ public static class MeshCleanup
         // Each face's input winding, to count the faces reversed at the end
         var inputFaces = unique.Select(f => (int[])f.Clone()).ToList();
 
+        // --- Cracks and T-junctions: snap border vertices onto border edges (before the
+        // orientation pass, so winding propagates across the mended seam)
+        var removedVertex = new bool[verts.Length];
+        var collapsedTo = new Dictionary<int, int>();
+        double crack = options.CrackTolerance;
+        if (crack > 0) CloseCracks(verts, unique, inputFaces, crack, minArea, removedVertex, collapsedTo, info);
+        else ProbeCracks(verts, unique, CrackProbeFraction * avgEdge, info);
+
         if (options.UnifyWinding) Orient(unique, verts);
 
         // --- Slivers
         info.MinAngleBefore = MinTriangleAngle(verts, unique);
         double sliver = options.SliverAngle;
-        var removedVertex = new bool[verts.Length];
         var faceAlive = unique.Select(_ => true).ToList();
-        var collapsedTo = new Dictionary<int, int>();
         if (sliver > 0) RemoveSlivers(verts, unique, faceAlive, removedVertex, collapsedTo, Math.Min(sliver, 60.0), info);
 
         var outFaces = new List<int[]>();
@@ -319,7 +380,7 @@ public static class MeshCleanup
         Census(result, info);
         info.MinAngleAfter = MinTriangleAngle(result.Vertices, finalFaces);
         info.SliversLeft = CountSlivers(result.Vertices, finalFaces, sliver > 0 ? sliver : ReportSliverAngle);
-        info.Report = BuildReport(welded, degenerate, duplicate, info, sliver, options.UnifyWinding);
+        info.Report = BuildReport(welded, degenerate, duplicate, info, sliver, options.UnifyWinding, crack);
 
         return new Result(result, welded, degenerate, duplicate, map, info);
     }
@@ -790,6 +851,350 @@ public static class MeshCleanup
         return true;
     }
 
+    // ------------------------------------------------------------------ cracks and T-junctions
+
+    /// <summary>
+    /// With the crack pass off, border vertices this fraction of the average edge length
+    /// from a border edge they do not belong to are reported as crack / T-junction candidates.
+    /// </summary>
+    public const double CrackProbeFraction = 0.1;
+
+    /// <summary>Live connectivity of the border during the crack pass.</summary>
+    private sealed class Border
+    {
+        public readonly Vec3d[] Verts;
+        public readonly List<int[]> Faces;
+        public readonly List<int>[] VertexFaces;
+        public readonly Dictionary<long, List<int>> EdgeFaces = new Dictionary<long, List<int>>(EdgeHash.Instance);
+        /// <summary>Border edges (one face) by key, with their end points.</summary>
+        public readonly Dictionary<long, (int A, int B)> BorderEdges = new Dictionary<long, (int, int)>(EdgeHash.Instance);
+        private readonly Dictionary<(long, long, long), List<long>> grid = new Dictionary<(long, long, long), List<long>>();
+        private readonly double cell;
+        private readonly Vec3d origin;
+        private readonly double reach;
+
+        public Border(Vec3d[] verts, List<int[]> faces, double reach)
+        {
+            Verts = verts;
+            Faces = faces;
+            this.reach = reach;
+            VertexFaces = new List<int>[verts.Length];
+            for (int i = 0; i < verts.Length; i++) VertexFaces[i] = new List<int>();
+            double sum = 0; int count = 0;
+            for (int fi = 0; fi < faces.Count; fi++)
+            {
+                var f = faces[fi];
+                foreach (int v in f) VertexFaces[v].Add(fi);
+                for (int i = 0; i < f.Length; i++)
+                {
+                    int a = f[i], b = f[(i + 1) % f.Length];
+                    long key = EdgeKey(a, b);
+                    if (!EdgeFaces.TryGetValue(key, out var l)) { l = new List<int>(2); EdgeFaces[key] = l; }
+                    l.Add(fi);
+                }
+            }
+            double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+            foreach (var e in EdgeFaces)
+            {
+                if (e.Value.Count != 1) continue;
+                var (a, b) = Ends(e.Key);
+                sum += (verts[a] - verts[b]).Length; count++;
+                foreach (int v in new[] { a, b })
+                {
+                    if (verts[v].X < minX) minX = verts[v].X;
+                    if (verts[v].Y < minY) minY = verts[v].Y;
+                    if (verts[v].Z < minZ) minZ = verts[v].Z;
+                }
+            }
+            origin = count > 0 ? new Vec3d(minX, minY, minZ) : Vec3d.Zero;
+            cell = Math.Max(count > 0 ? sum / count : 1.0, 2.0 * reach);
+            if (!(cell > 0)) cell = 1.0;
+            foreach (var e in EdgeFaces)
+                if (e.Value.Count == 1) AddBorderEdge(e.Key);
+        }
+
+        public static (int A, int B) Ends(long key) => ((int)(key >> 32), (int)(key & 0xFFFFFFFFL));
+
+        public bool IsBorderVertex(int v)
+        {
+            foreach (int fi in VertexFaces[v])
+            {
+                var f = Faces[fi];
+                int i = Array.IndexOf(f, v);
+                if (EdgeFaces[EdgeKey(v, f[(i + 1) % f.Length])].Count == 1) return true;
+                if (EdgeFaces[EdgeKey(v, f[(i + f.Length - 1) % f.Length])].Count == 1) return true;
+            }
+            return false;
+        }
+
+        public int Uses(int a, int b) => EdgeFaces.TryGetValue(EdgeKey(a, b), out var l) ? l.Count : 0;
+
+        private void AddBorderEdge(long key)
+        {
+            var (a, b) = Ends(key);
+            BorderEdges[key] = (a, b);
+            var (x0, y0, z0) = Key(Min(Verts[a], Verts[b]) - origin - new Vec3d(reach, reach, reach), cell);
+            var (x1, y1, z1) = Key(Max(Verts[a], Verts[b]) - origin + new Vec3d(reach, reach, reach), cell);
+            for (long x = x0; x <= x1; x++)
+                for (long y = y0; y <= y1; y++)
+                    for (long z = z0; z <= z1; z++)
+                    {
+                        if (!grid.TryGetValue((x, y, z), out var l)) { l = new List<long>(); grid[(x, y, z)] = l; }
+                        l.Add(key);
+                    }
+        }
+
+        private static Vec3d Min(Vec3d p, Vec3d q) => new Vec3d(Math.Min(p.X, q.X), Math.Min(p.Y, q.Y), Math.Min(p.Z, q.Z));
+        private static Vec3d Max(Vec3d p, Vec3d q) => new Vec3d(Math.Max(p.X, q.X), Math.Max(p.Y, q.Y), Math.Max(p.Z, q.Z));
+
+        /// <summary>Border edge keys whose cell set contains p (dead keys included; check BorderEdges).</summary>
+        public IEnumerable<long> Near(Vec3d p)
+        {
+            var (x, y, z) = Key(p - origin, cell);
+            return grid.TryGetValue((x, y, z), out var l) ? l : (IEnumerable<long>)Array.Empty<long>();
+        }
+
+        /// <summary>Records that face fi now uses edge (a, b); updates the border set.</summary>
+        public void AddEdgeUse(int a, int b, int fi)
+        {
+            long key = EdgeKey(a, b);
+            if (!EdgeFaces.TryGetValue(key, out var l)) { l = new List<int>(2); EdgeFaces[key] = l; }
+            l.Add(fi);
+            if (l.Count == 1) AddBorderEdge(key);
+            else BorderEdges.Remove(key);
+        }
+
+        public void RemoveEdgeUse(int a, int b, int fi)
+        {
+            long key = EdgeKey(a, b);
+            if (!EdgeFaces.TryGetValue(key, out var l)) return;
+            l.Remove(fi);
+            if (l.Count == 0) { EdgeFaces.Remove(key); BorderEdges.Remove(key); }
+            else if (l.Count == 1) AddBorderEdge(key);
+            else BorderEdges.Remove(key);
+        }
+    }
+
+    private readonly struct Snap
+    {
+        public readonly int Vertex;
+        public readonly long Edge;     // border edge key
+        public readonly int Target;    // ≥ 0: merge into this end; −1: split the edge at Foot
+        public readonly Vec3d Foot;
+        public readonly double Distance;
+        public Snap(int vertex, long edge, int target, Vec3d foot, double distance)
+        { Vertex = vertex; Edge = edge; Target = target; Foot = foot; Distance = distance; }
+    }
+
+    /// <summary>
+    /// Nearest border edge not incident to v (and not of a face v belongs to) within
+    /// tol: a vertex–vertex merge when an end of it is within tol, else the interior foot.
+    /// </summary>
+    private static bool FindSnap(Border b, int v, double tol, out Snap snap)
+    {
+        snap = default;
+        double best = double.MaxValue;
+        Vec3d p = b.Verts[v];
+        var seen = new HashSet<long>();
+        foreach (long key in b.Near(p))
+        {
+            if (!seen.Add(key) || !b.BorderEdges.TryGetValue(key, out var ends)) continue;
+            int ea = ends.A, eb = ends.B;
+            if (ea == v || eb == v) continue;
+            int fi = b.EdgeFaces[key][0];
+            if (Array.IndexOf(b.Faces[fi], v) >= 0) continue;
+            Vec3d pa = b.Verts[ea], pb = b.Verts[eb];
+            double da = (p - pa).Length, db = (p - pb).Length;
+            if (da <= tol || db <= tol)
+            {
+                double d = Math.Min(da, db);
+                if (d < best) { best = d; snap = new Snap(v, key, da <= db ? ea : eb, da <= db ? pa : pb, d); }
+                continue;
+            }
+            Vec3d ab = pb - pa;
+            double len2 = ab.LengthSquared;
+            if (len2 <= 0) continue;
+            double t = Vec3d.Dot(p - pa, ab) / len2;
+            if (t <= 0 || t >= 1) continue;
+            Vec3d c = pa + t * ab;
+            double dist = (p - c).Length;
+            if (dist <= tol && dist < best) { best = dist; snap = new Snap(v, key, -1, c, dist); }
+        }
+        return best <= tol;
+    }
+
+    private static void CloseCracks(Vec3d[] verts, List<int[]> faces, List<int[]> inputFaces, double tol, double minArea,
+        bool[] removedVertex, Dictionary<int, int> collapsedTo, Diagnostics info)
+    {
+        var b = new Border(verts, faces, tol);
+        int seq = 0;
+        var queue = new SortedSet<(double d, int seq)>();
+        var pending = new Dictionary<int, Snap>();
+        void Push(Snap s) { queue.Add((s.Distance, seq)); pending[seq++] = s; }
+
+        for (int round = 0; round < 4; round++)
+        {
+            int applied = 0;
+            foreach (var ends in b.BorderEdges.Values.ToArray())
+                foreach (int v in new[] { ends.A, ends.B })
+                    if (!removedVertex[v] && FindSnap(b, v, tol, out var s)) Push(s);
+            // a vertex pushed from both of its border edges is popped twice: the second
+            // entry is stale after the first snap and is measured again
+            while (queue.Count > 0)
+            {
+                var top = queue.Min;
+                queue.Remove(top);
+                var s = pending[top.seq];
+                pending.Remove(top.seq);
+                int v = s.Vertex;
+                if (removedVertex[v] || !b.IsBorderVertex(v)) continue;
+                if (!b.BorderEdges.ContainsKey(s.Edge) || (s.Target >= 0 && removedVertex[s.Target]))
+                {
+                    // stale: the edge was split or merged meanwhile — measure again against the live border
+                    if (FindSnap(b, v, tol, out var again)) Push(again);
+                    continue;
+                }
+                bool done = s.Target >= 0
+                    ? TryMergeVertex(b, v, s.Target, minArea, removedVertex, collapsedTo, info)
+                    : TrySplitEdge(b, v, s.Edge, minArea, inputFaces, info);
+                if (done)
+                {
+                    applied++;
+                    if (s.Distance > info.CrackMaxGap) info.CrackMaxGap = s.Distance;
+                }
+            }
+            if (applied == 0) break;
+        }
+
+        // what is left within the tolerance
+        int left = 0;
+        var counted = new HashSet<int>();
+        foreach (var ends in b.BorderEdges.Values)
+            foreach (int v in new[] { ends.A, ends.B })
+                if (counted.Add(v) && !removedVertex[v] && FindSnap(b, v, tol, out _)) left++;
+        info.CracksLeft = left;
+    }
+
+    /// <summary>Counts the border vertices that would be snapped at the probe distance (crack pass off).</summary>
+    private static void ProbeCracks(Vec3d[] verts, List<int[]> faces, double probe, Diagnostics info)
+    {
+        if (!(probe > 0)) return;
+        var b = new Border(verts, faces, probe);
+        int n = 0; double worst = 0;
+        var counted = new HashSet<int>();
+        foreach (var ends in b.BorderEdges.Values)
+            foreach (int v in new[] { ends.A, ends.B })
+                if (counted.Add(v) && FindSnap(b, v, probe, out var s)) { n++; if (s.Distance > worst) worst = s.Distance; }
+        info.CrackCandidates = n;
+        info.CrackCandidateDistance = worst;
+    }
+
+    /// <summary>Merge border vertex v into border vertex w (w stays where it is).</summary>
+    private static bool TryMergeVertex(Border b, int v, int w, double minArea, bool[] removedVertex, Dictionary<int, int> collapsedTo, Diagnostics info)
+    {
+        var verts = b.Verts;
+        foreach (int fi in b.VertexFaces[v])
+        {
+            var f = b.Faces[fi];
+            if (Array.IndexOf(f, w) >= 0) return false;              // the face would collapse
+            var g = (int[])f.Clone();
+            for (int i = 0; i < g.Length; i++) if (g[i] == v) g[i] = w;
+            Vec3d nOld = VectorArea(verts, f), nNew = VectorArea(verts, g);
+            if (nNew.Length * 0.5 < minArea || Vec3d.Dot(nOld, nNew) <= 0) return false; // degenerate or folded
+            int iv = Array.IndexOf(f, v);
+            foreach (int x in new[] { f[(iv + 1) % f.Length], f[(iv + f.Length - 1) % f.Length] })
+                if (b.Uses(v, x) + b.Uses(w, x) > 2) return false;       // a third face on edge (w, x)
+        }
+        foreach (int fi in b.VertexFaces[v].ToArray())
+        {
+            var f = b.Faces[fi];
+            for (int i = 0; i < f.Length; i++) b.RemoveEdgeUse(f[i], f[(i + 1) % f.Length], fi);
+            for (int i = 0; i < f.Length; i++) if (f[i] == v) f[i] = w;
+            for (int i = 0; i < f.Length; i++) b.AddEdgeUse(f[i], f[(i + 1) % f.Length], fi);
+            b.VertexFaces[w].Add(fi);
+        }
+        b.VertexFaces[v].Clear();
+        removedVertex[v] = true;
+        collapsedTo[v] = w;
+        info.CrackVerticesMerged++;
+        return true;
+    }
+
+    /// <summary>Split border edge e's face at border vertex v (v is not moved; the edge bends through it).</summary>
+    private static bool TrySplitEdge(Border b, int v, long edge, double minArea, List<int[]> inputFaces, Diagnostics info)
+    {
+        var verts = b.Verts;
+        var (ea, eb) = Border.Ends(edge);
+        int fi = b.EdgeFaces[edge][0];
+        var f = b.Faces[fi];
+        if (Array.IndexOf(f, v) >= 0) return false;
+        if (b.Uses(ea, v) >= 2 || b.Uses(eb, v) >= 2) return false;      // (a, v) or (v, b) would get a third face
+
+        // v stays where it is (a sample of the surface); the edge bends through it by at most the tolerance
+        // the split of f = (…, a, b, …) at v, keeping f's winding
+        int ia = Array.IndexOf(f, ea);
+        bool forward = f[(ia + 1) % f.Length] == eb;           // f runs a → b
+        int a = forward ? ea : eb, c = forward ? eb : ea;       // f runs a → c with v between
+        int[][] pieces;
+        if (f.Length == 3)
+        {
+            int x = f.First(q => q != ea && q != eb);
+            pieces = new[] { new[] { a, v, x }, new[] { v, c, x } };
+        }
+        else if (f.Length == 4)
+        {
+            int i0 = Array.IndexOf(f, a);
+            int x = f[(i0 + 2) % 4], y = f[(i0 + 3) % 4];       // f = (a, c, x, y)
+            pieces = new[] { new[] { a, v, y }, new[] { v, x, y }, new[] { v, c, x } };
+        }
+        else
+        {
+            int i0 = Array.IndexOf(f, a);
+            var poly = new int[f.Length + 1];
+            for (int i = 0; i < f.Length; i++) poly[i] = f[(i0 + i) % f.Length];
+            Array.Copy(poly, 1, poly, 2, f.Length - 1);
+            poly[1] = v;
+            pieces = new[] { poly };
+        }
+        Vec3d nf = VectorArea(verts, f);
+        foreach (var p in pieces)
+        {
+            Vec3d n = VectorArea(verts, p);
+            if (n.Length * 0.5 < minArea || Vec3d.Dot(n, nf) <= 0) return false;
+        }
+        // no edge may end up with a third face (a double wall zipped onto one of its own faces)
+        var newUses = new Dictionary<long, int>(EdgeHash.Instance);
+        foreach (var p in pieces)
+            for (int i = 0; i < p.Length; i++)
+            {
+                long k = EdgeKey(p[i], p[(i + 1) % p.Length]);
+                newUses.TryGetValue(k, out int n);
+                newUses[k] = n + 1;
+            }
+        foreach (var e in newUses)
+        {
+            var (p0, p1) = Border.Ends(e.Key);
+            int i0 = Array.IndexOf(f, p0), i1 = Array.IndexOf(f, p1);
+            int diff = Math.Abs(i0 - i1);
+            bool edgeOfF = i0 >= 0 && i1 >= 0 && (diff == 1 || diff == f.Length - 1);
+            if (b.Uses(p0, p1) - (edgeOfF ? 1 : 0) + e.Value > 2) return false;
+        }
+
+        for (int i = 0; i < f.Length; i++) b.RemoveEdgeUse(f[i], f[(i + 1) % f.Length], fi);
+        foreach (int q in f) b.VertexFaces[q].Remove(fi);
+        for (int k = 0; k < pieces.Length; k++)
+        {
+            int gi;
+            if (k == 0) { gi = fi; b.Faces[fi] = pieces[0]; inputFaces[fi] = (int[])pieces[0].Clone(); }
+            else { gi = b.Faces.Count; b.Faces.Add(pieces[k]); inputFaces.Add((int[])pieces[k].Clone()); }
+            var p = pieces[k];
+            foreach (int q in p) b.VertexFaces[q].Add(gi);
+            for (int i = 0; i < p.Length; i++) b.AddEdgeUse(p[i], p[(i + 1) % p.Length], gi);
+        }
+        info.CracksClosed++;
+        return true;
+    }
+
     // ------------------------------------------------------------------ census and report
 
     private static void Census(MeshData mesh, Diagnostics info)
@@ -866,12 +1271,21 @@ public static class MeshCleanup
         info.ClosedComponents = partOpen.Values.Count(o => !o);
     }
 
-    private static string BuildReport(int welded, int degenerate, int duplicate, Diagnostics info, double sliver, bool unify)
+    private static string BuildReport(int welded, int degenerate, int duplicate, Diagnostics info, double sliver, bool unify, double crack)
     {
         var ci = CultureInfo.InvariantCulture;
         var sb = new StringBuilder();
         void Line(string s) { if (sb.Length > 0) sb.Append('\n'); sb.Append(s); }
         if (welded > 0) Line(string.Format(ci, "Welded {0} vertices.", welded));
+        if (info.CracksClosed + info.CrackVerticesMerged > 0)
+            Line(string.Format(ci, "Closed cracks within {0:0.###e-0}: {1} border vertices snapped onto a border edge (the edge split there: T-junctions, seams with different vertex counts), {2} merged into a border vertex; largest gap {3:0.###e-0}.",
+                crack, info.CracksClosed, info.CrackVerticesMerged, info.CrackMaxGap));
+        if (info.CracksLeft > 0)
+            Line(string.Format(ci, "{0} border vertices still lie within {1:0.###e-0} of another border edge: snapping them would give an edge a third face or fold a face.",
+                info.CracksLeft, crack));
+        if (crack <= 0 && info.CrackCandidates > 0)
+            Line(string.Format(ci, "{0} border vertices lie within {1:0.###e-0} of another border edge (T-junctions or cracks between joined patches: nets and curvature stop there): set Cracks to {1:0.###e-0} to weld them.",
+                info.CrackCandidates, RoundUp(info.CrackCandidateDistance)));
         if (degenerate > 0) Line(string.Format(ci, "Removed {0} degenerate (zero-area or collapsed) faces.", degenerate));
         if (duplicate > 0) Line(string.Format(ci, "Removed {0} duplicate faces.", duplicate));
         if (info.IsolatedVertices > 0)
@@ -900,5 +1314,13 @@ public static class MeshCleanup
         if (info.Components > 1) Line(string.Format(ci, "{0} separate parts ({1} closed).", info.Components, info.ClosedComponents));
         if (sb.Length == 0) Line("Clean: nothing to repair.");
         return sb.ToString();
+    }
+
+    /// <summary>Rounds up to two significant digits (a value a user can type).</summary>
+    public static double RoundUp(double x)
+    {
+        if (!(x > 0)) return 0;
+        double e = Math.Pow(10, Math.Floor(Math.Log10(x)) - 1);
+        return Math.Ceiling(x / e) * e;
     }
 }

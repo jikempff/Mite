@@ -436,17 +436,59 @@ remains the self-test review page.
       & Heckbert 1997; Attene 2010 itself and Botsch et al. 2010 ch. 8 were
       not accessible (restricted PDF / book), only the abstract and the
       tutorial's summary of MeshFix.
+- [x] Mesh repair, next (b): cracks and T-junctions — 2026-11-01 (session 1,
+      D/A). `MeshCleanup.Options.CrackTolerance` (Grasshopper `Cracks`, input
+      and output appended): a border vertex within the distance of a border
+      edge it does not belong to is joined to it — merged into the nearer end
+      when that is within the distance, otherwise the edge's face is split at
+      the vertex (triangle → 2, quad → 3 triangles, n-gon → (n+1)-gon) — the
+      vertex–edge contraction of Borodin, Novotni & Klein 2002 in order of
+      increasing distance (priority queue, stale pairs re-measured), as given
+      in Botsch et al. 2007 course notes §4.4.4 / 2010 PMP §8.2 (the paper
+      itself was not fetchable; Barequet & Sharir 1995 for the border and
+      the ε as the a-priori gap size; Guéziec et al. 2001 for "no new complex
+      edges"; Rhino's MatchMeshEdge as the independent implementation:
+      vertices first, then split edges, nothing moved beyond the tolerance).
+      Runs before the orientation pass so winding crosses the mended seam.
+      Findings:
+      - The vertex must NOT be moved onto the chord (Borodin's merge point is
+        free). On the sphere from hemispheres with 24 / 48 meridians the 24
+        T-vertices sit the sagitta 0.00856 outside the lower chords; snapped
+        onto the chord the equator read K = −0.10 … 1.67, kept in place (the
+        edge bends through it) K = 0.80 … 1.38, mean 1.09, every vertex still
+        on the sphere; Gauss–Bonnet Σ deficit = 4π to 2e-13, χ = 2 either way.
+      - Zipping a double wall (two sheets 0.01 apart, Cracks 0.02) at its rim
+        tries to split a coarse corner face twice from the same fine
+        triangle: the second split would be that triangle's duplicate and
+        give its diagonal a third face. Every new edge of the split pieces
+        is checked, the snap refused and counted (`CracksLeft`, 2 of 32).
+      - On a hyperboloid from two bands rotated half a step (both seams
+        T-vertices of each other) 130 asymptotic curves end on the seam; after
+        the weld 54 rulings run rim to rim, bow 0.0045, 0.08° off the exact
+        rulings, length 0.15 % off 2√2; K on the mended seam −0.84 (truth −1,
+        the zigzag seam).
+      - Cost: none measurable (whole cleanup 0.47 → 0.40 s on 50 k faces,
+        4.7 → 4.5 s on 450 k; the border grid has a cell of max(edge, 2·tol)).
+      - With `Cracks` 0 the report probes at a tenth of the average edge
+        (0.05 missed the 24-meridian sagitta, which is 0.066 of the fine edge)
+        and names the value to set, rounded up to two digits.
+      Open: a vertex–vertex merge keeps the edge's end and moves the other
+      vertex onto it (≤ tolerance) — a midpoint would halve the move but
+      moves both; an automatic tolerance (the probe distance) once it has been
+      tried on real Rhino exports; the web app's OBJ / STL drop could probe
+      and offer the weld; the 1.4.0 mode catalogue needs no entry (a
+      distance, not a mode).
 - [ ] Mesh repair, next: (a) non-manifold edges and vertices are reported,
       not repaired — cut them by duplicating vertices (Guéziec, Taubin,
       Lazarus & Horn 2001, Cutting and stitching) and offer it as an option;
-      (b) T-junctions and cracks (a vertex lying on the other side's edge, a
-      seam with different vertex counts) are not welded — snap vertices into
-      edges within Tolerance (Borodin, Novotni & Klein 2002, Progressive gap
-      closing); (c) holes are counted (border loops), never filled: a hole
+      (c) holes are counted (border loops), never filled: a hole
       filler (Liepa 2003) only on request, since gridshell surfaces have
       intended borders; (d) self-intersections are not detected; (e) slivers
       inside quads are left (only triangles are collapsed / flipped); (f) a
-      bench card with a picture (the card has numbers only).
+      bench card with a picture (the card has numbers only); (g) cracks wider
+      than the tolerance on one side only (a chain of fine vertices against a
+      coarse edge that drifts away) — Barequet & Kumar's edge-pair score
+      would pair the chains instead of single vertices.
 
 ## E. Kinetic and adaptive asymptotic structures (new, top priority)
 
@@ -659,6 +701,12 @@ Open
 
 ## Done
 
+- [x] 2026-11-01 (session 1, D/A): Mesh Cleanup closes cracks and T-junctions
+      (`Cracks`): vertex–edge contraction in order of distance after Borodin
+      et al. 2002, vertices kept in place; exact tests on two flat patches, a
+      sphere from two hemispheres with different meridian counts (Gauss–Bonnet),
+      a double wall, and a hyperboloid whose rulings cross the mended seam;
+      two bench self-tests (77 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench

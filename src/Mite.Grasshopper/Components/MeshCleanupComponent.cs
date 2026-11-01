@@ -14,7 +14,9 @@ public class MeshCleanupComponent : MiteComponent
             "degenerate and duplicate faces, reduces collapsed faces, drops isolated vertices, and " +
             "unifies face winding (closed parts outward, open parts keep the winding most of their " +
             "area had). Sliver > 0 collapses needles and flips caps below that angle. Reports " +
-            "non-manifold edges, non-orientable parts and holes. Mite components weld exactly " +
+            "non-manifold edges, non-orientable parts and holes. Cracks > 0 closes cracks and T-junctions " +
+            "between joined patches (a border vertex within that distance of another border edge is joined to " +
+            "it, the edge split there), so nets and curvature run through the seam. Mite components weld exactly " +
             "coincident vertices on their own; run this first on meshes with near-coincident " +
             "vertices, slivers or mixed winding (joins, booleans, imports).",
             "Util", "MeshCleanup") { }
@@ -30,6 +32,14 @@ public class MeshCleanupComponent : MiteComponent
             "Triangles with an angle below this (degrees) are slivers: needles (longest edge ≥ 4 × shortest) are collapsed, " +
             "caps (one angle near 180°) have their long edge flipped, border caps are dropped. No vertex is moved. " +
             "0 = leave slivers (default); 1 is a good start", GH_ParamAccess.item, 0.0);
+        pManager.AddNumberParameter("Cracks", "Ck",
+            "Close cracks and T-junctions: a border vertex within this distance of a border edge it does not belong to is " +
+            "joined to it — merged into the nearer end when that is within the distance, otherwise the edge's face is split " +
+            "at the vertex (triangle → 2, quad → 3 triangles). Nothing moves but merged vertices (by at most this distance); " +
+            "a split edge bends through the vertex by at most this distance. Seams between joined patches with different " +
+            "vertex counts become ordinary interior edges, so nets and curvature run through them. 0 = off (default); the " +
+            "Report then says how many such vertices exist and which value welds them. Use the gap width, say 1e-3 of the span; " +
+            "a large value on a double wall zips the walls at their rim.", GH_ParamAccess.item, 0.0);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -42,6 +52,7 @@ public class MeshCleanupComponent : MiteComponent
         pManager.AddIntegerParameter("Slivers", "Sl", "Slivers removed (needles collapsed + caps flipped or dropped)", GH_ParamAccess.item);
         pManager.AddLineParameter("NonManifold", "N", "Edges shared by more than two faces (not repaired)", GH_ParamAccess.list);
         pManager.AddTextParameter("Report", "Rp", "What was repaired and what is left, one finding per line", GH_ParamAccess.item);
+        pManager.AddIntegerParameter("Cracks", "Ck", "Border vertices joined to another border edge or vertex by the crack pass (T-junctions, seams with different vertex counts)", GH_ParamAccess.item);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -55,6 +66,8 @@ public class MeshCleanupComponent : MiteComponent
         DA.GetData(2, ref unify);
         double sliver = 0.0;
         DA.GetData(3, ref sliver);
+        double cracks = 0.0;
+        DA.GetData(4, ref cracks);
         if (mesh.Vertices.Count == 0 || mesh.Faces.Count == 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "The mesh has no faces.");
@@ -78,11 +91,18 @@ public class MeshCleanupComponent : MiteComponent
             sliver = Math.Max(0.0, Math.Min(59.0, sliver));
         }
 
+        if (cracks < 0)
+        {
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Cracks must be 0 (off) or a distance; a negative value was ignored.");
+            cracks = 0.0;
+        }
+
         var result = MeshCleanup.Compute(data, new MeshCleanup.Options
         {
             WeldTolerance = tolerance,
             UnifyWinding = unify,
             SliverAngle = sliver,
+            CrackTolerance = cracks,
         });
         var info = result.Info;
 
@@ -103,6 +123,14 @@ public class MeshCleanupComponent : MiteComponent
                 ? $"{info.SliversLeft} triangles are still below {sliver:0.##}°: removing them would fold the mesh or change its topology."
                 : $"{info.SliversLeft} triangles have an angle below {MeshCleanup.ReportSliverAngle:0.##}° (smallest {info.MinAngleAfter:0.###}°): set Sliver to 1 to collapse or flip them.");
 
+        if (cracks <= 0 && info.CrackCandidates > 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
+                $"{info.CrackCandidates} border vertices lie within {MeshCleanup.RoundUp(info.CrackCandidateDistance):0.###e-0} of another border edge " +
+                $"(T-junctions or cracks between joined patches: nets and curvature stop there): set Cracks to {MeshCleanup.RoundUp(info.CrackCandidateDistance):0.###e-0} to weld them.");
+        if (info.CracksLeft > 0)
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning,
+                $"{info.CracksLeft} border vertices still lie within {cracks:0.###e-0} of another border edge: joining them would give an edge a third face or fold a face.");
+
         DA.SetData(0, MeshConvert.ToRhinoMesh(result.Mesh));
         DA.SetData(1, result.WeldedVertices);
         DA.SetData(2, removed);
@@ -114,5 +142,6 @@ public class MeshCleanupComponent : MiteComponent
             lines.Add(new Line(MeshConvert.ToRhinoPoint(result.Mesh.Vertices[a]), MeshConvert.ToRhinoPoint(result.Mesh.Vertices[b])));
         DA.SetDataList(6, lines);
         DA.SetData(7, info.Report);
+        DA.SetData(8, info.CracksClosed + info.CrackVerticesMerged);
     }
 }
