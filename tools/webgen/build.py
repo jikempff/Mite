@@ -16,49 +16,7 @@ TAB_BLURB = {
     "Kinetics": "Nets that move: scissor-jointed asymptotic grids as mechanisms.",
     "Util": "Mesh intake, projection and colouring helpers.",
 }
-COMP_ORDER = [
-    "Principal Curvature",
-    "Gaussian Curvature",
-    "Mean Curvature",
-    "Curvature Streamlines",
-    "Umbilics",
-    "Planarize Mesh",
-    "Minimal Surface",
-    "Force Density Method",
-    "Dynamic Relaxation",
-    "Asymptotic Net",
-    "Geodesic Net",
-    "Chebyshev Net",
-    "Conjugate Net",
-    "Geodesic Path",
-    "Net Trim",
-    "Mite Net",
-    "Asymptotic Web",
-    "Lath Analysis",
-    "Gridshell Analysis",
-    "Net Distributions",
-    "Mesh Isocurves",
-    "Lath Sweep",
-    "Net Joints",
-    "Lath Unroll",
-    "Lath Strip",
-    "Lath Segment",
-    "Lath Labels",
-    "Lath Preview",
-    "Flat Kit",
-    "Net Topology",
-    "Net Kinetics",
-    "Mesh Cleanup",
-    "Pull To Mesh",
-    "Mesh Colour Map",
-]
-COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Test Shape",
-              "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
-              "Asymptotic Net", "Geodesic Net", "AGG Web", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Web Propagation", "Asymptotic Web",
-              "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
-              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Flat Kit", "Net Topology",
-              "Net Kinetics",
-              "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
+COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Test Shape", "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation", "Asymptotic Net", "Asymptotic Web", "AGG Web", "Web Propagation", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Net Trim", "Mite Net", "Lath Analysis", "Gridshell Analysis", "Net Distributions", "Mesh Isocurves", "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Strip", "Lath Segment", "Lath Labels", "Lath Preview", "Flat Kit", "Net Topology", "Net Kinetics", "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 byname = {c["name"]: c for c in comps}
 assert set(COMP_ORDER) <= set(byname), set(COMP_ORDER) - set(byname)
 if set(byname) - set(COMP_ORDER): print("components without a bench card:", ", ".join(sorted(set(byname) - set(COMP_ORDER))))
@@ -120,7 +78,7 @@ for tab in TAB_ORDER:
         demo = note.get("demo")
         demo_html = ""
         if demo:
-            kind = "palette" if demo == "palette" else "hist" if note.get("hist") else "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sheet" if note.get("sheet") else "sparkline" if demo == "lathUtil" else "3d", kind = "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "plotKit" if note.get("plotKit") else "sparkline" if demo == "lathUtil" else "3d",
+            kind = "palette" if demo == "palette" else "hist" if note.get("hist") else "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "plotKit" if note.get("plotKit") else "sheet" if note.get("sheet") else "sparkline" if demo == "lathUtil" else "3d"
             controls = ""
             if note.get("before_after"):
                 controls = '<div class="demo-ctl"><label><input type="radio" name="ba-' + slug(n) + '" value="before"> input</label><label><input type="radio" name="ba-' + slug(n) + '" value="after" checked> result</label><label><input type="radio" name="ba-' + slug(n) + '" value="both"> both</label></div>'
@@ -136,6 +94,10 @@ for tab in TAB_ORDER:
             if note.get("sheet"):
                 controls = '<div class="demo-ctl"><span class="ctl-l">sheet</span><select></select></div>'
             if demo == "torusK":
+                mode = note.get("demoMode", "K")
+                controls = '<div class="demo-ctl"><span class="ctl-l">show</span>' + "".join(
+                    f'<label><input type="radio" name="tk-{slug(n)}" value="{m}" {"checked" if m == mode else ""}> {lbl}</label>'
+                    for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2")]) + '</div>'
             if demo == "curv":
                 # curvature against the exact truth: shape × quantity × (measured | exact | error)
                 mode = note.get("demoMode", "K")
@@ -147,7 +109,10 @@ for tab in TAB_ORDER:
                     for key, lbl in shapes) +
                     '<span class="ctl-l" style="flex-basis:100%"></span><span class="ctl-l">show</span>' + "".join(
                     f'<label><input type="radio" name="tk-{slug(n)}" value="{m}" {"checked" if m == mode else ""}> {lbl}</label>'
-                    for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2")]) + '</div>'
+                    for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2"), ("um", "|k1 − k2|")]) +
+                    '<span class="ctl-l">·</span>' + "".join(
+                    f'<label><input type="radio" name="vw-{slug(n)}" value="{m}" {"checked" if m == note.get("demoView", "measured") else ""}> {lbl}</label>'
+                    for m, lbl in [("measured", "measured"), ("truth", "exact"), ("error", "|error|")]) + '</div>')
             if demo == "palette":
                 controls = '<div class="demo-ctl"><span class="ctl-l">map</span>' + "".join(
                     f'<label><input type="radio" name="map-{slug(n)}" value="{k}" {"checked" if k == "div" else ""}> {lbl}</label>'
@@ -155,10 +120,6 @@ for tab in TAB_ORDER:
                     '<span class="ctl-l" style="margin-left:8px">colours</span>' + "".join(
                     f'<label><input type="radio" name="ver-{slug(n)}" value="{k}" {"checked" if k == "new" else ""}> {lbl}</label>'
                     for k, lbl in [("new", "Mite palette"), ("old", "1.3.0")]) + '</div>'
-                    for m, lbl in [("K", "K"), ("H", "H"), ("k1", "k1"), ("k2", "k2"), ("um", "|k1 − k2|")]) +
-                    '<span class="ctl-l">·</span>' + "".join(
-                    f'<label><input type="radio" name="vw-{slug(n)}" value="{m}" {"checked" if m == note.get("demoView", "measured") else ""}> {lbl}</label>'
-                    for m, lbl in [("measured", "measured"), ("truth", "exact"), ("error", "|error|")]) + '</div>')
             hint = "drag to rotate · scroll to zoom" if kind == "3d" else ""
             demo_html = f'<div class="demo{" tall" if note.get("tall") else ""}" data-demo="{demo}" data-kind="{kind}" data-id="{slug(n)}">{controls}<canvas></canvas><div class="demo-legend" id="lg-{slug(n)}"></div><div class="demo-hint">{hint}</div></div>'
         checks_html = ""

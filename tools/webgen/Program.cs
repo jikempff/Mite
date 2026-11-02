@@ -87,6 +87,13 @@ var sw = Stopwatch.StartNew();
         rows.Add(new { phi = R3(phi * 180 / Math.PI), K = R3(K[vi]), Kt = R3(Kt), H = R3(H[vi]), Ht = R3(Ht), k1 = R3(pc.K1[vi]), k2 = R3(pc.K2[vi]) });
     }
     numbers["torusCurvature"] = rows;
+    // per-vertex K, H, k1, k2 for the colour-map demos of the curvature cards (torus 64 × 32 = 2048 verts, quads)
+    {
+        var verts = torus.Vertices.Select(P).ToArray();
+        var faces = new List<int[]>();
+        for (int i = 0; i < 64; i++) for (int j = 0; j < 32; j++) { int a = i * 32 + j, b = ((i + 1) % 64) * 32 + j, c = ((i + 1) % 64) * 32 + (j + 1) % 32, d = i * 32 + (j + 1) % 32; faces.Add(new[] { a, b, c, d }); }
+        scenes["torusK"] = new { verts, faces = faces.ToArray(), values = K.Select(R3).ToArray(), valuesH = H.Select(R3).ToArray(), valuesK1 = pc.K1.Select(R3).ToArray(), valuesK2 = pc.K2.Select(R3).ToArray() };
+    }
     // isocurves K = 0
     var iso = MeshIsocurves.Compute(torus, K, new[] { 0.0 })[0];
     scenes["torusIso"] = new { wire = TorusWire(3, 1, 64, 32, 4, 4), iso = iso.Select(l => Line(l, 2)).ToArray() };
