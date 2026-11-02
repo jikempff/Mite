@@ -695,6 +695,7 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         double pulledDiff = pulled.Count == oa.GuideNodes.Count ? pulled.Zip(oa.GuideNodes, (x, y) => (x.pos - y).Length).Max() : double.NaN;
         scenes["asymCat_catenoidGuide"] = new { label = "catenoid, web from a guide (the waist)", wire = Edges(mesh, 6), a = A.Select(l => Line(l, 3)).ToArray(), b = B.Select(l => Line(l, 3)).ToArray(), guide = Line(guide, 1), nodes = oa.GuideNodes.Select(q => new[] { q.X, q.Y, q.Z }).ToArray() };
         numbers["asymGuide"] = new { nodes = oa.GuideNodes.Count, expectedNodes = n, a = A.Count, b = B.Count, ends = e.ends, boundaryEnds = e.boundary, tEnds = e.onCurve, floatingEnds = e.floating, worstOffset = R3(worstOff * 1000) / 1000, edge = R3(proj.AverageEdgeLength), through = R3(through * 1e6) / 1e6, gapErr = R3(gapErr * 1e6) / 1e6, pulledNodes = pulled.Count, pulledDiff = R3(pulledDiff * 1e6) / 1e6, spacing = S, ms = tt.ElapsedMilliseconds };
+    }
     // Flat Kit of the 3-fold Enneper web, nested on a 600 × 400 mm bed at 1 : 5 and 1 : 2.5:
     // first-fit shelves against the area bound and the 1.3.1 next-fit rule; strips longer than
     // the bed split into lapped pieces between the joints (nothing on a "longer bed" drawing)
@@ -1302,6 +1303,8 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         seqProfileOld = LsOld.Where((_, i) => i % 10 == 0).Select(x => Math.Round(x, 2)).ToArray(),
     };
     numbers["palette"] = pal;
+}
+
 // ---------- Net Distributions: spacing, crossing angles, utilization as distributions ----------
 {
     object Stats(Distribution d, double target = double.NaN) => new
@@ -1406,6 +1409,8 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         };
     }
     numbers["dist"] = distRows;
+}
+
 // ---------- Asymptotic Web (Schling): catenoid rotational web against the isothermal lattice ----------
 {
     var mesh = AnalyticShapes.Build("catenoid", 1.0, 1.2, 0, 64).ToTriangulated();
@@ -1460,6 +1465,8 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         rows[name] = new { message = Mite.Core.Modes.ModeCatalog.Message(name, _ => null), modes = list };
     }
     numbers["modes"] = new { components = rows.Count, inputs, problems, missing, byComponent = rows };
+}
+
 // ---- Runtime messages with the fix (Mite.Core.Diagnostics.InputAdvice) ----
 {
     // z = x² − 0.01 y² on [−0.3, 0.3]²: a saddle so shallow that the families
@@ -1524,6 +1531,8 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         alarms += l.Count; alarmText.AddRange(l.Select(x => name + ": " + x.Code));
     }
     numbers["advice"] = new { minAngle = minAngleRow, spacing = spacingRow, units = unitsRow, falseAlarms = alarms, falseAlarmText = alarmText };
+}
+
 // ---------- Farthest-point seeding (Layout 3; Mebarki, Alliez & Devillers 2005) ----------
 {
     var t = Stopwatch.StartNew();
