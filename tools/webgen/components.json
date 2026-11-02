@@ -883,6 +883,23 @@
     "access": "item",
     "default": null,
     "optional": true
+   },
+   {
+    "name": "Layer",
+    "nick": "Ly",
+    "type": "Integer",
+    "desc": "Layer of each lath along the surface normal, one per curve or one for all: 0 the layer on the surface, 1 the layer stacked on it, 2 the next … Laths of different layers meeting at a joint keep their own axes one lath depth apart and are bolted through a rigid link, so the forces handed between them act with that lever arm (torsion of the lower lath under a horizontal pull of the upper one). Empty = every axis on its curve, the single-node joint of earlier versions",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Align",
+    "nick": "Al",
+    "type": "Integer",
+    "desc": "Where layer 0 sits along the surface normal when Layer is given, as in Lath Sweep: 0 grows from the surface out (default), 1 centred on the surface, 2 grows from the surface in (layers then stack inward)",
+    "access": "item",
+    "default": "0"
    }
   ],
   "outputs": [
@@ -948,6 +965,14 @@
     "type": "Number",
     "desc": "Axial force per element in N (tension positive), one branch per lath",
     "access": "tree",
+    "default": null
+   },
+   {
+    "name": "ReactionMoments",
+    "nick": "Rm",
+    "type": "Vector",
+    "desc": "Reaction moment in N·m at each support node (zero at pinned supports)",
+    "access": "list",
     "default": null
    }
   ]

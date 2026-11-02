@@ -15,6 +15,35 @@ namespace Mite.Core.Analysis;
 /// are fixed or pinned. A first-order sanity check for gridshells — not a
 /// replacement for a full FE package, but it runs inside the definition and
 /// reports per-lath axial/bending utilization against an allowable stress.
+///
+/// Joint eccentricity (2026-11-02). Laths of a gridshell are stacked: at a
+/// crossing the axis of the upper lath lies a lath depth above the axis of the
+/// lower one, and the bolt through both is a short, stiff bar. With
+/// <see cref="Options.AxisOffsets"/> every lath keeps its own axis at a signed
+/// height h_c along the surface normal, while the frame's nodes stay on the
+/// surface (the reference points, where joints, supports and point loads are
+/// given). Each element end is tied to its reference node by a rigid link
+/// r = h_c · n: u_axis = u_node + θ × r, θ_axis = θ (small rotations), i.e.
+/// the 6 × 6 transfer T = [[I, −[r]×], [0, I]]; the element stiffness at the
+/// nodes is Tᵀ K T, loads lumped at the axis go to the node as Tᵀ f (the force
+/// itself plus the moment r × f), and the axis displacements for the force
+/// recovery are T u. This is the rigid end offset of the frame programs
+/// (Oasys GSA theory, "Offsets": "u_pseudo = T u_node", "f_node = Tᵀ f_pseudo",
+/// with the same T; Midas "Beam End Offsets", Karamba3D "Eccentricity on
+/// Beam"), the model D'Amico, Kermani &amp; Zhang 2014 (Form finding and
+/// structural analysis of actively bent timber grid shells, Eng. Struct. 81,
+/// §4.3.1) describe as placing the two lath layers "on staggered levels"
+/// linked at the nodes — "faithful to the real geometry" — and the layering
+/// Schling, Kilian, Wang, Schikore &amp; Pottmann 2018 (AAG 2018, §3.2)
+/// report for the timber asymptotic gridshell, whose lamella layers are
+/// "arranged on two levels". Forces transferred between the layers at a
+/// crossing therefore act with the lever arm of the stack: a horizontal force
+/// handed from the upper lath to the lower one twists the lower lath by
+/// e · F, which the single-node model of 1.3.x could not see. Erkmen &amp;
+/// Saleh 2012 (Eccentricity effects in the finite element modelling of
+/// composite beams, Adv. Eng. Softw. 52) note the limit of rigid-bar
+/// coupling for two *parallel* beams (discrete links over-constrain the slip);
+/// crossing laths are coupled at isolated points, where the link is exact.
 /// </summary>
 public static class FrameAnalysis
 {
@@ -87,6 +116,20 @@ public static class FrameAnalysis
 
         /// <summary>Concentrated forces (N) attached to the nearest node.</summary>
         public IReadOnlyList<(Vec3d Point, Vec3d Force)>? PointLoads { get; set; }
+
+        /// <summary>
+        /// Signed height of each lath's axis above the surface along its
+        /// normal (model units), one value per lath or a single value for
+        /// all; null or empty = every axis on its curve (the laths of a
+        /// crossing share one point, as before). With offsets the frame nodes
+        /// stay on the curves and every element end hangs on a rigid link
+        /// h · n from its node, so two laths stacked at a crossing are joined
+        /// through the lever arm of the stack (see the class remarks). For
+        /// laths of a <see cref="LathProfile"/> in layers, layer k has
+        /// h = profile.Lift + k · depth (<see cref="LathProfile.NormalHigh"/>
+        /// − <see cref="LathProfile.NormalLow"/>), outward.
+        /// </summary>
+        public IReadOnlyList<double>? AxisOffsets { get; set; }
     }
 
     public readonly struct Result
@@ -152,6 +195,29 @@ public static class FrameAnalysis
         /// <summary>Laths (by index) that no support reaches through the net; they are left out of the solve (zero displacement, zero utilization).</summary>
         public readonly int[] FloatingLaths;
 
+        /// <summary>Reaction moment per node (zero at free and pinned nodes), N·m, about the node.</summary>
+        public readonly Vec3d[] ReactionMoments;
+
+        /// <summary>
+        /// Largest lever arm between the axes of two laths meeting at a joint
+        /// (|h_i − h_j|, model units); 0 when every axis lies on its curve.
+        /// </summary>
+        public readonly double Eccentricity;
+
+        /// <summary>Signed axis height per lath along the surface normal: the beams of lath c run through Laths[c][i] + AxisOffsets[c] · n.</summary>
+        public readonly double[] AxisOffsets;
+
+        /// <summary>Moment of all applied loads about the origin (each lumped load at the beam axis where it acts), N·m.</summary>
+        public readonly Vec3d TotalMoment;
+
+        /// <summary>
+        /// |Σ (node × reaction + reaction moment) + TotalMoment| relative to the
+        /// applied moment: global moment equilibrium of the solution (≈ 1e-12
+        /// for a well-posed frame) — with axis offsets it checks that the
+        /// lever arms of the stacked laths are carried into the supports.
+        /// </summary>
+        public readonly double MomentEquilibriumError;
+
         public Result(Vec3d[] nodes, List<(int, int)>[] nodeMap, Vec3d[] displacements,
             double maxDisplacement, (int, int)[] elementSource,
             double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
@@ -165,7 +231,22 @@ public static class FrameAnalysis
             double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
             int supportNodeCount, double[] torsion, int[] supportNodes, Vec3d[] reactions,
             Vec3d totalLoad, double equilibriumError, Vec3d[][] laths, int jointCount, int[] floatingLaths)
+            : this(nodes, nodeMap, displacements, maxDisplacement, elementSource, axial, bendY, bendZ,
+                utilization, maxUtilization, supportNodeCount, torsion, supportNodes, reactions, totalLoad,
+                equilibriumError, laths, jointCount, floatingLaths, new Vec3d[nodes.Length], 0.0, new double[laths.Length], Vec3d.Zero, 0.0) { }
+
+        public Result(Vec3d[] nodes, List<(int, int)>[] nodeMap, Vec3d[] displacements,
+            double maxDisplacement, (int, int)[] elementSource,
+            double[] axial, double[] bendY, double[] bendZ, double[] utilization, double maxUtilization,
+            int supportNodeCount, double[] torsion, int[] supportNodes, Vec3d[] reactions,
+            Vec3d totalLoad, double equilibriumError, Vec3d[][] laths, int jointCount, int[] floatingLaths,
+            Vec3d[] reactionMoments, double eccentricity, double[] axisOffsets, Vec3d totalMoment, double momentEquilibriumError)
         {
+            TotalMoment = totalMoment;
+            MomentEquilibriumError = momentEquilibriumError;
+            ReactionMoments = reactionMoments;
+            Eccentricity = eccentricity;
+            AxisOffsets = axisOffsets;
             FloatingLaths = floatingLaths;
             SupportNodeCount = supportNodeCount;
             Nodes = nodes;
@@ -451,6 +532,27 @@ public static class FrameAnalysis
             };
         }
 
+        // ---- Axis offsets: the beams run h_c · n above the nodes -------------
+        var offsets = ResolveOffsets(options.AxisOffsets, laths.Count);
+        bool eccentric = false;
+        foreach (double h in offsets) if (h != 0.0) { eccentric = true; break; }
+        var proj = new MeshProjection(mesh);
+        var nodeNormal = new Vec3d[nodes.Count];
+        double eccentricity = 0.0;
+        if (eccentric)
+        {
+            for (int n = 0; n < nodes.Count; n++)
+            {
+                nodeNormal[n] = proj.ClosestPoint(nodes[n], proj.NearestVertexGlobal(nodes[n])).SmoothNormal.Normalized();
+                var ls = lathsAtNode[n];
+                if (ls == null || ls.Count < 2) continue;
+                double lo = double.MaxValue, hi = double.MinValue;
+                foreach (int c in ls) { lo = Math.Min(lo, offsets[c]); hi = Math.Max(hi, offsets[c]); }
+                eccentricity = Math.Max(eccentricity, hi - lo);
+            }
+        }
+        Vec3d Arm(int node, int curve) => eccentric ? offsets[curve] * nodeNormal[node] : Vec3d.Zero;
+
         // Supports: each support point holds the nearest node within snap
         var fixedDof = new bool[ndof];
         var supportNodes = new List<int>();
@@ -516,7 +618,6 @@ public static class FrameAnalysis
         }
 
         // ---- Assemble -----------------------------------------------------
-        var proj = new MeshProjection(mesh);
         var K = new Dictionary<long, double>();
         var F = new double[ndof];
         void AddK(int r, int c, double v)
@@ -533,18 +634,23 @@ public static class FrameAnalysis
         var torsion = new double[ne];
         var elemLen = new double[ne];
         var elemRot = new Vec3d[ne][]; // local axes [ex, ey, ez] per element
+        var elemArm = new Vec3d[ne][]; // rigid link from each end's node to the beam end (zero without offsets)
         var nodeRotStiff = new double[nodes.Count];
+        Vec3d totalMoment = Vec3d.Zero;
 
         for (int e = 0; e < ne; e++)
         {
-            Vec3d p1 = nodes[elemA[e]], p2 = nodes[elemB[e]];
+            Vec3d rA = Arm(elemA[e], elemCurve[e]), rB = Arm(elemB[e], elemCurve[e]);
+            elemArm[e] = new[] { rA, rB };
+            Vec3d p1 = nodes[elemA[e]] + rA, p2 = nodes[elemB[e]] + rB;
             Vec3d d = p2 - p1;
             double L = d.Length;
             if (L < 1e-12) continue;
             elemLen[e] = L;
 
             Vec3d ex = d / L;
-            Vec3d nrm = proj.ClosestPoint(0.5 * (p1 + p2), proj.NearestVertexGlobal(0.5 * (p1 + p2))).SmoothNormal;
+            Vec3d mid = 0.5 * (nodes[elemA[e]] + nodes[elemB[e]]);
+            Vec3d nrm = proj.ClosestPoint(mid, proj.NearestVertexGlobal(mid)).SmoothNormal;
             Vec3d ey;
             if (profile.Upright)
             {
@@ -568,8 +674,9 @@ public static class FrameAnalysis
             nodeRotStiff[elemA[e]] = Math.Max(nodeRotStiff[elemA[e]], kr);
             nodeRotStiff[elemB[e]] = Math.Max(nodeRotStiff[elemB[e]], kr);
 
-            // K_global += Tᵀ ke T with T = diag(Q, Q, Q, Q), Q rows = local axes
+            // K_global = Tᵀ ke T with T = diag(Q, Q, Q, Q), Q rows = local axes
             var dofs = ElemDofs(e);
+            var kg = new double[12, 12];
             for (int r = 0; r < 12; r++)
             {
                 int rb = r / 3 * 3, ra = r % 3;
@@ -584,17 +691,29 @@ public static class FrameAnalysis
                         for (int b = 0; b < 3; b++)
                             sum += qa * ke[rb + a, cb + b] * Component(rot[b], ca);
                     }
-                    AddK(dofs[r], dofs[c], sum);
+                    kg[r, c] = sum;
                 }
             }
+            // beam ends on rigid links from their nodes: K_nodes = Hᵀ K_axis H
+            if (eccentric) kg = OffsetStiffness(kg, rA, rB);
+            for (int r = 0; r < 12; r++)
+                for (int c = 0; c < 12; c++)
+                    AddK(dofs[r], dofs[c], kg[r, c]);
 
-            // Distributed load -> lumped nodal forces
+            // Distributed load -> lumped forces at the beam ends; an end on a
+            // rigid link hands its node the force and the moment r × f
             Vec3d f = 0.5 * L * q;
-            foreach (int node in new[] { elemA[e], elemB[e] })
+            for (int end = 0; end < 2; end++)
             {
+                int node = end == 0 ? elemA[e] : elemB[e];
                 F[transBase[node] + 0] += f.X;
                 F[transBase[node] + 1] += f.Y;
                 F[transBase[node] + 2] += f.Z;
+                if (anchored.Contains(CFind(node))) totalMoment = totalMoment + Vec3d.Cross(nodes[node] + elemArm[e][end], f);
+                if (!eccentric) continue;
+                Vec3d m = Vec3d.Cross(elemArm[e][end], f);
+                int rbase = dofs[end * 6 + 3];
+                F[rbase + 0] += m.X; F[rbase + 1] += m.Y; F[rbase + 2] += m.Z;
             }
         }
 
@@ -638,6 +757,7 @@ public static class FrameAnalysis
                 int best = NearestNode(nodeGrid, nodes, pt, snap);
                 if (best < 0) best = NearestNodeBrute(nodes, pt);
                 F[transBase[best] + 0] += force.X; F[transBase[best] + 1] += force.Y; F[transBase[best] + 2] += force.Z;
+                if (anchored.Contains(CFind(best))) totalMoment = totalMoment + Vec3d.Cross(nodes[best], force);
             }
         }
 
@@ -714,14 +834,32 @@ public static class FrameAnalysis
             reactDof[r] += kv.Value * U(c);
         }
         var reactions = new Vec3d[nodes.Count];
+        var reactionMoments = new Vec3d[nodes.Count];
         Vec3d reactionSum = Vec3d.Zero;
         foreach (int n in supportNodes)
         {
             var r = new Vec3d(reactDof[transBase[n]] - F[transBase[n]], reactDof[transBase[n] + 1] - F[transBase[n] + 1], reactDof[transBase[n] + 2] - F[transBase[n] + 2]);
             reactions[n] = r;
             reactionSum = reactionSum + r;
+            if (options.Support == SupportKind.Fixed)
+            {
+                Vec3d m = Vec3d.Zero;
+                foreach (int rb in rotBlocks[n])
+                    m = m + new Vec3d(reactDof[rb] - F[rb], reactDof[rb + 1] - F[rb + 1], reactDof[rb + 2] - F[rb + 2]);
+                reactionMoments[n] = m;
+            }
         }
         double eqErr = totalLoad.Length > 0 ? (reactionSum + totalLoad).Length / totalLoad.Length : 0.0;
+        Vec3d momentSum = Vec3d.Zero;
+        foreach (int n in supportNodes) momentSum = momentSum + Vec3d.Cross(nodes[n], reactions[n]) + reactionMoments[n];
+        var (bbLo, bbHi) = (nodes[0], nodes[0]);
+        foreach (var p in nodes)
+        {
+            bbLo = new Vec3d(Math.Min(bbLo.X, p.X), Math.Min(bbLo.Y, p.Y), Math.Min(bbLo.Z, p.Z));
+            bbHi = new Vec3d(Math.Max(bbHi.X, p.X), Math.Max(bbHi.Y, p.Y), Math.Max(bbHi.Z, p.Z));
+        }
+        double momentScale = Math.Max(totalMoment.Length, totalLoad.Length * (bbHi - bbLo).Length);
+        double momentErr = momentScale > 0 ? (momentSum + totalMoment).Length / momentScale : 0.0;
 
         // ---- Element forces and utilization --------------------------------
         var utilization = new double[ne];
@@ -732,12 +870,23 @@ public static class FrameAnalysis
             double L = elemLen[e];
             var dofs = ElemDofs(e);
             var rot = elemRot[e];
+            // global end displacements: a beam end on a rigid link moves by u + θ × r
+            var ug = new double[12];
+            for (int i = 0; i < 12; i++) ug[i] = U(dofs[i]);
+            if (eccentric)
+                for (int end = 0; end < 2; end++)
+                {
+                    int t = end * 6;
+                    var th = new Vec3d(ug[t + 3], ug[t + 4], ug[t + 5]);
+                    Vec3d dv = Vec3d.Cross(th, elemArm[e][end]);
+                    ug[t] += dv.X; ug[t + 1] += dv.Y; ug[t + 2] += dv.Z;
+                }
             var ul = new double[12];
             for (int blk = 0; blk < 4; blk++)
                 for (int a = 0; a < 3; a++)
                 {
                     double sum = 0;
-                    for (int b = 0; b < 3; b++) sum += Component(rot[a], b) * U(dofs[blk * 3 + b]);
+                    for (int b = 0; b < 3; b++) sum += Component(rot[a], b) * ug[blk * 3 + b];
                     ul[blk * 3 + a] = sum;
                 }
 
@@ -760,7 +909,61 @@ public static class FrameAnalysis
 
         return new Result(nodes.ToArray(), nodeMap.ToArray(), displacements, maxDisp,
             elemSrc.ToArray(), axial, bendY, bendZ, utilization, maxUtil, supportNodes.Count,
-            torsion, supportNodes.ToArray(), reactions, totalLoad, eqErr, lathsW, jointCount, floatingCurves.OrderBy(c => c).ToArray());
+            torsion, supportNodes.ToArray(), reactions, totalLoad, eqErr, lathsW, jointCount, floatingCurves.OrderBy(c => c).ToArray(),
+            reactionMoments, eccentricity, offsets, totalMoment, momentErr);
+    }
+
+    /// <summary>One axis offset per lath from the option (null / empty → zeros, one value → all laths).</summary>
+    private static double[] ResolveOffsets(IReadOnlyList<double>? given, int lathCount)
+    {
+        var h = new double[lathCount];
+        if (given == null || given.Count == 0) return h;
+        if (given.Count != 1 && given.Count != lathCount)
+            throw new ArgumentException($"AxisOffsets has {given.Count} values for {lathCount} laths: give one per lath or one for all.", nameof(given));
+        for (int c = 0; c < lathCount; c++)
+        {
+            double v = given[given.Count == 1 ? 0 : c];
+            if (double.IsNaN(v) || double.IsInfinity(v)) throw new ArgumentException("AxisOffsets must be finite.", nameof(given));
+            h[c] = v;
+        }
+        return h;
+    }
+
+    /// <summary>
+    /// Rigid end offsets: K_nodes = Hᵀ K_axis H with H = diag(H_A, H_B),
+    /// H_end = [[I, −[r]×], [0, I]] so that u_axis = u_node + θ × r and
+    /// θ_axis = θ (GSA theory, "Offsets"; see the class remarks).
+    /// </summary>
+    public static double[,] OffsetStiffness(double[,] kg, Vec3d rA, Vec3d rB)
+    {
+        var H = new double[12, 12];
+        for (int i = 0; i < 12; i++) H[i, i] = 1.0;
+        void Link(int t, Vec3d r)
+        {
+            // S = −[r]×: u += S θ  ⇔  u += θ × r
+            H[t + 0, t + 4] = r.Z; H[t + 0, t + 5] = -r.Y;
+            H[t + 1, t + 3] = -r.Z; H[t + 1, t + 5] = r.X;
+            H[t + 2, t + 3] = r.Y; H[t + 2, t + 4] = -r.X;
+        }
+        Link(0, rA);
+        Link(6, rB);
+        var kh = new double[12, 12]; // kg H
+        for (int i = 0; i < 12; i++)
+            for (int j = 0; j < 12; j++)
+            {
+                double s = 0;
+                for (int k = 0; k < 12; k++) s += kg[i, k] * H[k, j];
+                kh[i, j] = s;
+            }
+        var res = new double[12, 12]; // Hᵀ (kg H)
+        for (int i = 0; i < 12; i++)
+            for (int j = 0; j < 12; j++)
+            {
+                double s = 0;
+                for (int k = 0; k < 12; k++) s += H[k, i] * kh[k, j];
+                res[i, j] = s;
+            }
+        return res;
     }
 
     private static int NearestNode(PointGrid grid, List<Vec3d> nodes, Vec3d p, double radius)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Grasshopper;
 using Grasshopper.Kernel;
 using Rhino.Geometry;
@@ -45,9 +46,12 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddNumberParameter("AreaLoad", "q", "Vertical area load in N/m² on the mesh area (snow, cladding), shared by the laths per metre of length (0 = none)", GH_ParamAccess.item, 0.0);
         pManager.AddPointParameter("LoadPoints", "Lp", "Points where concentrated forces act (attached to the nearest node)", GH_ParamAccess.list);
         pManager.AddVectorParameter("Forces", "F", "Force in N per load point (one per point, or one for all)", GH_ParamAccess.list);
+        pManager.AddIntegerParameter("Layer", "Ly", "Layer of each lath along the surface normal, one per curve or one for all: 0 the layer on the surface, 1 the layer stacked on it, 2 the next … Laths of different layers meeting at a joint keep their own axes one lath depth apart and are bolted through a rigid link, so the forces handed between them act with that lever arm (torsion of the lower lath under a horizontal pull of the upper one). Empty = every axis on its curve, the single-node joint of earlier versions", GH_ParamAccess.list);
+        pManager.AddIntegerParameter("Align", "Al", "Where layer 0 sits along the surface normal when Layer is given, as in Lath Sweep: 0 grows from the surface out (default), 1 centred on the surface, 2 grows from the surface in (layers then stack inward)", GH_ParamAccess.item, 0);
         pManager[2].Optional = true;
         pManager[19].Optional = true;
         pManager[20].Optional = true;
+        pManager[21].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -63,6 +67,7 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager.AddPointParameter("SupportNodes", "Sn", "The frame nodes the supports hold", GH_ParamAccess.list);
         pManager.AddVectorParameter("Reactions", "R", "Reaction force in N at each support node", GH_ParamAccess.list);
         pManager.AddTextParameter("Report", "Rp", "Totals: applied load, reactions, equilibrium error, joints, supports", GH_ParamAccess.item);
+        pManager.AddVectorParameter("ReactionMoments", "Rm", "Reaction moment in N·m at each support node (zero at pinned supports)", GH_ParamAccess.list);
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -99,6 +104,10 @@ public class GridshellAnalysisComponent : MiteComponent
         var loadPts = new List<Point3d>(); var forces = new List<Vector3d>();
         DA.GetDataList(19, loadPts);
         DA.GetDataList(20, forces);
+        var layers = new List<int>();
+        DA.GetDataList(21, layers);
+        int align = 0;
+        DA.GetData(22, ref align);
 
         if (supports.Count == 0)
         {
@@ -155,6 +164,27 @@ public class GridshellAnalysisComponent : MiteComponent
         var supportPts = new List<Vec3d>();
         foreach (var p in supports) supportPts.Add(s * MeshConvert.ToVec3d(p));
 
+        // Layers: lath axes stacked along the normal, one lath depth per layer
+        // (metres, like the profile); empty = every axis on its curve
+        List<double>? axisOffsets = null;
+        if (layers.Count > 0)
+        {
+            if (layers.Count != 1 && layers.Count != curves.Count)
+            {
+                AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Layer has {layers.Count} values for {curves.Count} curves: give one per curve or one for all.");
+                return;
+            }
+            var aligned = profile.WithAlign(AlignOf(align));
+            double depth = aligned.NormalHigh - aligned.NormalLow;
+            double sign = align == 2 ? -1.0 : 1.0;
+            axisOffsets = new List<double>(laths.Count);
+            foreach (int ci in lathIndex)
+            {
+                int layer = Math.Max(0, layers[layers.Count == 1 ? 0 : ci]);
+                axisOffsets.Add(aligned.Lift + sign * layer * depth);
+            }
+        }
+
         List<(Vec3d, Vec3d)>? pointLoads = null;
         if (loadPts.Count > 0 && forces.Count > 0)
         {
@@ -176,6 +206,7 @@ public class GridshellAnalysisComponent : MiteComponent
                     JointRotationalStiffness = jointK < 0 ? double.PositiveInfinity : jointK,
                     Density = Math.Max(0, density), AreaLoad = areaLoad,
                     PointLoads = pointLoads,
+                    AxisOffsets = axisOffsets,
                 });
         }
         catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
@@ -240,13 +271,16 @@ public class GridshellAnalysisComponent : MiteComponent
         DA.SetDataList(5, nodes);
         DA.SetDataList(6, disps);
         DA.SetDataTree(7, axialTree);
-        var supNodes = new List<Point3d>(); var reacts = new List<Vector3d>();
-        foreach (int n in result.SupportNodes) { supNodes.Add(MeshConvert.ToRhinoPoint(inv * result.Nodes[n])); reacts.Add(MeshConvert.ToRhinoVector(result.Reactions[n])); }
+        var supNodes = new List<Point3d>(); var reacts = new List<Vector3d>(); var moments = new List<Vector3d>();
+        foreach (int n in result.SupportNodes) { supNodes.Add(MeshConvert.ToRhinoPoint(inv * result.Nodes[n])); reacts.Add(MeshConvert.ToRhinoVector(result.Reactions[n])); moments.Add(MeshConvert.ToRhinoVector(result.ReactionMoments[n])); }
         DA.SetDataList(8, supNodes);
         DA.SetDataList(9, reacts);
+        DA.SetDataList(11, moments);
         var sumR = Vec3d.Zero; foreach (int n in result.SupportNodes) sumR = sumR + result.Reactions[n];
+        string stack = axisOffsets == null ? "lath axes on the curves"
+            : $"{layers.Distinct().Count()} layer(s) · joint eccentricity {result.Eccentricity * 1000:0.#} mm · moment equilibrium error {result.MomentEquilibriumError:E1}";
         DA.SetData(10, $"load {result.TotalLoad.Z / 1000:0.###} kN (vertical) · reactions {sumR.Z / 1000:0.###} kN · equilibrium error {result.EquilibriumError:E1}\n" +
-            $"{result.Nodes.Length} nodes · {result.Utilization.Length} elements · {result.JointCount} joints · {result.SupportNodeCount} supports ({(supportType == 1 ? "pinned" : "fixed")}) · joints {(jointK < 0 ? "rigid" : jointK == 0 ? "hinged" : $"k = {jointK:G3} N·m/rad")}\n" +
+            $"{result.Nodes.Length} nodes · {result.Utilization.Length} elements · {result.JointCount} joints · {result.SupportNodeCount} supports ({(supportType == 1 ? "pinned" : "fixed")}) · joints {(jointK < 0 ? "rigid" : jointK == 0 ? "hinged" : $"k = {jointK:G3} N·m/rad")} · {stack}\n" +
             $"max displacement {result.MaxDisplacement * 1000:0.#} mm · peak utilization {result.MaxUtilization:0.00}");
 
         if (result.MaxUtilization > 1.0)

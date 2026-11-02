@@ -25,8 +25,9 @@ where they overlap
    2026-09-27 (1.3.0, `AsymptoticWeb`, `AagWeb`); next items in G below.
 2. Structural analysis that can be trusted: chosen supports (done: border /
    lowest / picked, fixed / pinned), joint model (done: rigid / hinge /
-   semi-rigid), loads (done: self-weight, area, point); next: buckling, joint
-   eccentricity, the AAG erection sequence.
+   semi-rigid), loads (done: self-weight, area, point), joint eccentricity
+   (done 2026-11-02: laths in layers on rigid end offsets, see D); next:
+   buckling, the AAG erection sequence.
 3. The kinetic behaviour of any web in the browser (done for scissor / lift /
    spread drives, 1.3.0; the flat state as the assembly state — press flat,
    the 3-fold Enneper web into a hexagon — 1.3.1); next: speed, strain
@@ -412,6 +413,60 @@ remains the self-test review page.
       (Shell Structures for Architecture) — kinetic damping details,
       bending-active DR (Lienhard 2014, Bending-active structures;
       D'Amico et al. 2014 for elastic gridshell DR with bending stiffness).
+- [x] Joint eccentricity in Gridshell Analysis — 2026-11-02 (session 1,
+      José's priority 2 "next: … joint eccentricity"). `FrameAnalysis.Options.
+      AxisOffsets` (signed height of each lath's axis along the surface normal),
+      `Layer` / `Align` inputs on the component (layer k → axis at Lift +
+      k · depth of the profile), `ReactionMoments` output, `Result.Eccentricity`,
+      `TotalMoment`, `MomentEquilibriumError`. The frame's nodes stay on the
+      surface (where joints, supports and point loads are given) and every beam
+      end hangs on a rigid link r = h · n: u_axis = u_node + θ × r, θ shared,
+      K_nodes = Hᵀ K H with H_end = [[I, −[r]×], [0, I]], lumped loads go to the
+      node as the force plus r × f, recovery from H u — the rigid end offset of
+      Oasys GSA ("Offsets" theory page: u_pseudo = T u_node, f_node = Tᵀ
+      f_pseudo, same T), Midas Beam End Offsets and Karamba3D's beam
+      eccentricity, and the "staggered levels" model D'Amico, Kermani & Zhang
+      2014 (Eng. Struct. 81, §4.3.1) call faithful to the geometry (they keep a
+      single node for stability of their nonlinear solve; the linear rigid-link
+      form here has no small link element, so no conditioning cost). Layering
+      after Schling et al. 2018 (AAG 2018, §3.2: the timber asymptotic
+      gridshell's lamella layers "arranged on two levels"); the caveat of
+      Erkmen & Saleh 2012 (rigid bars over-constrain the slip of *parallel*
+      composite beams) does not apply to laths coupled at isolated crossings.
+      Measured (`EccentricJointTests`, bench Gridshell Analysis card): L-frame,
+      1-element cantilever A (4 m, flat 100 × 20) with a 2 m lath B on its tip
+      50 mm above it, 300 N/m along B → torsion of A = e·q·b = 30 N·m to
+      1.1e-10, reaction torque the same, tip deflection P L³/3EI to 1e-9, B's
+      far node moved by v + q b²/2EA and −θz·b to 1e-9, twist 0.122 rad; the
+      same frame under a vertical load: every element force and reaction equal
+      to the e = 0 run to 1e-9 (statically determinate, offsets ∥ load);
+      Hᵀ K H symmetric to 1e-12, rigid motions of the nodes cost 0 to 1e-10;
+      hyperboloid ruling grid (16 + 16 rulings, 144 joints, rim fixed) with
+      family − one depth (60 mm) above family +: force and moment equilibrium
+      to 1e-12 for wind and gravity, rigid and scissor joints; wind 1 kN/m:
+      displacement 32.0 → 29.4 mm, utilization 3.31 → 3.29; gravity: 2.99 →
+      2.90 mm, 0.926 → 0.950. Bench saddle net (80 × 12 upright, 525 joints,
+      e = 80 mm): wind utilization 0.86 → 0.98, displacement 2.12 → 2.04 mm;
+      gravity 1.001 → 1.017. Without `Layer` every number is bit-identical to
+      before (the stiffness scatter and load lumping are the same code path).
+      Findings: (1) with r ∥ n the vertical load produces no eccentric moment
+      (r × f = 0) and a determinate frame's forces do not change — the stack
+      matters for horizontal loads and for indeterminate nets, where the layer
+      stiffens and shifts the load paths (the saddle net's displacement drops
+      5 % while its peak stress rises 14 %); (2) the Displacements output is
+      the surface node's, not the axis's: the two differ by θ × r, which
+      cancels back at the lath's own nodes, so deformed curves stay on the
+      surface points; (3) the T-junction coupling counts rim ends sharing a
+      point as joints (144 of 112 crossings on the hyperboloid grid).
+      Open: per-family profiles (the 10-27 bundle) give each layer its own
+      depth — then h = Σ depths of the layers below + ½ own depth; the Mite
+      Net wire (1.4.0) can set `Layer` from the family; a support on an offset
+      lath holds the surface point with a rigid bracket to the axis (a pinned
+      support then carries the axial force with the arm h — document or add a
+      "support on the axis" switch); the shear-block coupled double layer of
+      Downland / Mannheim (two parallel laths per rib, D'Amico 2014 c_s) is not
+      this model; buckling (10-26b) should take the offsets through the same
+      H (K_g too).
 - [ ] Lath bending and fabrication: Pottmann, Eigensatz, Vaxman, Wallner
       2015 (Architectural geometry review); Tang, Kilian, Bo, Wallner,
       Pottmann 2016 (Analysis and design of curved support structures);
@@ -659,6 +714,10 @@ Open
 
 ## Done
 
+- [x] 2026-11-02 (session 1, D / priority 2): joint eccentricity in Gridshell
+      Analysis — laths in layers on rigid end offsets (`AxisOffsets`, `Layer`
+      / `Align`, `ReactionMoments`, moment equilibrium), five exact tests, two
+      bench self-tests (77 PASS).
 - [x] 2026-10-09 (session 1, A/D): dirty meshes for Mesh Cleanup and mesh
       repair — outward / majority winding, isolated vertices, needles and
       caps (`Sliver`), a defect report, 15 exact dirty-mesh tests, four bench
