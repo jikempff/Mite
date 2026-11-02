@@ -1187,8 +1187,6 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         scenes["dynrelaxGrid"] = new { before = GridWire(gm, nx, ny, 1), after = GridWire(new MeshData(gs.Vertices, gq.Faces), nx, ny, 1) };
         numbers["dynrelaxGrid"] = new { laths = gs.Laths.Length, iterations = gs.Iterations, resets = gs.Resets, converged = gs.Converged, ms = t.ElapsedMilliseconds, rise = R3(rise), riseExact = R3(riseExact), riseErr = worstRise, rowOff = worstRow, arc, maxCurv = R3(maxCurv), curvExact = R3(curvExact) };
     }
-    // Planarization: noisy grid
-    numbers["dynrelax"] = new { iterations = dr.Iterations, converged = dr.Converged, ms = t.ElapsedMilliseconds, sag = R3(-dr.Vertices.Min(p => p.Z)), residual = dr.Residual, maxForce = R3(dr.EdgeForces.Max()), minForce = R3(dr.EdgeForces.Min()) };
     // Planarization: noisy grid — the projection loop (Method 0) against the guided projection (Method 1)
     var rng = new Random(3); var nz = (Vec3d[])grid.Vertices.Clone();
     for (int i = 0; i < nz.Length; i++) nz[i] = new Vec3d(nz[i].X, nz[i].Y, 0.3 * Math.Sin(nz[i].X * 0.7) * Math.Cos(nz[i].Y * 0.5) + 0.15 * (rng.NextDouble() - 0.5));
@@ -1713,7 +1711,8 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         {
             string type = p.GetProperty("type").GetString()!, access = p.GetProperty("access").GetString()!, pn = p.GetProperty("name").GetString()!;
             string desc = p.GetProperty("desc").GetString()!;
-            bool modeLike = access == "item" && (type == "Boolean" || (type == "Integer"
+            bool hasDefault = p.TryGetProperty("default", out var dflt) && dflt.ValueKind != JsonValueKind.Null;
+            bool modeLike = access == "item" && hasDefault && (type == "Boolean" || (type == "Integer"
                 && System.Text.RegularExpressions.Regex.IsMatch(desc, @"(?<![\d\-−])0 =") && System.Text.RegularExpressions.Regex.IsMatch(desc, @"(?<![\d\-−])1 =")));
             if (modeLike && modes.All(m => m.Input != pn)) missing.Add(name + "." + pn);
         }

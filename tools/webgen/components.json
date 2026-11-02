@@ -97,15 +97,6 @@
     "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed), 3 = farthest-point fill (each new curve starts in the middle of the widest gap left, Mebarki et al. 2005: no gap wider than 1.6 x Spacing, fewer T-junctions, gaps less uniform than 0). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
-   },
-   {
-    "name": "Guide",
-    "nick": "Gd",
-    "type": "Curve",
-    "desc": "Guide (seed) curve: when given, each family is a web seeded from it instead of the border or the seed cross, whatever Layout says. The curve is pulled onto the mesh and nodes are placed every Spacing of arc length along it (centred on an open curve; L / round(L / Spacing) apart on a closed one); one curve runs through every node, border to border, so both families of a net cross at every node — Schling's layout (the node distance along the seed curve is the repeated parameter). Neighbouring curves are then Spacing × sin(angle to the guide) apart. A guide along one family's own curve seeds only the other family. Geodesics leave the guide with the first Direction carried along it by parallel transport (Pottmann et al. 2010). Gaps elsewhere are filled as for the other webs.",
-    "access": "item",
-    "default": null,
-    "optional": true
    }
   ],
   "outputs": [
@@ -416,6 +407,14 @@
     "desc": "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends. Laths as polylines through the nodes (straight segments of EdgeLength)",
     "access": "item",
     "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Nodes placed, largest edge-length error, shear-angle range, nodes refused by MinAngle (locked) and compass steps that left the mesh",
+    "access": "item",
+    "default": null
    }
   ]
  },
@@ -500,15 +499,6 @@
     "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed), 3 = farthest-point fill (each new curve starts in the middle of the widest gap left, Mebarki et al. 2005: no gap wider than 1.6 x Spacing, fewer T-junctions, gaps less uniform than 0). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
-   },
-   {
-    "name": "Guide",
-    "nick": "Gd",
-    "type": "Curve",
-    "desc": "Guide (seed) curve: when given, each family is a web seeded from it instead of the border or the seed cross, whatever Layout says. The curve is pulled onto the mesh and nodes are placed every Spacing of arc length along it (centred on an open curve; L / round(L / Spacing) apart on a closed one); one curve runs through every node, border to border, so both families of a net cross at every node — Schling's layout (the node distance along the seed curve is the repeated parameter). Neighbouring curves are then Spacing × sin(angle to the guide) apart. A guide along one family's own curve seeds only the other family. Geodesics leave the guide with the first Direction carried along it by parallel transport (Pottmann et al. 2010). Gaps elsewhere are filled as for the other webs.",
-    "access": "item",
-    "default": null,
-    "optional": true
    }
   ],
   "outputs": [
@@ -944,15 +934,6 @@
     "desc": "Layout of the family: 0 = evenly spaced fill (new geodesics beside existing ones, stopped where they converge; T-junctions), 1 = web from the border edge nearest the seed (every geodesic runs until it leaves the mesh, seeds every Spacing along the edge at BorderAngle), 2 = web from the seed cross (seeds every Spacing along the geodesic through the seed perpendicular to Direction, each parallel-transported). Webs never merge; geodesics converge where K > 0 and diverge where K < 0 (Jacobi), so their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
-   },
-   {
-    "name": "Guide",
-    "nick": "Gd",
-    "type": "Curve",
-    "desc": "Guide (seed) curve: when given, the family is a web seeded from it instead of the border or the seed cross, whatever Layout says. The curve is pulled onto the mesh and nodes are placed every Spacing of arc length along it (centred on an open curve; L / round(L / Spacing) apart on a closed one); one curve runs through every node, border to border, so both families of a net cross at every node — Schling's layout (the node distance along the seed curve is the repeated parameter). Neighbouring curves are then Spacing × sin(angle to the guide) apart. A guide along one family's own curve seeds only the other family. Geodesics leave the guide with the first Direction carried along it by parallel transport (Pottmann et al. 2010). Gaps elsewhere are filled as for the other webs.",
-    "access": "item",
-    "default": null,
-    "optional": true
    }
   ],
   "outputs": [
@@ -1055,7 +1036,7 @@
   "file": "GridshellAnalysisComponent.cs",
   "name": "Gridshell Analysis",
   "nick": "GridFE",
-  "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the strip section, coupled at net crossings; supports are fixed points. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. A first-order sanity check, not a full FE package.",
+  "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the strip section, coupled at net crossings (rigid, scissor hinge or semi-rigid about the surface normal); supports are fixed or pinned points; loads per metre of lath, self-weight, area load and point loads. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. A first-order sanity check, not a full FE package.",
   "tab": "Analysis",
   "icon": "GridshellAnalysis",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF3",
@@ -1186,6 +1167,56 @@
     "optional": true
    },
    {
+    "name": "SupportType",
+    "nick": "St",
+    "type": "Integer",
+    "desc": "0 = fixed (all six degrees of freedom), 1 = pinned (translations held, rotations free)",
+    "access": "item",
+    "default": "0"
+   },
+   {
+    "name": "JointStiffness",
+    "nick": "Jk",
+    "type": "Number",
+    "desc": "Rotational stiffness of the joints about the surface normal in N·m/rad: −1 = rigid (default), 0 = free scissor hinge (a bolt along the normal), > 0 semi-rigid bolted joint",
+    "access": "item",
+    "default": "-1.0"
+   },
+   {
+    "name": "Density",
+    "nick": "ρ",
+    "type": "Number",
+    "desc": "Material density in kg/m³ for self-weight (0 = none; timber ≈ 450, steel 7850)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "AreaLoad",
+    "nick": "q",
+    "type": "Number",
+    "desc": "Vertical area load in N/m² on the mesh area (snow, cladding), shared by the laths per metre of length (0 = none)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "LoadPoints",
+    "nick": "Lp",
+    "type": "Point",
+    "desc": "Points where concentrated forces act (attached to the nearest node)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Forces",
+    "nick": "F",
+    "type": "Vector",
+    "desc": "Force in N per load point (one per point, or one for all)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
     "name": "Layer",
     "nick": "Ly",
     "type": "Integer",
@@ -1266,6 +1297,30 @@
     "type": "Number",
     "desc": "Axial force per element in N (tension positive), one branch per lath",
     "access": "tree",
+    "default": null
+   },
+   {
+    "name": "SupportNodes",
+    "nick": "Sn",
+    "type": "Point",
+    "desc": "The frame nodes the supports hold",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Reactions",
+    "nick": "R",
+    "type": "Vector",
+    "desc": "Reaction force in N at each support node",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "Rp",
+    "type": "Text",
+    "desc": "Totals: applied load, reactions, equilibrium error, joints, supports",
+    "access": "item",
     "default": null
    },
    {
@@ -1665,6 +1720,14 @@
     "default": "0.0"
    },
    {
+    "name": "Align",
+    "nick": "Al",
+    "type": "Integer",
+    "desc": "Where the lath sits along the surface normal: 0 grows from the surface out (default), 1 centred on the surface (its centre line on the curve), 2 grows from the surface in. Offset is the gap to the near face, or the shift of the centre when centred",
+    "access": "item",
+    "default": "0"
+   },
+   {
     "name": "Net",
     "nick": "Nt",
     "type": "Mite Net",
@@ -1802,6 +1865,14 @@
     "optional": true
    },
    {
+    "name": "Align",
+    "nick": "Al",
+    "type": "Integer",
+    "desc": "Where the lath sits along the surface normal: 0 grows from the surface out (default), 1 centred on the surface (its centre line on the curve), 2 grows from the surface in. Offset is the gap to the near face, or the shift of the centre when centred",
+    "access": "item",
+    "default": "0"
+   },
+   {
     "name": "Net",
     "nick": "Nt",
     "type": "Mite Net",
@@ -1824,7 +1895,7 @@
     "name": "Centerlines",
     "nick": "C",
     "type": "Curve",
-    "desc": "Strip centerline per lath (lifted by the offset and half the depth)",
+    "desc": "Strip centerline per lath (moved along the normal by Align and Offset)",
     "access": "list",
     "default": null
    },
@@ -2531,6 +2602,14 @@
     "default": "0.0"
    },
    {
+    "name": "Align",
+    "nick": "Al",
+    "type": "Integer",
+    "desc": "Where the lath sits along the surface normal: 0 grows from the surface out (default), 1 centred on the surface (its centre line on the curve), 2 grows from the surface in. Offset is the gap to the near face, or the shift of the centre when centred",
+    "access": "item",
+    "default": "0"
+   },
+   {
     "name": "Net",
     "nick": "Nt",
     "type": "Mite Net",
@@ -2603,7 +2682,7 @@
   "file": "NetTopologyComponent.cs",
   "name": "Net Topology",
   "nick": "NetTopo",
-  "desc": "Turns a two-family lath net into a structural graph: unique nodes at the crossings and one member per lath piece between consecutive crossings (free tails included). Same-family crossings and T-junctions (a lath ending on a neighbour) are nodes too. Feed Nodes / Members to a structural package (e.g. Karamba) or use the node schedule for fabrication.",
+  "desc": "Turns a two-family lath net into a structural graph: unique nodes at the crossings and one member per lath piece between consecutive crossings (free tails included). Same-family crossings and T-junctions (a lath ending on a neighbour) are nodes too. Feed Nodes / Members to a structural package (e.g. Karamba) or use the node schedule for fabrication. Mesh is the panel mesh of the net (one face per panel between the laths, quads where two families cross cleanly) with its planarity per face: a conjugate net (curvature lines) gives nearly planar panels, an asymptotic net skew ones (Liu et al. 2006) — wire it into Planarize Mesh.",
   "tab": "Fabrication",
   "icon": "NetTopology",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDFD",
@@ -2737,22 +2816,25 @@
     "name": "Mesh",
     "nick": "Me",
     "type": "Mesh",
+    "desc": "Panel mesh of the net: one face per panel between the laths (vertices = the nodes that bound a panel), counter-clockwise about the surface normal; polygons at T-junctions are fan-triangulated by Rhino",
     "access": "item",
-    "desc": "Panel mesh of the net: one face per panel between the laths (vertices = the nodes that bound a panel), counter-clockwise about the surface normal; polygons at T-junctions are fan-triangulated by Rhino"
+    "default": null
    },
    {
     "name": "Planarity",
     "nick": "Pl",
     "type": "Number",
+    "desc": "Per panel, dimensionless: for a quad the distance between its diagonals over the mean diagonal (Zadravec, Schiftner & Wallner 2010; above 0.01 is visibly skew); 0 for triangles; for a polygon its plane deviation over its mean radius",
     "access": "list",
-    "desc": "Per panel, dimensionless: for a quad the distance between its diagonals over the mean diagonal (Zadravec, Schiftner & Wallner 2010; above 0.01 is visibly skew); 0 for triangles; for a polygon its plane deviation over its mean radius"
+    "default": null
    },
    {
     "name": "Deviation",
     "nick": "Dv",
     "type": "Number",
+    "desc": "Per panel, model units: the largest distance of a corner from the panel's plane (the Planarize Mesh measure)",
     "access": "list",
-    "desc": "Per panel, model units: the largest distance of a corner from the panel's plane (the Planarize Mesh measure)"
+    "default": null
    }
   ]
  },
@@ -3137,15 +3219,6 @@
     "desc": "Layout of the family: 0 = evenly spaced fill (curves inserted and stopped to keep the spacing; T-junctions), 1 = web from the border (every curve border to border, seeds every Spacing along the border), 2 = web from the seed cross (seeds along the crossing curve through the seed), 3 = farthest-point fill (each new curve starts in the middle of the widest gap left, Mebarki et al. 2005: no gap wider than 1.6 x Spacing, fewer T-junctions, gaps less uniform than 0). Webs never merge; their spacing away from the seed line is what the surface dictates",
     "access": "item",
     "default": "0"
-   },
-   {
-    "name": "Guide",
-    "nick": "Gd",
-    "type": "Curve",
-    "desc": "Guide (seed) curve: when given, the family is a web seeded from it instead of the border or the seed cross, whatever Layout says. The curve is pulled onto the mesh and nodes are placed every Spacing of arc length along it (centred on an open curve; L / round(L / Spacing) apart on a closed one); one curve runs through every node, border to border, so both families of a net cross at every node — Schling's layout (the node distance along the seed curve is the repeated parameter). Neighbouring curves are then Spacing × sin(angle to the guide) apart. A guide along one family's own curve seeds only the other family. Geodesics leave the guide with the first Direction carried along it by parallel transport (Pottmann et al. 2010). Gaps elsewhere are filled as for the other webs.",
-    "access": "item",
-    "default": null,
-    "optional": true
    }
   ],
   "outputs": [
@@ -3240,7 +3313,7 @@
   "file": "NetKineticsComponent.cs",
   "name": "Net Kinetics",
   "nick": "Kinetics",
-  "desc": "Moves a scissor-jointed asymptotic net as a mechanism (Wan, Crolla & Schling 2025; Schikore et al. 2020). The crossings of A and B become scissor hinges: the distance between consecutive joints along every lath stays constant, every lath segment stays perpendicular to the (moving) surface normal at its ends — so upright laths remain straight-unrollable — and laths keep their rest bend with the given Stiffness. Drive the motion with Fixed points, Slide points (joints kept on the ground plane, free to slide), points moved To targets, or Cables whose Lengths change; Fold 0…1 runs the drivers from the rest state to the target in Steps states. Drift, Deviation and Miss tell you how well the mechanism can follow (a rigid net cannot follow at all; the exact doubly ruled grids follow to 1e-12). Every state is also read elastically (Schikore, Schling, Oberbichler & Bauer 2020): bending and twist strains of the lath section (Upright/Width/Thickness or Shape/Section, as Lath Analysis), the strain energy Π = ½∫(GJτ² + EIκ²) ds per state and the natural (least-energy) state along the motion.",
+  "desc": "Moves a scissor-jointed asymptotic net as a mechanism (Wan, Crolla & Schling 2025; Schikore et al. 2020). The crossings of A and B become scissor hinges: the distance between consecutive joints along every lath stays constant, every lath segment stays perpendicular to the (moving) surface normal at its ends — so upright laths remain straight-unrollable — and laths keep their rest bend with the given Stiffness. Drive the motion with Fixed points, Slide points (joints kept on the ground plane, free to slide), points moved To targets, Cables whose Lengths change, or Flatten (press the net onto a plane); Fold 0…1 runs the drivers from the rest state to the target in Steps states. Drift, Deviation and Miss tell you how well the mechanism can follow (a rigid net cannot follow at all; the exact doubly ruled grids follow to 1e-12). Every state is also read elastically (Schikore, Schling, Oberbichler & Bauer 2020): bending and twist strains of the lath section (Upright/Width/Thickness or Shape/Section, as Lath Analysis), the strain energy Π = ½∫(GJτ² + EIκ²) ds per state and the natural (least-energy) state along the motion.",
   "tab": "Kinetics",
   "icon": "NetKinetics",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCE01",
@@ -3454,6 +3527,14 @@
     "access": "item",
     "default": null,
     "optional": true
+   },
+   {
+    "name": "Flatten",
+    "nick": "Fl",
+    "type": "Boolean",
+    "desc": "Press the net flat: the first Fixed joint (or the joint nearest the centre) is held and every lath end slides on a plane of normal SlideNormal that moves from its rest height onto the plane through that joint as Fold goes 0 → 1. The flat state is the one the mechanism reaches — a 3-fold Enneper web closes into a hexagon; read the states backwards for the deployment from the flat grid",
+    "access": "item",
+    "default": "false"
    },
    {
     "name": "Net",
@@ -3938,132 +4019,6 @@
     "nick": "R",
     "type": "Text",
     "desc": "Summary statistics of every distribution",
-    "access": "item",
-    "default": null
-   }
-  ]
- },
- {
-  "file": "AsymptoticWebComponent.cs",
-  "name": "Asymptotic Web",
-  "nick": "AsymWeb",
-  "desc": "Schling's asymptotic web: nodes every Spacing along the two asymptotic curves through the seed, every other node the crossing of the curves through them — a quad net with no stubs and no T-junctions that keeps the surface's symmetry. A seed on a flat point (3-fold Enneper, monkey saddle) becomes a singular node where 2n rays meet; a surface of revolution gets the rotational web whose meridian diagonals are geodesics (an AAG web). With AAG on, the web is optimised so that one family of node diagonals is geodesic and every node star stays planar: three families of straight, flat slats (two upright, one lying on the surface).",
-  "tab": "Gridshells",
-  "icon": "AsymptoticWeb",
-  "guid": "7C1E5A2B-4D3F-4B8E-9A61-2F0C8D7E5B31",
-  "inputs": [
-   {
-    "name": "Mesh",
-    "nick": "M",
-    "type": "Mesh",
-    "desc": "Surface mesh (negatively curved where the web should run)",
-    "access": "item",
-    "default": null
-   },
-   {
-    "name": "Seed",
-    "nick": "S",
-    "type": "Point",
-    "desc": "Seed point (optional: the mesh point nearest the bounding-box centre; a symmetric surface's centre)",
-    "access": "item",
-    "default": null,
-    "optional": true
-   },
-   {
-    "name": "Spacing",
-    "nick": "Sp",
-    "type": "Number",
-    "desc": "Node distance along the two curves through the seed (0 = 4 % of the mesh diagonal)",
-    "access": "item",
-    "default": "0.0"
-   },
-   {
-    "name": "Symmetry",
-    "nick": "Sy",
-    "type": "Integer",
-    "desc": "−1 = detect a rotation about the seed normal or a surface of revolution, 0 = none, n = force n-fold",
-    "access": "item",
-    "default": "-1"
-   },
-   {
-    "name": "AAG",
-    "nick": "G",
-    "type": "Boolean",
-    "desc": "Optimise into an AAG web (geodesic diagonals, planar node stars); the surface moves slightly",
-    "access": "item",
-    "default": "false"
-   },
-   {
-    "name": "Iterations",
-    "nick": "It",
-    "type": "Integer",
-    "desc": "AAG optimisation iterations",
-    "access": "item",
-    "default": "16"
-   },
-   {
-    "name": "Proximity",
-    "nick": "Px",
-    "type": "Number",
-    "desc": "AAG: weight of staying on the reference surface (0 lets it float)",
-    "access": "item",
-    "default": "0.3"
-   },
-   {
-    "name": "Diagonal",
-    "nick": "D",
-    "type": "Integer",
-    "desc": "Which diagonal family becomes geodesic: 0 = the straighter one, 1 = the other",
-    "access": "item",
-    "default": "0"
-   }
-  ],
-  "outputs": [
-   {
-    "name": "A",
-    "nick": "A",
-    "type": "Curve",
-    "desc": "Asymptotic laths of the first family (upright strips)",
-    "access": "list",
-    "default": null
-   },
-   {
-    "name": "B",
-    "nick": "B",
-    "type": "Curve",
-    "desc": "Asymptotic laths of the second family (upright strips)",
-    "access": "list",
-    "default": null
-   },
-   {
-    "name": "G",
-    "nick": "G",
-    "type": "Curve",
-    "desc": "Node diagonals of the geodesic family (flat strips); with AAG off, the geodesic candidates",
-    "access": "list",
-    "default": null
-   },
-   {
-    "name": "Nodes",
-    "nick": "N",
-    "type": "Point",
-    "desc": "Web nodes (every A × B crossing)",
-    "access": "list",
-    "default": null
-   },
-   {
-    "name": "Quads",
-    "nick": "Q",
-    "type": "Mesh",
-    "desc": "The web as a quad mesh on its nodes",
-    "access": "item",
-    "default": null
-   },
-   {
-    "name": "Report",
-    "nick": "R",
-    "type": "Text",
-    "desc": "Rays, symmetry, node count, diagonal geodesic error and — with AAG — star and geodesic errors and how far the surface moved",
     "access": "item",
     "default": null
    }

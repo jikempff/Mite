@@ -240,7 +240,19 @@ public static class ModeCatalog
             Bool("Write", false, O(0, "Preview only", ""), O(1, "Write the files to Folder", "Write")),
         },
         ["Lath Strip"] = new[] { Upright(false) },
-        ["Mite Net"] = new[] { Upright(false), Shape },
+        ["Mite Net"] = new[]
+        {
+            Upright(false), Shape,
+        },
+        ["Net Trim"] = new[] { Bool("Invert", false, O(0, "Keep the inside", "Inside"), O(1, "Keep the outside", "Outside", "Cut a hole into the net")) },
+        ["Planarize Mesh"] = new[]
+        {
+            new ModeInput("Method", ModeKind.Integer, 1, new[]
+            {
+                O(0, "Projection loop (1.3.x)", "Projection", "Project every face to its best plane, average, repeat"),
+                O(1, "Guided projection (Tang et al. 2014)", "Guided", "Planarity, fairness and closeness solved together"),
+            }),
+        },
         ["Geodesic Path"] = new[]
         {
             new ModeInput("Method", ModeKind.Integer, 1, new[]

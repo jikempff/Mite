@@ -12,6 +12,7 @@ Run from tools/webgen:  python3 extract_components.py
 The component order of the existing components.json is kept; new components
 are appended.
 """
+import base64
 import json
 import os
 import re
@@ -179,5 +180,21 @@ def main():
     print(len(comps), "components written")
 
 
+def write_icons():
+    """icons.json: every PNG of the Resources folder as a data URI, existing order kept, new icons last."""
+    res = os.path.join(SRC, "Resources")
+    ipath = os.path.join(HERE, "icons.json")
+    order = list(json.load(open(ipath, encoding="utf-8"))) if os.path.exists(ipath) else []
+    icons = {}
+    for fn in sorted(os.listdir(res)):
+        if fn.endswith(".png"):
+            icons[fn[:-4]] = "data:image/png;base64," + base64.b64encode(open(os.path.join(res, fn), "rb").read()).decode()
+    icons = dict(sorted(icons.items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else len(order)))
+    with open(ipath, "w", encoding="utf-8") as f:
+        f.write(json.dumps(icons, indent=1))
+    print(len(icons), "icons written")
+
+
 if __name__ == "__main__":
     main()
+    write_icons()

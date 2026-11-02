@@ -16,14 +16,42 @@ TAB_BLURB = {
     "Kinetics": "Nets that move: scissor-jointed asymptotic grids as mechanisms.",
     "Util": "Mesh intake, projection and colouring helpers.",
 }
-COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation", "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Mite Net", "Asymptotic Web", "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves", "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Strip", "Lath Segment", "Lath Labels", "Lath Preview", "Net Topology", "Net Distributions", "Net Kinetics", "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
-COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics",
-              "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation",
-              "Asymptotic Net", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Net Trim",
-              "Lath Analysis", "Gridshell Analysis", "Mesh Isocurves",
-              "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Segment", "Lath Labels", "Lath Preview", "Flat Kit", "Net Topology",
-              "Net Kinetics",
-              "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
+COMP_ORDER = [
+    "Principal Curvature",
+    "Gaussian Curvature",
+    "Mean Curvature",
+    "Curvature Streamlines",
+    "Umbilics",
+    "Planarize Mesh",
+    "Minimal Surface",
+    "Force Density Method",
+    "Dynamic Relaxation",
+    "Asymptotic Net",
+    "Geodesic Net",
+    "Chebyshev Net",
+    "Conjugate Net",
+    "Geodesic Path",
+    "Net Trim",
+    "Mite Net",
+    "Asymptotic Web",
+    "Lath Analysis",
+    "Gridshell Analysis",
+    "Net Distributions",
+    "Mesh Isocurves",
+    "Lath Sweep",
+    "Net Joints",
+    "Lath Unroll",
+    "Lath Strip",
+    "Lath Segment",
+    "Lath Labels",
+    "Lath Preview",
+    "Flat Kit",
+    "Net Topology",
+    "Net Kinetics",
+    "Mesh Cleanup",
+    "Pull To Mesh",
+    "Mesh Colour Map",
+]
 byname = {c["name"]: c for c in comps}
 assert set(byname) == set(COMP_ORDER), set(byname) ^ set(COMP_ORDER)
 
@@ -84,7 +112,7 @@ for tab in TAB_ORDER:
         demo = note.get("demo")
         demo_html = ""
         if demo:
-            kind = "palette" if demo == "palette" else "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sparkline" if demo == "lathUtil" else "3d", kind = "hist" if note.get("hist") else "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sparkline" if demo == "lathUtil" else "3d", kind = "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sheet" if note.get("sheet") else "sparkline" if demo == "lathUtil" else "3d",
+            kind = "palette" if demo == "palette" else "hist" if note.get("hist") else "plot2d" if note.get("plot2d") else "plot1d" if note.get("plot1d") else "sheet" if note.get("sheet") else "sparkline" if demo == "lathUtil" else "3d"
             controls = ""
             if note.get("before_after"):
                 controls = '<div class="demo-ctl"><label><input type="radio" name="ba-' + slug(n) + '" value="before"> input</label><label><input type="radio" name="ba-' + slug(n) + '" value="after" checked> result</label><label><input type="radio" name="ba-' + slug(n) + '" value="both"> both</label></div>'
