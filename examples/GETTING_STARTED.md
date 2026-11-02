@@ -135,7 +135,13 @@ section. `St` holds the supports fixed (`0`) or pinned (`1`); `Jk` sets the join
 in N·m/rad for a real bolted joint; `ρ` adds self-weight, `q` an area load in
 N/m², `Lp`/`F` point loads. The `Rp` report must show the reactions equal to the
 load (equilibrium error ≈ 1e-12); laths that no support reaches are listed and
-left out instead of making the frame singular.
+left out instead of making the frame singular. `Ly` Layer (one value per curve,
+e.g. `0` for every A curve and `1` for every B curve) stacks the laths: each
+family keeps its own axis one lath depth apart at the crossings, joined through
+a rigid link, so a horizontal load twists the lower laths through the lever arm
+of the stack; `Al` says where layer 0 sits (as in Lath Sweep). Leave `Ly` empty
+for the single-node joint. `Rm` gives the reaction moments, and the report adds
+the eccentricity with a moment-equilibrium error.
 
 Sanity values: on an asymptotic lath `Kn` should sit near 0 (it is measured from
 the surface normal, so mesh facets do not spike it) and `Tg` near √−K of the

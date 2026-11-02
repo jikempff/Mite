@@ -265,6 +265,36 @@ var sw = Stopwatch.StartNew();
     for (int c = 0; c < laths.Count; c++) { var l = new List<double[]>(); for (int i = 0; i < laths[c].Length; i++) { var d = nodeOf.TryGetValue((c, i), out int n) ? fr.Displacements[n] : Vec3d.Zero; l.Add(P(laths[c][i] + 100 * d)); } defl.Add(l.ToArray()); }
     scenes["frame"] = new { original = laths.Select(l => Line(l)).ToArray(), deformed = defl.ToArray(), scale = 100, supports = sup.Select(P).ToArray() };
     numbers["frame"] = new { nodes = fr.Nodes.Length, dof = fr.Nodes.Length * 6, ms = t2.ElapsedMilliseconds, maxDisp = fr.MaxDisplacement, maxUtil = R3(fr.MaxUtilization), supports = fr.SupportNodeCount, elements = fr.Utilization.Length };
+    // Joint eccentricity: the same net with family B stacked one lath depth above family A
+    {
+        var profile = new LathProfile(0.08, 0.012, true);
+        double depth = profile.NormalHigh - profile.NormalLow;
+        var offsets = Enumerable.Range(0, laths.Count).Select(c => c < famA.Count ? 0.0 : depth).ToList();
+        var wind = new Vec3d(1000, 0, 0);
+        var w0 = FrameAnalysis.Compute(saddle, laths, xs.Select(x => x.Point).ToList(), sup, profile, wind);
+        var w1 = FrameAnalysis.Compute(saddle, laths, xs.Select(x => x.Point).ToList(), sup, profile, wind, new FrameAnalysis.Options { AxisOffsets = offsets });
+        var g1 = FrameAnalysis.Compute(saddle, laths, xs.Select(x => x.Point).ToList(), sup, profile, new Vec3d(0, 0, -1000), new FrameAnalysis.Options { AxisOffsets = offsets });
+        double TorsionOf(FrameAnalysis.Result r, bool lower) => Enumerable.Range(0, r.Torsion.Length).Where(i => (r.ElementSource[i].Curve < famA.Count) == lower).Select(i => r.Torsion[i]).DefaultIfEmpty(0).Max();
+        // the exact L-frame: a one-element cantilever A (4 m, flat 100 × 20 mm, axis on the surface) with a 2 m lath B
+        // on its tip 50 mm above it, 300 N/m along B: B pulls q·b on A's tip through the stack → torque e·q·b in A
+        var flat = new LathProfile(0.1, 0.02, false);
+        var plane = TestMeshes_QuadGrid(4, 4, 10.0);
+        const double L = 4.0, b = 2.0, q = 300.0, e = 0.05;
+        var la = new[] { new Vec3d(2, 3, 0), new Vec3d(2 + L, 3, 0) };
+        var lb = Enumerable.Range(0, 9).Select(i => new Vec3d(2 + L, 3 + b * i / 8.0, 0)).ToArray();
+        var lf = FrameAnalysis.Compute(plane, new[] { la, lb }, new[] { lb[0] }, new[] { la[0] }, flat, new Vec3d(0, q, 0), new FrameAnalysis.Options { AxisOffsets = new[] { 0.0, e } });
+        var sec = flat.SectionProperties();
+        double G = 11e9 / 2.6, T = e * q * b, phi = T * L / (G * sec.J);
+        numbers["frameStack"] = new
+        {
+            depth, eccentricity = w1.Eccentricity, joints = w1.JointCount,
+            windDisp0 = R3(w0.MaxDisplacement * 1000), windDisp1 = R3(w1.MaxDisplacement * 1000), windUtil0 = R3(w0.MaxUtilization), windUtil1 = R3(w1.MaxUtilization),
+            windTorsionLower0 = R3(TorsionOf(w0, true)), windTorsionLower1 = R3(TorsionOf(w1, true)), windTorsionUpper1 = R3(TorsionOf(w1, false)),
+            gravUtil0 = R3(fr.MaxUtilization), gravUtil1 = R3(g1.MaxUtilization), gravDisp1 = R3(g1.MaxDisplacement * 1000),
+            momentError0 = w0.MomentEquilibriumError, momentError1 = w1.MomentEquilibriumError, forceError1 = w1.EquilibriumError,
+            lTorque = lf.Torsion[0], lTorqueExact = T, lTwist = phi, lMomentError = lf.MomentEquilibriumError, lReactionTorque = Math.Abs(lf.ReactionMoments[lf.SupportNodes[0]].X),
+        };
+    }
 }
 
 static double ArcAt(Vec3d[] line, double[] arc, Vec3d p)
@@ -274,6 +304,13 @@ static double ArcAt(Vec3d[] line, double[] arc, Vec3d p)
     return bestArc;
 }
 static Vec3d[] Sub(Vec3d[] l, double spacing) => ShortestPath.Resample(l, spacing);
+static MeshData TestMeshes_QuadGrid(int nx, int ny, double size)
+{
+    var v = new List<Vec3d>(); var f = new List<int[]>();
+    for (int j = 0; j <= ny; j++) for (int i = 0; i <= nx; i++) v.Add(new Vec3d(size * i / nx, size * j / ny, 0));
+    for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) f.Add(new[] { j * (nx + 1) + i, j * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i + 1, (j + 1) * (nx + 1) + i });
+    return new MeshData(v.ToArray(), f.ToArray());
+}
 static (int ends, int boundary, int onCurve, int floating, double endTurn, double turn) Ends(List<Vec3d[]> all, MeshProjection pj)
 {
     int ends = 0, onBoundary = 0, onCurve = 0, floating = 0; double maxEndTurn = 0, maxTurn = 0;

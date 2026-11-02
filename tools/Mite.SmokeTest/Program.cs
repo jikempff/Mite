@@ -256,6 +256,37 @@ internal static class Tests
                     $"turned outward: {flipped} faces reversed, {outward} of {m?.Faces.Count} face normals point out; report: {report.Replace('\n', ' ')}");
             });
 
+        TestComponent("Gridshell Analysis (two layers: upper lath pulls, lower lath twists by e·F)",
+            new Mite.Grasshopper.Components.GridshellAnalysisComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-2, -2, 0);
+                plane.Vertices.Add(6, -2, 0);
+                plane.Vertices.Add(6, 6, 0);
+                plane.Vertices.Add(-2, 6, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                // A: cantilever along x on layer 0; B: along y on layer 1, hanging on A's tip;
+                // load 300 N/m along y: B pulls on A's tip one lath depth (0.02) above A's axis
+                SetInputs(c, (0, plane), (4, new Rhino.Geometry.Vector3d(0, 300, 0)), (7, 0.1), (8, 0.02), (12, 100.0), (22, 1));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(4, 0, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(4, 0, 0), new Rhino.Geometry.Point3d(4, 2, 0)));
+                SetPointList(c, 2, new Rhino.Geometry.Point3d(4, 0, 0));
+                SetPointList(c, 3, new Rhino.Geometry.Point3d(0, 0, 0));
+                SetPersistent(c, 21, 0, 1);
+            },
+            c =>
+            {
+                // Align 1 (centred): A's axis on the surface, B's one depth (0.02) above it;
+                // torque on A = e · q · b = 0.02 · 300 · 2 = 12 N·m — the reaction moment's x component
+                var moments = Vectors(c, 11);
+                string report = c.Params.Output[10].VolatileData.AllData(true).OfType<Grasshopper.Kernel.Types.GH_String>().Select(t => t.Value).FirstOrDefault() ?? "";
+                double mx = moments.Count > 0 ? System.Math.Abs(moments[0].X) : double.NaN;
+                return Expect(moments.Count == 1 && System.Math.Abs(mx - 12.0) < 1e-6, $"reaction torque {mx:F6} N·m vs e·q·b = 12")
+                    && Expect(report.Contains("eccentricity 20 mm"), $"report names the stack: {report.Replace('\n', ' ')}");
+            });
+
         TestComponent("Conjugate Net",
             new Mite.Grasshopper.Components.ConjugateNetComponent(),
             c => SetInputs(c, (0, saddle.DuplicateMesh()), (1, 0.25), (2, 0.05), (3, 300)),
@@ -625,6 +656,10 @@ internal static class Tests
     private static System.Collections.Generic.List<bool> Bools(Grasshopper.Kernel.GH_Component comp, int index) =>
         comp.Params.Output[index].VolatileData.AllData(true)
             .OfType<Grasshopper.Kernel.Types.GH_Boolean>().Select(b => b.Value).ToList();
+
+    private static System.Collections.Generic.List<Rhino.Geometry.Vector3d> Vectors(Grasshopper.Kernel.GH_Component comp, int index) =>
+        comp.Params.Output[index].VolatileData.AllData(true)
+            .OfType<Grasshopper.Kernel.Types.GH_Vector>().Select(v => v.Value).ToList();
 
     private static int CurveCount(Grasshopper.Kernel.GH_Component comp, int index) =>
         comp.Params.Output[index].VolatileData.AllData(true)
