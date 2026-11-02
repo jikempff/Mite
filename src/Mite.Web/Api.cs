@@ -440,6 +440,10 @@ public class PanelPayload
     public double MaxOffSurface { get; set; }
     public int PlanarizeIterations { get; set; }
     public int FixedNodes { get; set; }
+    public string? Error { get; set; }
+    public long Ms { get; set; }
+}
+
 public class PiecesOptions
 {
     /// <summary>Stock length, joint margin, splice (lap) length and saw kerf in model units.</summary>
@@ -1515,8 +1519,6 @@ public static partial class MiteApi
             var sheets = nest.Sheets;
             p.Plates = kit.Plates.Count; p.PlatelessHubs = kit.PlatelessHubs.Count;
             if (kit.Plates.Count > 0) { p.PlateDiameter = 2 * kit.Plates.Max(x => x.Radius); p.PlateAngleDrift = kit.Plates.Max(x => x.AngleDrift); p.PlateCramped = kit.Plates.Any(x => x.Cramped); }
-            var eo = new KitExport.Options { ToMm = o.ToMm > 0 ? o.ToMm : 1000, SheetWidth = o.SheetWidth > 0 ? o.SheetWidth : 600, SheetHeight = o.SheetHeight > 0 ? o.SheetHeight : 400 };
-            var sheets = KitExport.StripSheets(kit, eo);
             var assembly = KitExport.Assembly(kit, o.Upright ? o.Thickness : o.Width, eo);
             var deploy = KitExport.Deployment(kit);
             p.AssemblySvg = KitExport.ToSvg(assembly);

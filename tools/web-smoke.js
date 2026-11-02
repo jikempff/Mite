@@ -152,7 +152,7 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   check(cheb && cheb.finite >= cheb.nodes - 4 && cheb.min > 0 && cheb.max < 180 && cheb.min < 90 && cheb.max > 90, `shear angles ${cheb?.min.toFixed(1)}° … ${cheb?.max.toFixed(1)}° around the 90° seed`);
   const lockCount = await page.evaluate(() => { const c = window.__mite.netData.chebyshev; return { outside: c.angles.filter((w) => w >= 0 && (w < 45 || w > 135)).length, stated: +(document.getElementById('net-stats').textContent.match(/(\d+) locked/) || [0, -1])[1] }; });
   check(lockCount.outside === lockCount.stated, `locked count is the nodes outside 45° … 135° (${lockCount.stated})`);
-  check(cheb && cheb.total < 0 && Math.abs(cheb.total) < 2 * Math.PI, `the catenoid's cells read negative curvature (∬K dA = ${cheb?.total.toFixed(3)})`);
+  check(cheb && cheb.total < 0 && Math.abs(cheb.total) < 4 * Math.PI * Math.tanh(1.2), `the catenoid's cells read negative curvature, less than the whole band's Gauss image 4π tanh 1.2 (∬K dA = ${cheb?.total.toFixed(3)})`);
   check(cheb && cheb.drawn === 6 * cheb.cells && /shear angle/.test(cheb.legend) && /Hazzidakis/.test(cheb.stats), `angle map drawn (${cheb?.drawn / 6} cells) with its legend`);
   const before = await page.$eval('#net-stats', (e) => +(e.textContent.match(/(\d+) locked/) || [0, -1])[1]);
   await page.$eval('#lockangle', (e) => { e.value = '80'; e.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -194,7 +194,7 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
 
   // 7b. pieces: the catenoid web cut into 6 m stock with a 300 mm splice, a 150 mm joint margin, a 3 mm kerf
   await page.click('#piecesrun'); await idle(180000);
-  const pc = await page.evaluate(() => {
+  const pcs = await page.evaluate(() => {
     const r = window.__mite.pieces, o = { stock: +document.getElementById('pstock').value, splice: +document.getElementById('psplice').value, margin: +document.getElementById('pmargin').value, kerf: +document.getElementById('pkerf').value };
     const toM = (() => { const s = window.__mite.stats; const dx = s.max[0] - s.min[0], dy = s.max[1] - s.min[1]; return (+document.getElementById('span').value) / Math.max(dx, dy); })();
     const len = (pts) => { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2]); return L; };
@@ -207,14 +207,14 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
       maxLoad: Math.max(...boardLoads) * toM, pieceSum: r.pieceLengths.reduce((a, b) => a + b, 0), overlays, cuts,
       stats: document.getElementById('pieces-stats').textContent, nLaths: laths.length };
   });
-  check(pc.r && !pc.r.error && pc.r.laths === pc.nLaths && pc.r.pieces > pc.r.laths, `laths cut into pieces (${pc.r?.error || `${pc.r.laths} laths → ${pc.r.pieces} pieces, ${pc.r.splices} splices`})`);
-  check(pc.longestM <= pc.o.stock + 1e-6, `every piece fits the stock (longest ${pc.longestM.toFixed(2)} of ${pc.o.stock} m)`);
-  check(pc.r.joints > 50 && pc.minClearMm >= pc.o.margin - 1e-6, `every cut clears the joints by the margin (nearest ${pc.minClearMm.toFixed(0)} ≥ ${pc.o.margin} mm, ${pc.r.joints} joints)`);
+  check(pcs.r && !pcs.r.error && pcs.r.laths === pcs.nLaths && pcs.r.pieces > pcs.r.laths, `laths cut into pieces (${pcs.r?.error || `${pcs.r.laths} laths → ${pcs.r.pieces} pieces, ${pcs.r.splices} splices`})`);
+  check(pcs.longestM <= pcs.o.stock + 1e-6, `every piece fits the stock (longest ${pcs.longestM.toFixed(2)} of ${pcs.o.stock} m)`);
+  check(pcs.r.joints > 50 && pcs.minClearMm >= pcs.o.margin - 1e-6, `every cut clears the joints by the margin (nearest ${pcs.minClearMm.toFixed(0)} ≥ ${pcs.o.margin} mm, ${pcs.r.joints} joints)`);
   // the pieces carry the laths plus half a splice at each side of every cut
-  check(Math.abs(pc.pieceSum - (pc.lathLen + pc.r.splices * pc.spliceM / pc.toM)) < 1e-6 * pc.lathLen, `pieces add up to the laths plus the splices (${(pc.pieceSum * pc.toM).toFixed(2)} = ${(pc.lathLen * pc.toM).toFixed(2)} + ${pc.r.splices} × ${pc.spliceM} m)`);
-  check(pc.r.boards >= pc.r.lowerBound && pc.r.boards <= Math.ceil(11 / 9 * pc.r.lowerBound + 6 / 9) && pc.maxLoad <= pc.o.stock + 1e-6, `boards packed within the FFD guarantee (${pc.r.boards} boards, lower bound ${pc.r.lowerBound}, fullest ${pc.maxLoad.toFixed(2)} m)`);
-  check(Math.abs(pc.r.material - pc.pieceSum / (pc.r.boards * pc.o.stock / pc.toM)) < 1e-9 && pc.r.material > 0.5 && pc.r.material <= 1, `material figure is Σ pieces / (boards × stock) = ${(100 * pc.r.material).toFixed(1)} %`);
-  check(pc.overlays >= 4 && pc.cuts === pc.r.splices && /boards/.test(pc.stats), `pieces drawn alternately with the cuts marked (${pc.overlays} overlays, ${pc.cuts} cut marks)`);
+  check(Math.abs(pcs.pieceSum - (pcs.lathLen + pcs.r.splices * pcs.spliceM / pcs.toM)) < 1e-6 * pcs.lathLen, `pieces add up to the laths plus the splices (${(pcs.pieceSum * pcs.toM).toFixed(2)} = ${(pcs.lathLen * pcs.toM).toFixed(2)} + ${pcs.r.splices} × ${pcs.spliceM} m)`);
+  check(pcs.r.boards >= pcs.r.lowerBound && pcs.r.boards <= Math.ceil(11 / 9 * pcs.r.lowerBound + 6 / 9) && pcs.maxLoad <= pcs.o.stock + 1e-6, `boards packed within the FFD guarantee (${pcs.r.boards} boards, lower bound ${pcs.r.lowerBound}, fullest ${pcs.maxLoad.toFixed(2)} m)`);
+  check(Math.abs(pcs.r.material - pcs.pieceSum / (pcs.r.boards * pcs.o.stock / pcs.toM)) < 1e-9 && pcs.r.material > 0.5 && pcs.r.material <= 1, `material figure is Σ pieces / (boards × stock) = ${(100 * pcs.r.material).toFixed(1)} %`);
+  check(pcs.overlays >= 4 && pcs.cuts === pcs.r.splices && /boards/.test(pcs.stats), `pieces drawn alternately with the cuts marked (${pcs.overlays} overlays, ${pcs.cuts} cut marks)`);
   await page.check('#pnotches'); await idle(180000);
   const pn = await page.evaluate(() => ({ r: window.__mite.pieces, solid: window.__mite.viewer.overlayGroup.children.find((c) => c.userData.tag === 'notches')?.geometry.index.count || 0 }));
   check(pn.r.lapNotches === 2 * (pn.r.joints - pn.r.mixedCrossings) && pn.r.spliceNotches === 2 * pn.r.splices && pn.solid === 36 * (pn.r.lapNotches + pn.r.spliceNotches), `notch solids: two per crossing and two per cut (${pn.r.lapNotches} + ${pn.r.spliceNotches}, ${pn.solid / 36} boxes)`);
@@ -222,7 +222,7 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   // balanced pieces: never more pieces, and every piece well above the remainder the greedy cut leaves
   await page.check('#pbalance'); await idle(180000);
   const pb = await page.evaluate(() => { const r = window.__mite.pieces; return { pieces: r.pieces, shortest: r.shortestPiece, boards: r.boards, lb: r.lowerBound }; });
-  check(pb.pieces === pc.r.pieces && pb.shortest > pc.r.shortestPiece && pb.boards >= pb.lb, `balanced cut: same ${pb.pieces} pieces, shortest ${(pb.shortest * pc.toM).toFixed(2)} m instead of ${pc.shortestM.toFixed(2)} m, ${pb.boards} boards (was ${pc.r.boards})`);
+  check(pb.pieces === pcs.r.pieces && pb.shortest > pcs.r.shortestPiece && pb.boards >= pb.lb, `balanced cut: same ${pb.pieces} pieces, shortest ${(pb.shortest * pcs.toM).toFixed(2)} m instead of ${pcs.shortestM.toFixed(2)} m, ${pb.boards} boards (was ${pcs.r.boards})`);
   await page.uncheck('#pbalance'); await idle(180000);
   await page.click('#dl-recipe');
   check(/Lath Segment: .*StockLength/.test(await page.$eval('#recipe', (e) => e.textContent)), 'recipe names Lath Segment with the stock length');
