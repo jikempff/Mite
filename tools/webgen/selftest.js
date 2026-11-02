@@ -2,7 +2,7 @@
 //
 // Opens the built page in Chromium once per colour scheme, reads every
 // self-test chip (li[data-check] .chip) and prints
-//   light: 71 PASS, 0 FAIL, 0 not run, 0 page errors
+//   light: 223 PASS, 0 FAIL, 0 not run, 0 page errors
 // Exits 1 when any check fails or does not run, when the page throws, or
 // when the page has no self-tests at all. CI runs it after build.py.
 //

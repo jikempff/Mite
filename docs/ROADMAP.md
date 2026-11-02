@@ -493,11 +493,11 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       = Grasshopper's selection colour). Open: the component's plain curve
       outputs still preview in Grasshopper green on top — a preview toggle,
       contact dots, and the same colours in Net Joints / Net Topology outputs.
-- [ ] Replace boolean switches that are really modes (AutoSpace,
+- [x] Replace boolean switches that are really modes (AutoSpace,
       Continuous, Upright, MaxDir, Shape) by a right-click mode menu or an
       auto-attached value list; keep the inputs for compatibility.
       rectangle (they use Width/Thickness as the bounding box); a "Profile"
-      value list auto-attached to Shape.
+      value list auto-attached to Shape. (Done 2026-10-05: mode menus on every mode input.)
 - [x] Per-family profiles (A upright, B flat — the AGH hybrid) — 2026-10-27
       (session 1, B / D). Net Joints: `WidthB`, `ThicknessB`, `UprightB`,
       `OffsetB` appended (unset = as A); Gridshell Analysis: `CurvesB`,
@@ -591,9 +591,6 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       message while tracing / solving, Esc already cancels. The Message
       line now carries the modes (above): show progress in front of them
       during a solve and restore them in AfterSolveInstance.
-- [ ] Replace boolean switches that are really modes (AutoSpace,
-      Continuous, Upright, MaxDir, Shape) by a right-click mode menu or an
-      auto-attached value list; keep the inputs for compatibility.
 - [x] Progress and cancellation feedback: percentage in the component
       message while tracing / solving, Esc already cancels — 2026-11-01
       (session 2). `Mite.Core/Progress.cs`: `ProgressHandler(fraction,
@@ -783,7 +780,7 @@ remains the self-test review page.
       app returns notch solids only for same-orientation crossings (the flat
       G slats on upright A / B have no lap notch, as in Grasshopper).
 - [ ] App: planarization and Chebyshev angle map; isocurve labels.
-- [ ] App: lath segmentation, joints and nesting sheet (material %).
+- [x] App: lath segmentation, joints and nesting sheet (material %). (Done 2026-10-31: the Pieces block of the web app.)
 - [x] App: planarization — 2026-10-22 (session 1, C with B): a *panels ·
       planarity* switch on every two-family net (Net Topology → Mesh) colours
       the panels by Zadravec's δ_PQ,n (red from 0.01) and *planarize* runs
@@ -797,7 +794,6 @@ remains the self-test review page.
       Open: the Chebyshev angle map (colour the Chebyshev nodes by shear
       angle with the Hazzidakis check 2π − Σα = ∫∫K per quad; the 10-19
       compass bundle's `Report` carries the angles) and isocurve labels.
-- [ ] App: lath segmentation, joints and nesting sheet (material %).
 - [ ] App: planarization (done in the unmerged 2026-10-22 bundle: panels /
       planarity on Net Topology, the app's *panels · planarity* block).
 - [x] App: Chebyshev angle map and isocurve labels — 2026-10-26 (session 1,
@@ -2136,8 +2132,8 @@ Open
       the flat G laths and the upright A diagonals of an AGG web; (e) AGAG
       (both diagonal families) by the same code with a second asymptotic
       family — the paper found numerically exact ones from AGG starts.
-- [ ] Propagation from a boundary strip (Wang et al. 2024) as a second way to
-      start a web: two neighbouring polylines drawn by the user.
+- [x] Propagation from a boundary strip (Wang et al. 2024) as a second way to
+      start a web: two neighbouring polylines drawn by the user. (Done 2026-10-30: Web Propagation, Wang, Almaskin & Pottmann 2025.)
 - [x] Refinement: subdivide the AAG web and re-optimise so the laths between
       nodes are smooth — 2026-10-03, `Gridshells/AagRefinement`, Asymptotic Web
       `Refine` (input 8) and `Surface` (output 6). Schling et al. 2022 §3.4:
@@ -2243,8 +2239,6 @@ Open
       `Proximity`) so the drawn strip can come from a surface; a Mite Net
       output; the web app; the paper's "approximate the first strip" (make
       a drawn first row geodesic before propagating).
-- [ ] Propagation from a boundary strip (Wang et al. 2024) as a second way to
-      start a web: two neighbouring polylines drawn by the user.
 - [x] Tri-hex (midpoint) AAG web and constant crossing angle — 2026-10-31
       (session 1): `AsymptoticWeb.Result.MidChains` (the geodesic candidates
       through the lath midpoints: a topological walk that cuts one corner off
@@ -2505,8 +2499,8 @@ Open
       with the viewport preview; Gridshell Analysis deformed net; Lath
       Preview traffic-light colouring; Lath Unroll patterns. 1600 × 1000,
       light Rhino UI, no other plugins visible.
-- [ ] Description text and version notes from README's Unreleased section;
-      bump the yak manifest.
+- [x] Description text and version notes from README's Unreleased section;
+      bump the yak manifest. (1.5.0: Food4Rhino version notes written, manifest at 1.5.0.)
 - [x] CI and release hygiene (2026-10-08, session 2; step 4 of the 1.4.0
       integration): `.github/workflows/ci.yml` (Linux, .NET 10: Core +
       Grasshopper build, tests, bench build + `tools/webgen/selftest.js`

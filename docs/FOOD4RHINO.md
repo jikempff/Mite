@@ -1,8 +1,8 @@
-# Food4Rhino listing — Mite 1.3.2
+# Food4Rhino listing — Mite 1.5.0
 
 Paste-ready copy for https://www.food4rhino.com/en/app/mite (edit form). Images
 to upload are listed at the end; the package itself goes up with
-`yak push dist/mite-1.3.2-rh8_0-any.yak`, which also sets the package icon (1.3.0 is on the server; 1.3.2 includes everything in 1.3.1).
+`yak push dist/mite-1.5.0-rh8_0-any.yak`, which also sets the package icon (1.5.0 includes everything since 1.3.0, the last version on the server).
 
 ## Title
 Mite — curvature, form finding and gridshell nets for Grasshopper
@@ -12,7 +12,7 @@ Mesh curvature analysis, form finding, asymptotic / geodesic / Chebyshev nets, l
 
 ## Description
 Mite is an open-source Grasshopper toolkit (Rhino 8, Windows and Mac) for
-designing gridshells from meshes: 31 components in seven panels, no external
+designing gridshells from meshes: 37 components in seven panels, no external
 dependencies, MIT licence.
 
 **Curvature.** Principal, Gaussian and mean curvature per vertex (Rusinkiewicz
@@ -29,7 +29,10 @@ them cross — clean quad nets with no stubs or T-junctions that keep the
 surface's symmetry (flat points become singular nodes, surfaces of revolution
 rotational webs). An AAG option makes one family of node diagonals geodesic:
 gridshells of three families of straight flat slats, two upright and one
-lying on the surface (Schling, Wang, Hoyer & Pottmann 2022).
+lying on the surface (Schling, Wang, Hoyer & Pottmann 2022) — node to node or
+through the lath midpoints (tri-hex), at a chosen crossing angle. AGG Web gives
+the two-geodesic counterpart, Web Propagation grows an AAG web free in space
+from a drawn boundary strip (Wang, Almaskin & Pottmann 2025).
 
 **Nets.** Asymptotic nets (both families of zero-normal-curvature curves,
 combed labels, minimum crossing angle), geodesic nets (straightest geodesics
@@ -43,8 +46,9 @@ neighbour as T-junctions.
 normal curvature and geodesic torsion in the Darboux frame and converts them
 to bending and twist strains for the chosen section — flat or upright strip,
 round bar or your own profile; Gridshell Analysis solves the whole net as a
-beam frame with that same section (crossings and T-junctions coupled,
-supports on the border, utilisation per lath).
+beam frame with one section per lath family (crossings and T-junctions coupled,
+laths stacked in layers joined through their lever arm, supports on the border,
+utilisation per lath, linear buckling factors and mode shapes).
 
 **Fabrication.** Lath Sweep (rectangular, round or custom sections, flat or
 upright — one profile for every curve, and the same profile the strain check
@@ -65,6 +69,15 @@ where the answer is exact. The same library runs in the browser at
 kempffsele.me/mite — try a net on your own OBJ before installing anything.
 
 Source, examples and roadmap: https://github.com/jikempff/Mite
+
+## Version notes — 1.5.0
+- Gridshell Analysis reads the structure as it is built: one section per lath family (the asymptotic–geodesic hybrid, upright lamellas with flat slats), laths stacked in layers and bolted through the lever arm of the stack (joint eccentricity, reaction moments), and linear buckling factors with mode shapes and a Sturm check.
+- New components: AGG Web and Web Propagation (Gridshells), Net Trim (cut a net to a boundary), Mite Net (one wire for surface, both families and profiles), Net Distributions (spacing, angles and utilization as distributions), Lath Strip (developable plank strips) — 37 components in all.
+- Nets: seeded from a guide curve, a farthest-point fill, families labelled by their twist, tri-hex AAG webs at a constant crossing angle, smooth refined AAG laths, Chebyshev nets with an exact compass step, a lock angle and their own shear and curvature, geodesic laths that end straight on their neighbours.
+- Form finding: Dynamic Relaxation after Barnes (elastic lath bending), Planarize Mesh by guided projection, panels of a net with their planarity.
+- Fabrication: Flat Kit nests its strips on the laser bed and holds a 3-fold hub with laser-cut plates; Lath Segment packs pieces on stock boards with balanced cuts and kerf; Net Joints threads a flat slat through an upright lamella.
+- Kinetics: deploy a net from its flat state on a table, with the strain of every lath along the motion.
+- Everywhere: the active modes and the progress under each component, Esc on every long solve, runtime messages that name the fix, right-click mode menus, one black / white / neon colour language with legends, Mesh Cleanup that closes cracks and T-junctions, exact curvature on the analytic test shapes (Test Shape).
 
 ## Version notes — 1.3.2
 - Geodesic Path gives the exact geodesic of the mesh (new Method input, on by default): the path is shortened by intrinsic edge flips until it is straight across every face and edge, then returned as a polyline through every edge crossing. It goes round a cone tip, never over it; on a cone the length matches the exact unfolded value to 1e-13. Faster than before (1.2–15×); the old curve shortening stays as Method 0.

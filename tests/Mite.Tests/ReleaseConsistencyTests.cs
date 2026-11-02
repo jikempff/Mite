@@ -148,8 +148,10 @@ public class ReleaseConsistencyTests
             Assert.True(File.Exists(Path.Combine(Root(), "src", "Mite.Grasshopper", "Resources", c.icon + ".png")), $"{c.cls}: Resources/{c.icon}.png missing");
         }
         Assert.True(embedded.Contains("Mite_Tab"), "the tab icon is not embedded");
-        Assert.True(allCount == comps.Count + 1, $"generate_icons.py ALL has {allCount} entries, expected {comps.Count} components + the tab");
-        Assert.True(embedded.Count == comps.Count + 1, $"the csproj embeds {embedded.Count} icons, expected {comps.Count} components + the tab");
+        // besides the components: the tab icon and the Mite Net parameter's icon (MiteNet.cs loads MiteNetParam.png)
+        Assert.True(embedded.Contains("MiteNetParam") && drawn.Contains("MiteNetParam"), "the Mite Net parameter icon is not drawn and embedded");
+        Assert.True(allCount == comps.Count + 2, $"generate_icons.py ALL has {allCount} entries, expected {comps.Count} components + the tab + the Mite Net parameter");
+        Assert.True(embedded.Count == comps.Count + 2, $"the csproj embeds {embedded.Count} icons, expected {comps.Count} components + the tab + the Mite Net parameter");
     }
 
     [Fact]

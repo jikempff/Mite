@@ -66,8 +66,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 31 components and the Mite Net parameter", IconsLoad());
-        Check("Icons load for all 31 components", IconsLoad());
+        Check("Icons load for all 37 components and the Mite Net parameter", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -1128,9 +1127,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 31)
+        if (comps.Count != 37)
         {
-            Console.WriteLine($"      expected 31 components, found {comps.Count}");
+            Console.WriteLine($"      expected 37 components, found {comps.Count}");
             return false;
         }
         var param = new Mite.Grasshopper.MiteNetParameter();
