@@ -171,9 +171,11 @@ a **Mite Net** in between adds the lath profile for all of them.
 
 ## Changelog
 
-### Unreleased
+### 1.5.1
 - **Kinetics panel: Mechanism Modes and Kinetic State** (new components, Mite > Kinetics; core `Kinetics/MechanismModes`, `Kinetics/KineticMotion`, `ScissorNet.MeanStiffness`; additions only). Mechanism Modes reads how a net can move before any driver is set — the softest modes of `ScissorNet.SoftestModes` with their cost against the net's mean stiffness, a mode below 1e-6 of it being a mechanism (Pellegrino 1993; Schling & Schikore 2023): the hyperboloid grid has exactly one, the closed-form motion (cosine 1 − 1e-6, gap ×2e12 to the stiff modes), holding its bottom ring leaves none, a flat lattice of straight rods has two (in-plane shear, hypar twist). Kinetic State reads one moment of a motion: Net Kinetics gains an appended `Motion` output (18), read at any fold — exact at solved states, a chord between them whose error and joint drift fall with the square of the step (×3.97 and ×4.00 when halved, against the hyperboloid's closed form). The Kinetics panel's nets are built by one shared helper. Icons: Mechanism Modes (the lattice, the outline of its mode, a two-headed arrow), Kinetic State (the lattice under a fold slider); Net Kinetics' fold arrow gets a visible head.
 - **Web app: record the motion.** A *record* button beside *play* in the Kinetics block plays the motion there and back and downloads it as a video of the viewport (MediaRecorder: WebM, or MP4 in Safari), painted on the page colour so the clip is not black.
+- `build-yak.sh` / `build-yak.ps1` start from an empty `dist/` (manifest kept): yak packs every file in the folder, and an old `mite-1.3.2.zip` had shipped inside the 1.5.0 package.
+- Package Manager description rewritten for the 1.5 toolkit (it still described 1.3).
 - **Web app: a mesh symbol for "Your mesh"** — a triangulated patch in the catalogue's wire style with an import arrow, in place of a document glyph.
 - Smoke test: the Mite Net wire into Net Joints used input 11 (Align since 1.5.0); it is input 12.
 ### 1.5.0

@@ -1,8 +1,8 @@
-# Food4Rhino listing — Mite 1.5.0
+# Food4Rhino listing — Mite 1.5.1
 
 Paste-ready copy for https://www.food4rhino.com/en/app/mite (edit form). Images
 to upload are listed at the end; the package itself goes up with
-`yak push dist/mite-1.5.0-rh8_0-any.yak`, which also sets the package icon (1.5.0 includes everything since 1.3.0, the last version on the server).
+`yak push dist/mite-1.5.1-rh8_0-any.yak`, which also sets the package icon (1.5.0 is on the server; 1.5.1 adds the Kinetics panel).
 
 ## Title
 Mite — curvature, form finding and gridshell nets for Grasshopper
@@ -71,6 +71,11 @@ where the answer is exact. The same library runs in the browser at
 kempffsele.me/mite — try a net on your own OBJ before installing anything.
 
 Source, examples and roadmap: https://github.com/jikempff/Mite
+
+## Version notes — 1.5.1
+- Kinetics panel: Mechanism Modes shows how a scissor net can move before you set any driver — its softest motions, which of them are free (mechanisms), each drawn displaced; Kinetic State reads any moment of a Net Kinetics motion (new Motion output) to draw, bake or pass on, exact at the solved states.
+- Web app: record the motion as a video (record button beside play), and a new symbol for loading your own mesh.
+- Package: built from a clean folder (1.5.0 carried an unused old zip); new Package Manager description.
 
 ## Version notes — 1.5.0
 - Gridshell Analysis reads the structure as it is built: one section per lath family (the asymptotic–geodesic hybrid, upright lamellas with flat slats), laths stacked in layers and bolted through the lever arm of the stack (joint eccentricity, reaction moments), and linear buckling factors with mode shapes and a Sturm check.

@@ -1,26 +1,32 @@
 name: mite
-version: 1.5.0
+version: 1.5.1
 authors:
   - Mite Contributors
 description: >-
-  Open-source mesh curvature analysis, form-finding and gridshell toolkit.
-  Principal, Gaussian, and mean curvature; curvature streamlines, umbilics
-  and isocurves. Planarization, minimal surfaces, force density method and
-  dynamic relaxation on a fast sparse solver. Symmetric asymptotic webs after
-  Schling and asymptotic-asymptotic-geodesic (AAG) webs of straight flat
-  slats; asymptotic, geodesic, Chebyshev and conjugate nets with
-  evenly-spaced auto-seeding, plus shortest geodesic paths. Lath buildability analysis with bending and twist strain checks and
-  frame analysis of the whole network with fixed or pinned supports and
-  rigid, hinged or semi-rigid joints. Turn nets into buildable gridshells:
-  one profile (rectangular, round or custom) for every lath — swept, strain-checked and
-  used as the beam section — flat or upright; cut half-lap or
-  egg-crate joints at every crossing, unroll flat cutting patterns, segment to
-  stock lengths with splice joints, label laths and export the net topology.
-  Net Kinetics moves a scissor-jointed asymptotic net as a mechanism (fold
-  slider, supports, cables). Mesh healing, pull-to-mesh and one-step colour maps.
+  Open-source mesh curvature analysis, form-finding and gridshell toolkit, tested
+  against exact geometry. Principal, Gaussian and mean curvature, streamlines,
+  umbilics and isocurves. Planarization (guided projection), minimal surfaces,
+  force density and dynamic relaxation with elastic laths on a fast sparse
+  solver. Asymptotic, geodesic, Chebyshev and conjugate nets with even spacing,
+  guide curves and trimming; Schling's symmetric asymptotic webs, AAG and AGG
+  webs of straight flat slats, tri-hex webs and webs grown from a boundary strip.
+  Buildability: lath strain checks and a beam-frame analysis of the whole net with
+  per-family sections, stacked layers and linear buckling. Fabrication: one
+  profile per family swept and checked, half-lap, egg-crate and threaded joints,
+  unrolled strips, stock lengths packed on boards, labels, net topology and a
+  flat kit with nested sheets and laser-cut hub plates. Kinetics: Net Kinetics
+  moves a scissor-jointed net as a mechanism (press flat, deploy, cables),
+  Mechanism Modes shows how a net can move before you drive it, Kinetic State
+  reads any moment of the motion. Mesh cleanup, pull-to-mesh and colour maps
+  with legends.
 url: https://github.com/jikempff/Mite
 icon: icon.png
 keywords:
+  - kinetic
+  - mechanism
+  - scissor
+  - deployable
+  - buckling
   - mesh
   - curvature
   - form-finding
