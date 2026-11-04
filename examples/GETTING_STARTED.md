@@ -488,7 +488,7 @@ curves of an **Asymptotic Net**, then drive it:
   joints (never under a slot, where the doubled thickness would not pass);
   `Sp` = 0 picks three strip widths or what the joint pitch allows, `Sp` < 0
   keeps such strips whole on a drawing of their own, for a longer bed.
-  in model units; the files are in millimetres. `Hb` HubPlates (appended) puts
+  `Hb` HubPlates (appended) puts
   a laser-cut plate at the hub where the six rays of a flat point end: 1 one
   plate flush with the inner edge, 2 two plates bolted through the centre; the
   rays stop short of the centre, get a notch for the plate, and the plate — a
@@ -542,6 +542,28 @@ the slider or by that envelope). Keep `Sg` at 0 (joints only) for interactive us
 subdivides the laths so they can bend between joints, at several times the
 solve time (the twist energy does not change: a lath twists uniformly between
 hinges).
+
+**Before you drive it: Mechanism Modes** (Mite > Kinetics) takes the same
+`A` / `B` (or the Net), `F` fixed and `Sl` sliding points, and tells you how the
+net can move on its own: its `N` softest motions, each with its cost relative to
+the net's mean stiffness (`K`) and whether it is a mechanism (`Me`: it costs
+nothing). `MA` / `MB` draw each mode displaced by `Am` (default one joint
+spacing). A hyperboloid grid of straight rods has exactly one mechanism (its
+twist-and-rise); holding every lath end of its bottom ring leaves none; a flat
+lattice of straight rods held at one corner has two — the in-plane shear and the
+twist into a hypar. Zero mechanisms means any driver will strain the laths:
+release `F` points or lower the stiffness to see what would move.
+
+**One moment of the motion: Kinetic State** (Mite > Kinetics). Wire Net
+Kinetics' `Mo` Motion output (appended) into it and put `Fo` on a slider: you get
+the laths, joints, normals and scissor angles at that fold, each lath's strain
+utilization (`Ul` → Lath Preview), the strain energy and a Mite Net for Lath
+Sweep, Net Joints or Flat Kit — without solving the motion again. At a solved
+state the reading is exact; between states it is interpolated and `Dr` says how
+far the joint spacing then is from exact (halve the step and it drops four
+times). Right-click the slider › Animate to export the motion frame by frame; in
+the web app the Kinetics block has a **record** button next to *play* that
+downloads the motion there and back as a video.
 
 ## Reviewing a release on the Mite Bench
 
