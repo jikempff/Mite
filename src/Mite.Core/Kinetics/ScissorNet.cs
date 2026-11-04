@@ -1175,6 +1175,20 @@ public sealed class ScissorNet
     }
 
     /// <summary>
+    /// Mean diagonal of the Gauss–Newton matrix JᵀJ over the free unknowns
+    /// (trace / count): the stiffness of a typical direction, against which
+    /// <see cref="SoftestModes"/>' Rayleigh quotients are read (a mode far below
+    /// it costs nothing at first order: a mechanism).
+    /// </summary>
+    public double MeanStiffness(Options options)
+    {
+        var builder = GaussNewton(options, out _, out _, out int freeCount);
+        if (freeCount == 0) return 0;
+        double t = 0; for (int c = 0; c < freeCount; c++) t += builder.Get(c, c);
+        return t / freeCount;
+    }
+
+    /// <summary>
     /// The softest motions of the net at its rest state: the directions
     /// (positions and normals per node) along which the hinge, length,
     /// unit-normal, bending and twist residuals grow least, found by inverse

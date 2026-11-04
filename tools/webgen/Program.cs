@@ -1634,6 +1634,54 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     }
 }
 
+// ---------- Mechanism Modes: how a scissor net can move before any driver is set ----------
+{
+    // the doubly ruled hyperboloid grid (one exact mechanism, the closed form), the same grid held along its
+    // bottom ring (none), and a flat 60° lattice of straight rods with one corner held (shear + hypar twist)
+    const int mmN = 12, mmLv = 2; const double mmRho = 1.0, mmBeta = 30 * Math.PI / 180, mmEps = 1e-6;
+    var (hn, hl, hnr) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(mmN, mmLv, mmRho, mmBeta);
+    var hyp = new Mite.Core.Kinetics.ScissorNet(hn, hl, mmN, hnr);
+    var tMm = Stopwatch.StartNew();
+    var hm = Mite.Core.Kinetics.MechanismModes.Compute(hyp, new Mite.Core.Kinetics.ScissorNet.Options { Fixed = new[] { mmLv } }, new Mite.Core.Kinetics.MechanismModes.Options { Count = 4 });
+    long hypMs = tMm.ElapsedMilliseconds;
+    var (hpn, _, _) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(mmN, mmLv, mmRho, mmBeta + mmEps);
+    var (hmn, _, _) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(mmN, mmLv, mmRho, mmBeta - mmEps);
+    var dHyp = hn.Select((q, i) => (hpn[i] - hmn[i]) / (2 * mmEps) - (hpn[mmLv] - hmn[mmLv]) / (2 * mmEps)).ToArray();
+    double Cos(Vec3d[] a, Vec3d[] b) { double nm = 0, x = 0, y = 0; for (int i = 0; i < a.Length; i++) { nm += Vec3d.Dot(a[i], b[i]); x += a[i].LengthSquared; y += b[i].LengthSquared; } return Math.Abs(nm) / Math.Sqrt(x * y); }
+    int rows = 2 * mmLv + 1;
+    var ring = Enumerable.Range(0, mmN).Select(k => k * rows).Concat(Enumerable.Range(0, mmN).Select(j => hl[mmN + j][rows - 1])).Distinct().ToArray();
+    var held = Mite.Core.Kinetics.MechanismModes.Compute(hyp, new Mite.Core.Kinetics.ScissorNet.Options { Fixed = ring }, new Mite.Core.Kinetics.MechanismModes.Options { Count = 3 });
+    int ln = 4; double lg = Math.PI / 3;
+    var lnodes = new Vec3d[(ln + 1) * (ln + 1)];
+    for (int i = 0; i <= ln; i++) for (int j = 0; j <= ln; j++) lnodes[i * (ln + 1) + j] = new Vec3d(i + j * Math.Cos(lg), j * Math.Sin(lg), 0);
+    var llaths = new List<int[]>();
+    for (int j = 0; j <= ln; j++) llaths.Add(Enumerable.Range(0, ln + 1).Select(i => i * (ln + 1) + j).ToArray());
+    for (int i = 0; i <= ln; i++) llaths.Add(Enumerable.Range(0, ln + 1).Select(j => i * (ln + 1) + j).ToArray());
+    var lat = new Mite.Core.Kinetics.ScissorNet(lnodes, llaths, ln + 1);
+    var lm = Mite.Core.Kinetics.MechanismModes.Compute(lat, new Mite.Core.Kinetics.ScissorNet.Options { Fixed = new[] { 0 } }, new Mite.Core.Kinetics.MechanismModes.Options { Count = 6 });
+    numbers["mechModes"] = new
+    {
+        hypMechanisms = hm.Mechanisms, hypModes = hm.Modes.Count, hypGap = hm.Gap, hypCosine = R3(Cos(hm.Modes[0].Displacements, dHyp) * 1e6) / 1e6,
+        hypCosts = hm.Modes.Select(m => m.RelativeStiffness).ToArray(), hypMs,
+        heldMechanisms = held.Mechanisms, heldSoftest = held.Modes[0].RelativeStiffness,
+        latMechanisms = lm.Mechanisms, latGap = lm.Gap, latCosts = lm.Modes.Select(m => m.RelativeStiffness).ToArray(),
+        latOut = lm.Modes.Where(m => m.IsMechanism).Select(m => R3(m.OutOfPlane)).ToArray(),
+        tolerance = new Mite.Core.Kinetics.MechanismModes.Options().MechanismTolerance,
+    };
+    object Scene(Mite.Core.Kinetics.ScissorNet net, Mite.Core.Kinetics.MechanismModes.Result r, int k, double amp)
+    {
+        var rest = net.LathPolylines(new Mite.Core.Kinetics.ScissorNet.State { Nodes = net.Nodes, Normals = net.Normals });
+        var moved = net.LathPolylines(Mite.Core.Kinetics.MechanismModes.Displaced(net, r.Modes[k], amp));
+        return new { rest = rest.Select(l => Line(l)).ToArray(), a = moved.Take(net.CountA).Select(l => Line(l)).ToArray(), b = moved.Skip(net.CountA).Select(l => Line(l)).ToArray(),
+            mechanism = r.Modes[k].IsMechanism, cost = r.Modes[k].RelativeStiffness };
+    }
+    scenes["mechModes"] = new Dictionary<string, object>
+    {
+        ["hyp0"] = Scene(hyp, hm, 0, 0.35), ["hyp1"] = Scene(hyp, hm, 1, 0.35), ["held0"] = Scene(hyp, held, 0, 0.35),
+        ["lat0"] = Scene(lat, lm, 0, 0.8), ["lat1"] = Scene(lat, lm, 1, 0.8),
+    };
+}
+
 // ---------- Mite Net: one value for surface + both families (+ profile); lath-end classification ----------
 {
     // (1) the saddle's classic (non-continuous) asymptotic net: T-junctions, compared with the bench's own Ends()

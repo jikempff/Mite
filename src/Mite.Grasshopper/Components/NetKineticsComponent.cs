@@ -182,35 +182,9 @@ public class NetKineticsComponent : MiteComponent
         if (deploy == 2 && movePts.Count == 0 && cables.Count == 0)
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Deploy 2 needs a driver: a Move / To point (the node to pull) or a Cable.");
 
-        if (sampling <= 0)
-        {
-            var bbox = BoundingBox.Empty;
-            foreach (var c in curvesA) if (c != null) bbox.Union(c.GetBoundingBox(false));
-            foreach (var c in curvesB) if (c != null) bbox.Union(c.GetBoundingBox(false));
-            sampling = bbox.IsValid ? Math.Max(bbox.Diagonal.Length / 500.0, 1e-9) : 0.01;
-        }
-
-        var familyA = NetJointsComponent.SampleAligned(curvesA, sampling);
-        var familyB = NetJointsComponent.SampleAligned(curvesB, sampling);
-        var crossings = NetIntersections.FindAll(familyA, familyB, tolerance);
-        if (crossings.Count == 0)
-        {
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "No crossings found between the families: nothing to hinge.");
-            return;
-        }
-        var topo = NetTopology.Build(familyA, familyB, crossings);
-
-        Func<Vec3d, Vec3d>? normalAt = null;
         var surface = mesh != null ? MeshConvert.Load(mesh)?.Data : netIn?.Surface;
-        if (surface != null)
-        {
-            var proj = new MeshProjection(surface);
-            normalAt = p => proj.ClosestPoint(p, -1).SmoothNormal;
-        }
-
-        ScissorNet net;
-        try { net = ScissorNet.FromTopology(topo, familyA.Count + familyB.Count, familyA.Count, Math.Max(0, segment), normalAt); }
-        catch (ArgumentException ex) { AddRuntimeMessage(GH_RuntimeMessageLevel.Error, ex.Message); return; }
+        var net = KineticsInput.BuildNet(this, curvesA, curvesB, surface, sampling, tolerance, segment);
+        if (net == null) return;
 
         // drivers
         var fixedIdx = fixedPts.Select(p => net.NearestNode(MeshConvert.ToVec3d(p))).Distinct().ToList();

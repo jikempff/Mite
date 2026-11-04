@@ -933,6 +933,32 @@ internal static class Tests
             c => Expect(Points(c, 2).Count == 9 && Numbers(c, 4).All(a => System.Math.Abs(a - 60) < 0.5) && Numbers(c, 8).Max() < 1e-6,
                 $"9 joints / scissors at 60° / drift < 1e-6, got {Points(c, 2).Count} / {Numbers(c, 4).Min():F2}…{Numbers(c, 4).Max():F2} / {Numbers(c, 8).Max():E1}"));
 
+        // Mechanism Modes: the same flat lattice with one corner held moves two ways for free — the in-plane shear
+        // (lazy tongs) and the out-of-plane twist into a hypar (MechanismModesTests proves both in the core)
+        TestComponent("Mechanism Modes (flat lattice: shear and hypar)",
+            new Mite.Grasshopper.Components.MechanismModesComponent(),
+            c =>
+            {
+                SetCurveList(c, 0,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 1, 0), new Rhino.Geometry.Point3d(2, 1, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 2, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetCurveList(c, 1,
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(0, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1, 0, 0), new Rhino.Geometry.Point3d(1, 2, 0)),
+                    new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(2, 0, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+                SetPointList(c, 2, new Rhino.Geometry.Point3d(0, 0, 0));
+                SetInputs(c, (5, 4));
+            },
+            c =>
+            {
+                var mech = Bools(c, 5);
+                var stiff = Numbers(c, 4);
+                int count = c.Params.Output[6].VolatileData.AllData(true).OfType<Grasshopper.Kernel.Types.GH_Integer>().Select(i => i.Value).FirstOrDefault();
+                return Expect(mech.Count == 4 && count == 2 && mech[0] && mech[1] && !mech[2] && CurveCount(c, 0) >= 6,
+                    $"4 modes, 2 mechanisms (shear + hypar), the rest stiff; got {count} mechanisms, costs {string.Join(", ", stiff.Select(k => k.ToString("E1")))}");
+            });
+
         // Flat Kit: the same flat lattice is its own flat state; 6 strips, 9 joints, half-width slots at the spacing
         TestComponent("Flat Kit",
             new Mite.Grasshopper.Components.FlatKitComponent(),

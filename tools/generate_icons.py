@@ -734,8 +734,21 @@ def icon_net_kinetics():
     img, d = canvas()
     quad = [(2.5, 6.5), (13.5, 6.5), (21.5, 19.5), (10.5, 19.5)]   # parallelogram = the sheared grid
     lattice(img, d, "white", 3, 3, nodes=True, quad=quad, famU="a", famV="b")
-    arrow(d, 15.5, 3.2, 20.5, 3.2, "ink", 1.5, 2.2)
+    arrow(d, 13.5, 3.4, 21.0, 3.4, "ink", 1.4, 3.2)
     finish(img, "NetKinetics")
+
+
+def icon_mechanism_modes():
+    """The free motions of a net: the scissor lattice at rest, the outline of its mode (where it can lean,
+    sharing the held bottom edge), and a two-headed arrow: it can go either way."""
+    img, d = canvas()
+    rest = [(2.5, 9.0), (14.5, 9.0), (14.5, 21.0), (2.5, 21.0)]
+    moved = [(9.0, 9.0), (21.0, 9.0), (14.5, 21.0), (2.5, 21.0)]
+    halo(d, lambda ld: ld.line([P(*q) for q in moved + moved[:1]], fill=INK_RGBA, width=max(1, int(1.1 * S)), joint="curve"), 0.5)
+    lattice(img, d, "white", 3, 3, nodes=True, quad=rest, famU="a", famV="b")
+    arrow(d, 13.0, 4.0, 4.0, 4.0, "ink", 1.4, 3.2)
+    arrow(d, 10.0, 4.0, 19.0, 4.0, "ink", 1.4, 3.2)
+    finish(img, "MechanismModes")
 
 
 # ================================================================ Util (grey)
@@ -894,7 +907,7 @@ ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, i
        icon_agg_web, icon_web_propagation, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path, icon_net_trim,
        icon_mite_net, icon_mite_net_param, icon_lath_analysis, icon_gridshell_analysis, icon_net_distributions, icon_mesh_isocurves,
        icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_strip, icon_lath_segment, icon_lath_preview,
-       icon_lath_labels, icon_flat_kit, icon_net_topology, icon_net_kinetics, icon_mesh_cleanup, icon_pull_to_mesh,
+       icon_lath_labels, icon_flat_kit, icon_net_topology, icon_net_kinetics, icon_mechanism_modes, icon_mesh_cleanup, icon_pull_to_mesh,
        icon_mesh_colour_map, icon_tab]
 
 if __name__ == "__main__":

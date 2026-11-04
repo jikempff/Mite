@@ -5180,5 +5180,192 @@
     "default": null
    }
   ]
+ },
+ {
+  "file": "MechanismModesComponent.cs",
+  "name": "Mechanism Modes",
+  "nick": "Modes",
+  "desc": "How a scissor-jointed net can move, before you set any driver. The crossings of A and B become scissor hinges (as in Net Kinetics); the net's softest motions are found with their first-order cost, and a motion that costs nothing — the hinges, the joint spacing and the asymptotic condition all allow it — is a mechanism. Supports and singularities decide how many there are (Schling & Schikore 2023): a hyperboloid grid has exactly one, holding a whole ring of it leaves none, a flat grid of straight rods shears in its plane and twists into a hypar. Each mode is drawn displaced so you can see which way the net wants to go; feed a mechanism's direction to Net Kinetics as the motion to drive.",
+  "tab": "Kinetics",
+  "icon": "MechanismModes",
+  "guid": "6582956E-9B7F-4633-9C1F-DD82BD7C3524",
+  "inputs": [
+   {
+    "name": "CurvesA",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "First lath family",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "CurvesB",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Second lath family",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Fixed",
+    "nick": "F",
+    "type": "Point",
+    "desc": "Support points: the nearest joints are held (each one removes motions)",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Slide",
+    "nick": "Sl",
+    "type": "Point",
+    "desc": "Points whose nearest joints stay on a plane of normal SlideNormal, free to slide on it",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "SlideNormal",
+    "nick": "Sn",
+    "type": "Vector",
+    "desc": "Normal of the sliding plane (default world Z)",
+    "access": "item",
+    "default": "Vector3d.ZAxis"
+   },
+   {
+    "name": "Count",
+    "nick": "N",
+    "type": "Integer",
+    "desc": "Number of modes, softest first (default 3)",
+    "access": "item",
+    "default": "3"
+   },
+   {
+    "name": "Amplitude",
+    "nick": "Am",
+    "type": "Number",
+    "desc": "How far each mode is drawn: the largest node displacement in model units (0 = one mean joint spacing)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Stiffness",
+    "nick": "K",
+    "type": "Number",
+    "desc": "Bending stiffness of the laths relative to the hinges, as in Net Kinetics (0 = laths kink freely at every node)",
+    "access": "item",
+    "default": "1.0"
+   },
+   {
+    "name": "Segment",
+    "nick": "Sg",
+    "type": "Number",
+    "desc": "Longest lath piece between nodes (0 = joints only), as in Net Kinetics",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Tolerance",
+    "nick": "X",
+    "type": "Number",
+    "desc": "Maximum gap accepted as a crossing (0 = automatic)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Sampling",
+    "nick": "S",
+    "type": "Number",
+    "desc": "Chord deviation for curve sampling (0 = automatic)",
+    "access": "item",
+    "default": "0.0"
+   },
+   {
+    "name": "Mesh",
+    "nick": "M",
+    "type": "Mesh",
+    "desc": "Surface whose normals start the joint normals (optional; default from the crossing laths)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "Mite Net (from a net component or Mite Net): supplies the surface, the laths and — when it carries one — the profile in one wire. Anything wired beside it (Mesh, Curves, section inputs) overrides that part of the net. Its laths are the scissor grid and its surface starts the joint normals (unless Mesh is wired)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   }
+  ],
+  "outputs": [
+   {
+    "name": "ModesA",
+    "nick": "MA",
+    "type": "Curve",
+    "desc": "Family A laths moved along each mode (one branch per mode, softest first)",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "ModesB",
+    "nick": "MB",
+    "type": "Curve",
+    "desc": "Family B laths moved along each mode",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Joints",
+    "nick": "J",
+    "type": "Point",
+    "desc": "The scissor joints at rest",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Motion",
+    "nick": "Mo",
+    "type": "Vector",
+    "desc": "Per mode (branch): each joint's displacement, scaled to Amplitude",
+    "access": "tree",
+    "default": null
+   },
+   {
+    "name": "Stiffness",
+    "nick": "K",
+    "type": "Number",
+    "desc": "Per mode: first-order cost relative to the net's mean stiffness (≈ 0 for a mechanism)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Mechanism",
+    "nick": "Me",
+    "type": "Boolean",
+    "desc": "Per mode: true when it costs nothing — the net moves this way freely",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Mechanisms",
+    "nick": "Nm",
+    "type": "Integer",
+    "desc": "How many of the computed modes are mechanisms (raise Count when every mode is one)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Summary: the modes, their cost, how much of each moves out of the surface",
+    "access": "item",
+    "default": null
+   }
+  ]
  }
 ]
