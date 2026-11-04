@@ -7,9 +7,10 @@
 #
 # Action versions (checked 2026-10-08): checkout v7, setup-dotnet v6,
 # setup-node v7, setup-python v7, upload-artifact v7 — all node24 actions,
-# which GitHub-hosted runners support. Browsers are installed the way
-# Playwright's CI guide does it (`playwright install --with-deps`), for
-# Chromium only.
+# which GitHub-hosted runners support. The tests drive the Chrome the
+# runner image already has (CHROMIUM_PATH / CHROMIUM), with the Playwright
+# library alone from npm: no browser download, no apt (2026-11-04: the
+# `playwright install --with-deps` route hung on two runner images).
 #
 # Runner pinned to ubuntu-24.04 (2026-11-04): ubuntu-latest moved to Ubuntu 26
 # on 2026-10-19, which Playwright 1.56 does not know — its --with-deps install
@@ -95,14 +96,18 @@ jobs:
         working-directory: tools/webgen
         run: python3 build.py
       - name: Install Playwright and Chromium
-        # a hang here must fail fast, not use up the job's whole time limit
-        timeout-minutes: 10
-        env:
-          DEBIAN_FRONTEND: noninteractive
+        # the runner's own Chrome, no download and no apt: a hang here must fail fast
+        timeout-minutes: 5
         run: |
           mkdir -p "$RUNNER_TEMP/pw"
           npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock "playwright@$PLAYWRIGHT_VERSION"
-          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          exe="$(command -v google-chrome || command -v chromium || true)"
+          if [ -n "$exe" ]; then
+            echo "Using the runner's browser: $exe ($("$exe" --version))"
+            { echo "CHROMIUM_PATH=$exe"; echo "CHROMIUM=$exe"; } >> "$GITHUB_ENV"
+          else
+            "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install chromium
+          fi
       - name: Self-tests, light and dark (0 FAIL, no page errors)
         # --min is a floor: raise it when notes.py gains checks
         run: NODE_PATH="$RUNNER_TEMP/pw/node_modules" node tools/webgen/selftest.js tools/webgen/site/index.html --min 220
@@ -130,14 +135,18 @@ jobs:
       - name: Publish src/Mite.Web (no AOT)
         run: dotnet publish src/Mite.Web -c Release -o "$RUNNER_TEMP/miteweb" -p:RunAOTCompilation=false
       - name: Install Playwright and Chromium
-        # a hang here must fail fast, not use up the job's whole time limit
-        timeout-minutes: 10
-        env:
-          DEBIAN_FRONTEND: noninteractive
+        # the runner's own Chrome, no download and no apt: a hang here must fail fast
+        timeout-minutes: 5
         run: |
           mkdir -p "$RUNNER_TEMP/pw"
           npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock "playwright@$PLAYWRIGHT_VERSION"
-          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          exe="$(command -v google-chrome || command -v chromium || true)"
+          if [ -n "$exe" ]; then
+            echo "Using the runner's browser: $exe ($("$exe" --version))"
+            { echo "CHROMIUM_PATH=$exe"; echo "CHROMIUM=$exe"; } >> "$GITHUB_ENV"
+          else
+            "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install chromium
+          fi
       - name: Serve and smoke-test
         run: |
           (cd "$RUNNER_TEMP/miteweb/wwwroot" && python3 -m http.server 8765 >/dev/null 2>&1 &)
