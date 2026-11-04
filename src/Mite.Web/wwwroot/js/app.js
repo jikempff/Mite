@@ -781,6 +781,49 @@ function showDeformed() {
 // Kinetics
 // ---------------------------------------------------------------------------
 
+// Record: the motion played once there and back (held at both ends), captured from the viewport
+// canvas with MediaRecorder and downloaded — the clip to share, no screen recorder needed
+function recordingMime() {
+  if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
+  for (const m of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4;codecs=avc1', 'video/mp4'])
+    if (MediaRecorder.isTypeSupported(m)) return m;
+  return null;
+}
+
+async function recordKinetics() {
+  if (!S.kin || S.recording) return;
+  const mime = recordingMime(); if (!mime) return;
+  stopKinetics();
+  const n = S.kin.states.length;
+  const frames = [...Array(n).keys()];
+  const order = [...Array(6).fill(0), ...frames, ...Array(6).fill(n - 1), ...frames.slice().reverse(), ...Array(4).fill(0)];
+  const btn = $('krecord');
+  const canvas = S.viewer.canvas;
+  S.recording = { frames: 0, bytes: 0, mime, done: false };
+  btn.textContent = 'recording…'; btn.disabled = true;
+  S.viewer.opaqueBackground(true, getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
+  const chunks = [];
+  const recorder = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 8e6 });
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  const stopped = new Promise((res) => { recorder.onstop = res; });
+  recorder.start(250);
+  const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+  try {
+    for (const k of order) { $('kfold').value = k; showKinState(k); drawKinPlot(); S.recording.frames++; await wait(140); }
+  } finally {
+    recorder.stop(); await stopped;
+    S.viewer.opaqueBackground(false);
+    btn.textContent = 'record'; btn.disabled = false;
+  }
+  const blob = new Blob(chunks, { type: mime.split(';')[0] });
+  S.recording.bytes = blob.size; S.recording.done = true;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `mite-motion-${S.shape}.${mime.includes('mp4') ? 'mp4' : 'webm'}`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
 function stopKinetics(clear = false) {
   if (S.kinTimer) { clearInterval(S.kinTimer); S.kinTimer = null; $('kplay').textContent = 'play'; }
   if (clear && S.kin) { S.kin = null; $('kin-result').classList.add('hidden'); S.viewer.setMeshOpacity(surfaceOpacity()); S.viewer.colorCurves(null, null, null); showUtilLegend(false); }
@@ -1268,6 +1311,8 @@ async function main() {
     if (S.kin) colourKinLaths(S.kin.states[S.kinShown ?? 0]);
   });
   $('kfold').addEventListener('input', () => { stopKinetics(); showKinState(+$('kfold').value); drawKinPlot(); });
+  $('krecord').addEventListener('click', () => recordKinetics());
+  if (!recordingMime()) { $('krecord').disabled = true; $('krecord').title = 'This browser cannot record the viewport (no MediaRecorder)'; }
   $('kplay').addEventListener('click', () => {
     if (S.kinTimer) { stopKinetics(); return; }
     if (!S.kin) return;

@@ -244,6 +244,20 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
     return worst;
   });
   check(hex < 0.04, `the flat web is a hexagon (support function 60°-periodic to ${(hex * 100).toFixed(2)} %)`);
+  // record: the motion there and back, captured from the viewport and downloaded as a video
+  {
+    const canRecord = await page.evaluate(() => !document.getElementById('krecord').disabled);
+    if (canRecord) {
+      const dl = page.waitForEvent('download', { timeout: 120000 });
+      await page.click('#krecord');
+      const file = await dl;
+      await page.waitForFunction(() => window.__mite.recording && window.__mite.recording.done, null, { timeout: 120000 });
+      const rec = await page.evaluate(() => ({ ...window.__mite.recording, states: window.__mite.kin.states.length, label: document.getElementById('krecord').textContent, bg: window.__mite.viewer.renderer.getClearAlpha() }));
+      check(rec.bytes > 20000 && rec.frames === 2 * rec.states + 16 && /\.(webm|mp4)$/.test(file.suggestedFilename()),
+        `record downloads the motion there and back (${file.suggestedFilename()}, ${(rec.bytes / 1024).toFixed(0)} kB, ${rec.frames} frames for ${rec.states} states, ${rec.mime})`);
+      check(rec.label === 'record' && rec.bg === 0, 'after recording the button and the transparent viewport are back');
+    } else check(false, 'record button available (MediaRecorder in Chromium)');
+  }
 
   // 9. the kit of the pressed web: strips, joints, a hub and a zip
   await page.click('#kitrun'); await idle(300000);

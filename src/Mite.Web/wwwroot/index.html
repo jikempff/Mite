@@ -240,7 +240,7 @@
       <div class="row slider"><label for="ksteps">states</label><input id="ksteps" type="range" min="4" max="20" step="1" value="8"><output for="ksteps">8</output></div>
       <div class="row"><button id="kinrun" class="btn">Run the motion</button><span class="unit">on the current asymptotic net — use a coarse spacing</span></div>
       <div id="kin-result" class="hidden">
-        <div class="row slider"><label for="kfold">fold</label><input id="kfold" type="range" min="0" max="10" step="1" value="0"><output for="kfold">0</output><button id="kplay" class="ghost small">play</button></div>
+        <div class="row slider"><label for="kfold">fold</label><input id="kfold" type="range" min="0" max="10" step="1" value="0"><output for="kfold">0</output><button id="kplay" class="ghost small">play</button><button id="krecord" class="ghost small" title="Record the motion there and back as a video of the viewport (downloads a .webm, or .mp4 in Safari)">record</button></div>
         <div class="row"><span class="unit">lath colour</span><div class="chips small" id="kcolour" role="radiogroup" aria-label="lath colour during the motion">
           <button data-kc="state" class="on" title="Peak strain utilization of each lath in the state on screen — it changes as you move the fold slider">strain now</button>
           <button data-kc="envelope" title="Peak strain utilization of each lath over every state of the motion: what the lath must survive to be moved at all">envelope</button>

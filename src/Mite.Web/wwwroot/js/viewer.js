@@ -86,6 +86,12 @@ export class Viewer {
     if (this.mesh) this.mesh.material.needsUpdate = true;
   }
 
+  /** Paint the page colour behind the scene (on) or keep it transparent (off): a recorded video has no alpha, so a transparent canvas would come out black. */
+  opaqueBackground(on, cssColour) {
+    if (on) this.renderer.setClearColor(new THREE.Color(cssColour || (this.dark ? '#000000' : '#ffffff')), 1);
+    else this.renderer.setClearColor(0x000000, 0);
+  }
+
   resize() {
     const el = this.canvas.parentElement;
     const w = el.clientWidth, h = el.clientHeight;
