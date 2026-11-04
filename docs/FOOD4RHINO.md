@@ -119,16 +119,20 @@ Source, examples and roadmap: https://github.com/jikempff/Mite
 ## Keywords
 gridshell, asymptotic, geodesic, chebyshev, curvature, minimal surface, form finding, force density, dynamic relaxation, lath, timber, fabrication, unroll, planarization, mesh
 
-## Images (in `food4rhino/`, upload in this order)
-1. `app-01-catenoid-asymptotic.png` — asymptotic net on a catenoid in the browser app (hero).
-2. `app-02-catenoid-gaussian.png` — Gaussian curvature colouring under the net.
-3. `app-03-catenoid-lath-utilization.png` — one lath analysed (plots + unrolled pattern), every lath coloured by utilisation.
-4. `app-04-catenoid-beam-frame.png` — Gridshell Analysis: deformed net and utilisation.
-5. `app-05-schwarz-d-asymptotic.png`, `app-06-hyperboloid-rulings.png`, `app-07-enneper-3fold.png` — catalogue surfaces.
-6. `app-08-saddle-geodesic-net.png` — geodesic net.
-7. `app-09-catenoid-dark.png` — dark theme.
-8. `10-component-icons.png` — the component set (bench sheet); `02-asymptotic-net-hyperboloid.png`, `06-lath-sweep.png`, `07-net-joints.png` — bench cards with self-tests.
-9. Rhino/Grasshopper screenshots (to take on your machine): the Mite tab, a
-   catenoid definition Asymptotic Net → Lath Analysis (Shape 1) → Lath Sweep → Net Joints,
-   Gridshell Analysis deformed net, Lath Preview colouring, Lath Unroll patterns.
+## Images (in `food4rhino/`, upload in this order; 1600 × 1000, from the web app and the bench at 1.5.1)
+1. `app-01-catenoid-asymptotic.png` — the symmetric asymptotic web on a catenoid (hero).
+2. `app-02-catenoid-gaussian.png` — Gaussian curvature under the web (K < 0 everywhere: a minimal surface).
+3. `app-03-catenoid-beam-frame.png` — Gridshell Analysis: the net as a beam frame, utilisation per element.
+4. `app-04-catenoid-pieces.png` — Pieces: laths cut to stock with splices clear of the joints, boards packed.
+5. `app-05-catenoid-panels-planarity.png` — curvature-line panels and their planarity.
+6. `app-06-dome-chebyshev-angle-map.png` — Chebyshev net on a dome with its shear-angle map.
+7. `app-07-hyperboloid-rulings.png`, `app-08-enneper-3fold-web.png` — catalogue surfaces: straight rulings, the 3-fold web.
+8. `app-09-enneper-kinetics-strain.png`, `app-10-enneper-pressed-flat.png` — Net Kinetics: the web pressed flat, laths coloured by strain.
+9. `app-11-enneper-flat-kit.png` — Flat Kit: the flat assembly, deployment and nested strip sheets.
+10. `app-12-enneper-dark.png` — dark theme.
+11. `10-component-icons.png` — the 39 components by panel.
+12. `bench-13-mechanism-modes.png`, `bench-14-kinetic-state.png`, `bench-15-gridshell-analysis.png`, `bench-16-asymptotic-web.png` — Mite Bench cards: what to expect, self-tests on the real library, a live view.
+13. Rhino/Grasshopper screenshots (to take on your machine): the Mite tab, a
+    catenoid definition Asymptotic Net → Lath Analysis → Lath Sweep → Net Joints,
+    Gridshell Analysis deformed net, Net Kinetics with Kinetic State on a slider.
 Logo: `logo/mite-logo-512.png` (transparent, 512 × 512).
