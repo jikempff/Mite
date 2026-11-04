@@ -1,9 +1,9 @@
-# Food4Rhino listing — Mite 1.5.1
+# Food4Rhino listing — Mite 1.6.0
 
 Paste-ready copy for https://www.food4rhino.com/en/app/mite-curvature-form-finding-and-gridshell-nets-grasshopper
 (edit form; the address follows the title since 1.5.1 — the old /en/app/mite still shows the 1.3.2 page). Images
 to upload are listed at the end; the package itself goes up with
-`yak push dist/mite-1.5.1-rh8_0-any.yak`, which also sets the package icon (1.5.0 is on the server; 1.5.1 adds the Kinetics panel).
+`yak push dist/mite-1.6.0-rh8_0-any.yak`, which also sets the package icon (1.5.1 is on the server; 1.6.0 adds Kinetic Supports and Kinetic Drivers).
 
 ## Title
 Mite — curvature, form finding and gridshell nets for Grasshopper
@@ -74,6 +74,10 @@ kempffsele.me/mite — try a net on your own OBJ before installing anything.
 
 Source, examples and roadmap: https://github.com/jikempff/Mite
 
+## Version notes — 1.6.0
+- Kinetics: Kinetic Supports and Kinetic Drivers set up a scissor net as one wire each — fixed and sliding points, points moved to targets, cables to lengths. The points snap to the nearest joints of whichever net they are wired into, so one setup feeds Mechanism Modes (which motions are left free) and Net Kinetics (the motion under the drivers); both gain appended Supports / Drivers inputs, and their own inputs keep working. A motion driven through the setup is identical to the same motion set up by hand.
+- 41 components.
+
 ## Version notes — 1.5.1
 - Kinetics panel: Mechanism Modes shows how a scissor net can move before you set any driver — its softest motions, which of them are free (mechanisms), each drawn displaced; Kinetic State reads any moment of a Net Kinetics motion (new Motion output) to draw, bake or pass on, exact at the solved states.
 - Web app: record the motion as a video (record button beside play), and a new symbol for loading your own mesh.
@@ -133,7 +137,7 @@ form: the first is the hero. The live gallery since 1.5.1, in order:
 7. `app-09-enneper-kinetics-strain.png` — Net Kinetics: laths coloured by strain along the motion.
 8. `app-11-enneper-flat-kit.png` — Flat Kit: the flat assembly, deployment and nested strip sheets.
 9. `bench-13-mechanism-modes.png` — Mechanism Modes (new in 1.5.1), its Mite Bench card.
-10. `10-component-icons.png` — the 39 components by panel.
+10. `10-component-icons.png` — the components by panel (`python3 tools/icon-sheet.py`, retaken each release).
 
 Also in the folder, for a release that swaps one in (replace an image of the
 same kind, keep the hero first): `app-05-catenoid-panels-planarity.png`,
