@@ -1682,6 +1682,51 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     };
 }
 
+// ---------- Kinetic State: one moment of a solved motion ----------
+{
+    // the hyperboloid grid's exact motion β = 20° … 40° over Fold 0 … 1, solved at 5 and at 9 states;
+    // read at the solved states (exact) and halfway between (a chord: second order in the step)
+    const int ksN = 12, ksLv = 2; const double ksRho = 1.0;
+    double KsBeta(double f) => (20 + 20 * f) * Math.PI / 180;
+    Mite.Core.Kinetics.KineticMotion KsMotion(int count)
+    {
+        var (n0, l0, q0) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(ksN, ksLv, ksRho, KsBeta(0));
+        var net0 = new Mite.Core.Kinetics.ScissorNet(n0, l0, ksN, q0);
+        var sts = Enumerable.Range(0, count).Select(k => { double f = k / (double)(count - 1); var (p, _, q) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(ksN, ksLv, ksRho, KsBeta(f)); return new Mite.Core.Kinetics.ScissorNet.State { Fold = f, Nodes = p, Normals = q }; }).ToList();
+        return new Mite.Core.Kinetics.KineticMotion(net0, sts, new Mite.Core.Kinetics.KineticStrain.Options { Profile = new LathProfile(0.05, 0.005, true) });
+    }
+    (double err, double drift, double solvedErr) KsRead(int count)
+    {
+        var m = KsMotion(count); double e = 0, d = 0, se = 0;
+        for (int k = 0; k < count; k++)
+        {
+            double f = k / (double)(count - 1);
+            var (tr, _, _) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(ksN, ksLv, ksRho, KsBeta(f));
+            se = Math.Max(se, m.At(f).Nodes.Zip(tr, (a, b) => (a - b).Length).Max());
+            if (k + 1 == count) break;
+            double fm = (k + 0.5) / (count - 1);
+            var (tm, _, _) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(ksN, ksLv, ksRho, KsBeta(fm));
+            var s = m.At(fm);
+            e = Math.Max(e, s.Nodes.Zip(tm, (a, b) => (a - b).Length).Max()); d = Math.Max(d, m.SpacingDrift(s));
+        }
+        return (e, d, se);
+    }
+    var k5 = KsRead(5); var k9 = KsRead(9);
+    var mk = KsMotion(5);
+    var solvedUtil = Mite.Core.Kinetics.KineticStrain.Analyze(mk.Net, mk.States[2], mk.Strain).MaxUtilization;
+    var readUtil = Mite.Core.Kinetics.KineticStrain.Analyze(mk.Net, mk.At(0.5), mk.Strain).MaxUtilization;
+    numbers["kinState"] = new { err5 = k5.err, err9 = k9.err, ratio = R3(k5.err / k9.err), drift5 = k5.drift, drift9 = k9.drift, driftRatio = R3(k5.drift / k9.drift),
+        solvedErr = Math.Max(k5.solvedErr, k9.solvedErr), utilSolved = solvedUtil, utilRead = readUtil };
+    object KsScene(double fold)
+    {
+        var st = mk.At(fold); var (tr, _, _) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(ksN, ksLv, ksRho, KsBeta(fold));
+        var read = mk.Net.LathPolylines(st);
+        var exact = mk.Net.LathPolylines(new Mite.Core.Kinetics.ScissorNet.State { Nodes = tr });
+        return new { a = read.Take(mk.Net.CountA).Select(l => Line(l)).ToArray(), b = read.Skip(mk.Net.CountA).Select(l => Line(l)).ToArray(), exact = exact.Select(l => Line(l)).ToArray(), drift = mk.SpacingDrift(st) };
+    }
+    scenes["kinState"] = new Dictionary<string, object> { ["solved"] = KsScene(0.5), ["between"] = KsScene(0.625) };
+}
+
 // ---------- Mite Net: one value for surface + both families (+ profile); lath-end classification ----------
 {
     // (1) the saddle's classic (non-continuous) asymptotic net: T-junctions, compared with the bench's own Ends()

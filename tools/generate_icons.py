@@ -751,6 +751,16 @@ def icon_mechanism_modes():
     finish(img, "MechanismModes")
 
 
+def icon_kinetic_state():
+    """One moment of a motion: the sheared scissor lattice under a slider (the Fold), its knob part-way."""
+    img, d = canvas()
+    quad = [(4.5, 9.0), (15.0, 9.0), (21.0, 21.0), (10.5, 21.0)]
+    lattice(img, d, "white", 3, 3, nodes=True, quad=quad, famU="a", famV="b")
+    mark(d, [P(3.0, 4.0), P(21.0, 4.0)], 1.2)
+    dot(d, 13.5, 4.0, 2.3, ink=True)
+    finish(img, "KineticState")
+
+
 # ================================================================ Util (grey)
 def icon_mesh_cleanup():
     img, d = canvas()
@@ -907,7 +917,7 @@ ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, i
        icon_agg_web, icon_web_propagation, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path, icon_net_trim,
        icon_mite_net, icon_mite_net_param, icon_lath_analysis, icon_gridshell_analysis, icon_net_distributions, icon_mesh_isocurves,
        icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_strip, icon_lath_segment, icon_lath_preview,
-       icon_lath_labels, icon_flat_kit, icon_net_topology, icon_net_kinetics, icon_mechanism_modes, icon_mesh_cleanup, icon_pull_to_mesh,
+       icon_lath_labels, icon_flat_kit, icon_net_topology, icon_net_kinetics, icon_mechanism_modes, icon_kinetic_state, icon_mesh_cleanup, icon_pull_to_mesh,
        icon_mesh_colour_map, icon_tab]
 
 if __name__ == "__main__":

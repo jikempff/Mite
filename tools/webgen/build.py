@@ -16,7 +16,7 @@ TAB_BLURB = {
     "Kinetics": "Nets that move: scissor-jointed asymptotic grids as mechanisms.",
     "Util": "Mesh intake, projection and colouring helpers.",
 }
-COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Test Shape", "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation", "Asymptotic Net", "Asymptotic Web", "AGG Web", "Web Propagation", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Net Trim", "Mite Net", "Lath Analysis", "Gridshell Analysis", "Net Distributions", "Mesh Isocurves", "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Strip", "Lath Segment", "Lath Labels", "Lath Preview", "Flat Kit", "Net Topology", "Net Kinetics", "Mechanism Modes", "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
+COMP_ORDER = ["Principal Curvature", "Gaussian Curvature", "Mean Curvature", "Curvature Streamlines", "Umbilics", "Test Shape", "Planarize Mesh", "Minimal Surface", "Force Density Method", "Dynamic Relaxation", "Asymptotic Net", "Asymptotic Web", "AGG Web", "Web Propagation", "Geodesic Net", "Chebyshev Net", "Conjugate Net", "Geodesic Path", "Net Trim", "Mite Net", "Lath Analysis", "Gridshell Analysis", "Net Distributions", "Mesh Isocurves", "Lath Sweep", "Net Joints", "Lath Unroll", "Lath Strip", "Lath Segment", "Lath Labels", "Lath Preview", "Flat Kit", "Net Topology", "Net Kinetics", "Mechanism Modes", "Kinetic State", "Mesh Cleanup", "Pull To Mesh", "Mesh Colour Map"]
 byname = {c["name"]: c for c in comps}
 assert set(COMP_ORDER) <= set(byname), set(COMP_ORDER) - set(byname)
 if set(byname) - set(COMP_ORDER): print("components without a bench card:", ", ".join(sorted(set(byname) - set(COMP_ORDER))))

@@ -981,6 +981,7 @@ internal static class Tests
         // lines of family A and one of family B on a 4 × 4 plate: 2 joints; B ends
         // on the border (x = ±2), A's second lath starts on B (a T-junction)
         Check("Mite Net → Net Joints / Lath Labels / Net Topology (one wire)", NetWire());
+        Check("Net Kinetics → Motion → Kinetic State (one moment of the motion)", KineticStateWire());
         // Mode menus (ROADMAP B): the catalogue names live inputs of the right type and default
         Check("Mode menus: every catalogued input exists with its type and default", ModesMatch());
 
@@ -1037,6 +1038,49 @@ internal static class Tests
         return _failed == 0 ? 0 : 1;
     }
 
+    // Net Kinetics → Motion → Kinetic State: the flat lattice opened to 60°, read at Fold 1 (the last solved state:
+    // exact, the same joints as Net Kinetics) and at Fold 0.5 (between states: drift small, angles between 90° and 60°)
+    private static bool KineticStateWire()
+    {
+        try
+        {
+            var doc = new Grasshopper.Kernel.GH_Document();
+            var kin = new Mite.Grasshopper.Components.NetKineticsComponent();
+            var state = new Mite.Grasshopper.Components.KineticStateComponent();
+            doc.AddObject(kin, false); doc.AddObject(state, false);
+            SetCurveList(kin, 0,
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0)),
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 1, 0), new Rhino.Geometry.Point3d(2, 1, 0)),
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 2, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+            SetCurveList(kin, 1,
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(0, 2, 0)),
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1, 0, 0), new Rhino.Geometry.Point3d(1, 2, 0)),
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(2, 0, 0), new Rhino.Geometry.Point3d(2, 2, 0)));
+            SetPointList(kin, 2, new Rhino.Geometry.Point3d(0, 0, 0));
+            SetInputs(kin, (8, 4), (27, 1), (28, 60.0), (29, 0.0));
+            state.Params.Input[0].AddSource(kin.Params.Output[18]);
+            kin.CollectData(); kin.ComputeData();
+            SetInputs(state, (1, 1.0));
+            state.CollectData(); state.ComputeData();
+            foreach (var c in new Grasshopper.Kernel.GH_Component[] { kin, state })
+            {
+                var errors = c.RuntimeMessages(Grasshopper.Kernel.GH_RuntimeMessageLevel.Error);
+                if (errors.Count > 0) return Expect(false, $"no error on {c.Name}: {errors[0]}");
+            }
+            var jk = Points(kin, 2); var js = Points(state, 2);
+            double same = jk.Count == js.Count ? jk.Zip(js, (a, b) => a.DistanceTo(b)).DefaultIfEmpty(0).Max() : double.NaN;
+            bool atEnd = js.Count == 9 && same < 1e-9 && Numbers(state, 4).All(a => System.Math.Abs(a - 60) < 0.5) && Numbers(state, 8)[0] < 1e-6;
+            state.ExpireSolution(false);
+            SetInputs(state, (1, 0.5));
+            state.CollectData(); state.ComputeData();
+            var mid = Numbers(state, 4);
+            bool between = mid.Count == 9 && mid.All(a => a > 59.5 && a < 90.5) && Numbers(state, 8)[0] < 0.05;
+            return Expect(atEnd, $"Fold 1 = Net Kinetics' last state: 9 joints within 1e-9 of it, 60°; got {js.Count} joints, Δ {same:E1}")
+                && Expect(between, $"Fold 0.5 between 90° and 60°, small drift; got {string.Join(", ", mid.Select(a => a.ToString("F1")))}, drift {Numbers(state, 8).FirstOrDefault():E1}");
+        }
+        catch (System.Exception ex) { return Expect(false, "threw " + ex.Message); }
+    }
+
     private static bool NetWire()
     {
         try
@@ -1056,7 +1100,7 @@ internal static class Tests
                 new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1.5, 0, 0), new Rhino.Geometry.Point3d(1.5, 1, 0)));
             SetCurveList(build, 3,
                 new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-2, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0)));
-            joints.Params.Input[11].AddSource(build.Params.Output[0]);
+            joints.Params.Input[12].AddSource(build.Params.Output[0]);
             labels.Params.Input[4].AddSource(build.Params.Output[0]);
             topo.Params.Input[5].AddSource(build.Params.Output[0]);
             foreach (var c in new Grasshopper.Kernel.GH_Component[] { build, joints, labels, topo }) { c.CollectData(); c.ComputeData(); }

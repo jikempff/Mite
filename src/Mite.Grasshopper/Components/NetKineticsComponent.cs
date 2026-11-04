@@ -106,6 +106,7 @@ public class NetKineticsComponent : MiteComponent
         pManager.AddNumberParameter("Natural", "Nf", "Fold parameter of the least-energy state along the motion (Schikore et al.'s natural configuration); NaN when the energy is flat", GH_ParamAccess.item);
         pManager.AddBooleanParameter("Buildable", "Ok", "True when every state stays within MaxStrain", GH_ParamAccess.item);
         RegisterNetOutput(pManager, "The net at Fold (kind Kinetic, the profile used, no surface — the moved grid no longer lies on the input surface)"); // 17
+        pManager.AddGenericParameter("Motion", "Mo", "The whole solved motion (appended 2026-11-04): wire it into Kinetic State to read the net at any fold — between the solved states, or to bake one", GH_ParamAccess.item); // 18
     }
 
     protected override void SolveInstance(IGH_DataAccess DA)
@@ -391,5 +392,6 @@ public class NetKineticsComponent : MiteComponent
         var polysB = polys.Skip(net.CountA).ToList();
         DA.SetData(17, new MiteNetGoo(new LathNet(null, polysA, polysB, NetKind.Kinetic, netIn?.Spacing ?? 0,
             netProfile == null ? profile : netIn!.ProfileA, netProfile == null ? profile : netIn!.ProfileOf(netIn.CountA))));
+        DA.SetData(18, new KineticMotionGoo(new KineticMotion(net, result.States, strainOpt)));
     }
 }

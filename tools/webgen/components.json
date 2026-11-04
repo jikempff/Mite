@@ -3759,6 +3759,14 @@
     "desc": "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends. The net at Fold (kind Kinetic, the profile used, no surface — the moved grid no longer lies on the input surface)",
     "access": "item",
     "default": null
+   },
+   {
+    "name": "Motion",
+    "nick": "Mo",
+    "type": "Generic",
+    "desc": "The whole solved motion (appended 2026-11-04): wire it into Kinetic State to read the net at any fold — between the solved states, or to bake one",
+    "access": "item",
+    "default": null
    }
   ]
  },
@@ -5363,6 +5371,123 @@
     "nick": "R",
     "type": "Text",
     "desc": "Summary: the modes, their cost, how much of each moves out of the surface",
+    "access": "item",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "KineticStateComponent.cs",
+  "name": "Kinetic State",
+  "nick": "State",
+  "desc": "Reads one moment of a motion solved by Net Kinetics: wire its Motion output here and slide Fold. You get the laths, joints, normals and scissor angles at that fold, each lath's strain utilization and the strain energy, and a Mite Net to pass on (Lath Sweep, Net Joints, Flat Kit) — without solving the motion again. At a solved state the reading is exact; between two states the net is interpolated, and Drift tells how far the joint spacing is then from exact (it falls with the square of the step: raise Steps on Net Kinetics when it matters). Animate the Fold slider (right-click › Animate) to record the motion.",
+  "tab": "Kinetics",
+  "icon": "KineticState",
+  "guid": "66D5EB75-6902-4B60-87F0-0B1644387652",
+  "inputs": [
+   {
+    "name": "Motion",
+    "nick": "Mo",
+    "type": "Generic",
+    "desc": "A solved motion: Net Kinetics' Motion output",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Fold",
+    "nick": "Fo",
+    "type": "Number",
+    "desc": "Where in the motion to read: 0 = the rest state, 1 = the end of a full run (clamped to the solved range)",
+    "access": "item",
+    "default": "1.0"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "A",
+    "nick": "A",
+    "type": "Curve",
+    "desc": "Family A laths at Fold (polylines through the nodes)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "B",
+    "nick": "B",
+    "type": "Curve",
+    "desc": "Family B laths at Fold",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Joints",
+    "nick": "J",
+    "type": "Point",
+    "desc": "Joint positions at Fold",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Normals",
+    "nick": "N",
+    "type": "Vector",
+    "desc": "Surface normal at each joint at Fold",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Angles",
+    "nick": "An",
+    "type": "Number",
+    "desc": "Scissor angle (degrees) between the two laths at each joint",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "LathUtil",
+    "nick": "Ul",
+    "type": "Number",
+    "desc": "Each lath's peak strain utilization at Fold (A laths first, then B) — wire into Lath Preview",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Utilization",
+    "nick": "U",
+    "type": "Number",
+    "desc": "Peak strain utilization over all laths at Fold (1 = MaxStrain)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Energy",
+    "nick": "En",
+    "type": "Number",
+    "desc": "Strain energy at Fold in joules (plus the self-weight potential when Density is set)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Drift",
+    "nick": "Dr",
+    "type": "Number",
+    "desc": "Largest relative change of a joint spacing at Fold: ≈ 0 at a solved state, the chord error between states",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Net",
+    "nick": "Nt",
+    "type": "Mite Net",
+    "desc": "The whole net in one wire (surface + both families): plug it into Net Joints, Net Topology, Lath Sweep, Lath Analysis, Gridshell Analysis, Lath Segment, Lath Unroll, Lath Labels or Net Kinetics; Mite Net adds a profile and reports the lath ends. The net at Fold (kind Kinetic, the section the motion is read with, no surface)",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "Where the reading lies in the motion and what it shows",
     "access": "item",
     "default": null
    }
