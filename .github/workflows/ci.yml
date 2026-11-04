@@ -10,6 +10,11 @@
 # which GitHub-hosted runners support. Browsers are installed the way
 # Playwright's CI guide does it (`playwright install --with-deps`), for
 # Chromium only.
+#
+# Runner pinned to ubuntu-24.04 (2026-11-04): ubuntu-latest moved to Ubuntu 26
+# on 2026-10-19, which Playwright 1.56 does not know — its --with-deps install
+# hung there for 25 minutes on the first 1.5.1 run. Move both together: a
+# newer runner image with a Playwright release that supports it.
 name: CI
 
 on:
@@ -39,7 +44,7 @@ env:
 jobs:
   build-test:
     name: Build and test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -70,7 +75,7 @@ jobs:
 
   bench:
     name: Mite Bench page and self-tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -90,6 +95,10 @@ jobs:
         working-directory: tools/webgen
         run: python3 build.py
       - name: Install Playwright and Chromium
+        # a hang here must fail fast, not use up the job's whole time limit
+        timeout-minutes: 10
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           mkdir -p "$RUNNER_TEMP/pw"
           npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock "playwright@$PLAYWRIGHT_VERSION"
@@ -106,7 +115,7 @@ jobs:
 
   web:
     name: Web app publish and smoke test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -121,6 +130,10 @@ jobs:
       - name: Publish src/Mite.Web (no AOT)
         run: dotnet publish src/Mite.Web -c Release -o "$RUNNER_TEMP/miteweb" -p:RunAOTCompilation=false
       - name: Install Playwright and Chromium
+        # a hang here must fail fast, not use up the job's whole time limit
+        timeout-minutes: 10
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           mkdir -p "$RUNNER_TEMP/pw"
           npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock "playwright@$PLAYWRIGHT_VERSION"
