@@ -36,14 +36,30 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
 (async () => {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM || undefined,
-    args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'],
+    // software WebGL: newer Chrome needs the explicit opt-in on a machine without a GPU (a CI runner)
+    args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'],
   });
+  console.log(`browser: ${process.env.CHROMIUM || 'Playwright Chromium'} ${browser.version()}`);
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const errors = [];
+  const consoleErrors = [];
   const pickShape = async (k) => { await page.click('#shape-current'); await page.click(`#shape-list [data-shape=${k}]`); };
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error' && !/status of 404/.test(m.text())) consoleErrors.push(m.text()); });
+  page.on('crash', () => consoleErrors.push('the page crashed'));
   await page.goto(`${base}/index.html?v=${Date.now()}`);
-  await page.waitForFunction(() => document.getElementById('boot').classList.contains('hidden'), null, { timeout: 180000 });
+  const booted = await page.waitForFunction(() => document.getElementById('boot').classList.contains('hidden'), null, { timeout: 180000 }).then(() => true, () => false);
+  if (!booted) {
+    // say why, instead of a bare timeout: the boot line, WebGL, and every error the page or its worker logged
+    const why = await page.evaluate(() => ({
+      text: document.getElementById('boot-text')?.textContent,
+      webgl: !!document.createElement('canvas').getContext('webgl2'),
+    })).catch((e) => ({ text: 'page not readable: ' + e.message }));
+    check(false, `the app boots within 3 min (stuck at "${why.text}", WebGL2 ${why.webgl ? 'available' : 'NOT available'})`);
+    for (const e of [...new Set([...errors, ...consoleErrors])].slice(0, 12)) console.log('  error: ' + e.slice(0, 400));
+    await browser.close();
+    process.exit(1);
+  }
 
   // 1. shape change during the first load
   await pickShape('catenoid');
