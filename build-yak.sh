@@ -42,6 +42,9 @@ if [ ! -d "$build_out" ]; then
 fi
 echo "==> Staging package files..."
 mkdir -p "$dist"
+# Start from an empty dist (manifest.yml kept): yak packs every file in the
+# folder, so anything left there — an old zip, a stray DLL — would ship
+find "$dist" -mindepth 1 -maxdepth 1 ! -name manifest.yml -exec rm -rf {} +
 
 # GHA = the plugin DLL renamed
 cp -f "$build_out/Mite.Grasshopper.dll" "$dist/Mite.Grasshopper.gha"

@@ -35,6 +35,9 @@ Write-Host '==> Staging package files...' -ForegroundColor Cyan
 
 # Copy GHA (rename DLL to .gha)
 $ghaDll = Join-Path $buildOut 'Mite.Grasshopper.dll'
+# Start from an empty dist (manifest.yml kept): yak packs every file in the
+# folder, so anything left there - an old zip, a stray DLL - would ship
+Get-ChildItem $distDir -Force | Where-Object { $_.Name -ne 'manifest.yml' } | Remove-Item -Recurse -Force
 Copy-Item $ghaDll (Join-Path $distDir 'Mite.Grasshopper.gha') -Force
 
 # Copy Core library
