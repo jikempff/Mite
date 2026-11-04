@@ -148,6 +148,38 @@ const TPMS = {
   gyroid: ([x, y, z]) => sin(x) * cos(y) + sin(y) * cos(z) + sin(z) * cos(x),
 };
 
+
+// "Your mesh": an irregular triangle mesh (what an exported OBJ is, unlike the
+// smooth parametric grids of the catalogue) in the same isometric wire style,
+// with an import arrow dropping onto it
+function meshSymbol(size) {
+  const n = 4;
+  // fixed, gentle jitter so the triangles look like a real export, not a grid
+  const J = [0.00, 0.07, -0.05, 0.04, -0.07, 0.06, 0.03, -0.06, 0.08, -0.03, 0.05, -0.06, 0.06, -0.03, -0.05, 0.07, 0.03, -0.07, 0.05, 0.02, -0.04, 0.06, -0.08, 0.04, 0.02];
+  const pt = (i, j) => {
+    const interior = i > 0 && i < n && j > 0 && j < n;
+    const k = i * (n + 1) + j;
+    const u = -1 + 2 * i / n + (interior ? J[k] : 0), v = -1 + 2 * j / n + (interior ? J[(k + 7) % J.length] : 0);
+    // a free-form bump, off centre: reads as a scanned or modelled mesh
+    return ISO([u, v, 0.55 * Math.exp(-1.6 * ((u - 0.15) ** 2 + (v + 0.1) ** 2)) - 0.12 * u + 0.08 * v]);
+  };
+  const lines = [], border = [];
+  for (let i = 0; i <= n; i++)
+    for (let j = 0; j <= n; j++) {
+      if (i < n) ((j === 0 || j === n) ? border : lines).push([pt(i, j), pt(i + 1, j)]);
+      if (j < n) ((i === 0 || i === n) ? border : lines).push([pt(i, j), pt(i, j + 1)]);
+      if (i < n && j < n) lines.push((i + j) % 2 ? [pt(i, j), pt(i + 1, j + 1)] : [pt(i + 1, j), pt(i, j + 1)]);
+    }
+  const all = fitPaths([...border, ...lines], size, 3);
+  const B = all.slice(0, border.length), L = all.slice(border.length);
+  // import arrow in the empty top-right corner
+  const s = size / 44, ax = 37 * s, a0 = 3 * s, a1 = 12.5 * s, h = 3 * s;
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">` +
+    `<path d="${L.map(d).join('')}" fill="none" stroke="currentColor" stroke-width="0.7" stroke-opacity="0.55" stroke-linejoin="round"/>` +
+    `<path d="${B.map(d).join('')}" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>` +
+    `<path d="M${ax.toFixed(1)} ${a0.toFixed(1)}V${a1.toFixed(1)}M${(ax - h).toFixed(1)} ${(a1 - h).toFixed(1)}L${ax.toFixed(1)} ${a1.toFixed(1)}L${(ax + h).toFixed(1)} ${(a1 - h).toFixed(1)}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 const cache = new Map();
 
 /** SVG markup of a shape's symbol, drawn in currentColor. */
@@ -156,7 +188,7 @@ export function symbolSVG(key, size = 44) {
   if (cache.has(id)) return cache.get(id);
   let svg;
   if (key === 'file') {
-    svg = `<svg viewBox="0 0 44 44" width="${size}" height="${size}" aria-hidden="true"><path d="M12 6h14l8 8v24H12z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M26 6v8h8" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M16 32l5-10 5 6 4-7 3 11z M21 22l5 6 M16 32h17" fill="none" stroke="currentColor" stroke-width="0.9"/></svg>`;
+    svg = meshSymbol(size);
   } else {
     const w = TPMS[key] ? tpms(TPMS[key]) : wires(key);
     const all = fitPaths([...w.border, ...w.lines], size, 3);
