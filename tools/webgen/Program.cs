@@ -1727,6 +1727,54 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     scenes["kinState"] = new Dictionary<string, object> { ["solved"] = KsScene(0.5), ["between"] = KsScene(0.625) };
 }
 
+// ---------- Kinetic Supports / Kinetic Drivers: supports and drivers as one wire ----------
+{
+    // a square 4 × 4 lattice of straight rods held at a corner, its far corner pulled up by 1:
+    // through a setup (points snapped to the nodes) and through direct node indices — the same motion
+    const int sn = 3;
+    Mite.Core.Kinetics.ScissorNet Lat()
+    {
+        var nodes = new Vec3d[(sn + 1) * (sn + 1)];
+        for (int i = 0; i <= sn; i++) for (int j = 0; j <= sn; j++) nodes[i * (sn + 1) + j] = new Vec3d(i, j, 0);
+        var laths = new List<int[]>();
+        for (int j = 0; j <= sn; j++) laths.Add(Enumerable.Range(0, sn + 1).Select(i => i * (sn + 1) + j).ToArray());
+        for (int i = 0; i <= sn; i++) laths.Add(Enumerable.Range(0, sn + 1).Select(j => i * (sn + 1) + j).ToArray());
+        return new Mite.Core.Kinetics.ScissorNet(nodes, laths, sn + 1);
+    }
+    var supports = new Mite.Core.Kinetics.KineticSetup(fixedPoints: new[] { new Vec3d(0.05, -0.04, 0) });
+    var drivers = new Mite.Core.Kinetics.KineticSetup(move: new[] { new Vec3d(3.03, 2.98, 0) }, to: new[] { new Vec3d(3, 3, 1) });
+    var setup = Mite.Core.Kinetics.KineticSetup.Merge(supports, drivers);
+    Mite.Core.Kinetics.ScissorNet.Result KsRun(IReadOnlyList<int> fixedIdx, IReadOnlyList<int> driven, IReadOnlyList<Vec3d> targets, out Mite.Core.Kinetics.ScissorNet net)
+    {
+        net = Lat(); var start = driven.Select(i => Lat().Nodes[i]).ToArray();
+        return net.Solve(new Mite.Core.Kinetics.ScissorNet.Options { Fixed = fixedIdx, Driven = driven, Steps = 4, TargetsAt = t => start.Select((p, k) => p + t * (targets[k] - p)).ToArray() });
+    }
+    var res = setup.Resolve(Lat());
+    var viaSetup = KsRun(res.Fixed, res.Driven, res.TargetEnd, out var netS);
+    var direct = KsRun(new[] { 0 }, new[] { sn * (sn + 1) + sn }, new[] { new Vec3d(3, 3, 1) }, out _);
+    double diff = 0; for (int k = 0; k < direct.States.Count; k++) for (int v = 0; v < direct.States[k].Nodes.Length; v++) diff = Math.Max(diff, (direct.States[k].Nodes[v] - viaSetup.States[k].Nodes[v]).Length);
+    var mS = Mite.Core.Kinetics.MechanismModes.Compute(Lat(), new Mite.Core.Kinetics.ScissorNet.Options { Fixed = res.Fixed }, new Mite.Core.Kinetics.MechanismModes.Options { Count = 3 });
+    var mD = Mite.Core.Kinetics.MechanismModes.Compute(Lat(), new Mite.Core.Kinetics.ScissorNet.Options { Fixed = new[] { 0 } }, new Mite.Core.Kinetics.MechanismModes.Options { Count = 3 });
+    var merged = Mite.Core.Kinetics.KineticSetup.Merge(new Mite.Core.Kinetics.KineticSetup(move: new[] { Vec3d.Zero, new Vec3d(1, 0, 0) }, to: new[] { new Vec3d(9, 9, 9) }),
+        new Mite.Core.Kinetics.KineticSetup(move: new[] { new Vec3d(2, 0, 0) }, to: new[] { new Vec3d(7, 7, 7) }));
+    numbers["kinSetup"] = new
+    {
+        fixedIdx = res.Fixed, driven = res.Driven, snap = R3(res.LargestSnap), states = viaSetup.States.Count, motionDiff = diff, targetMiss = viaSetup.Last.TargetMiss,
+        modesSame = mS.Mechanisms == mD.Mechanisms && mS.Modes.Zip(mD.Modes, (a, b) => Math.Abs(a.Stiffness - b.Stiffness)).Max() < 1e-12, mechanisms = mS.Mechanisms,
+        mergedTo = merged.To.Select(v => v.X).ToArray(), problemsMoveNoTo = new Mite.Core.Kinetics.KineticSetup(move: new[] { Vec3d.Zero }).Problems().Count,
+        problemsOk = setup.Problems().Count,
+    };
+    var restPolys = netS.LathPolylines(new Mite.Core.Kinetics.ScissorNet.State { Nodes = Lat().Nodes });
+    var endPolys = netS.LathPolylines(viaSetup.Last);
+    scenes["kinSetup"] = new
+    {
+        rest = restPolys.Select(l => Line(l)).ToArray(),
+        a = endPolys.Take(netS.CountA).Select(l => Line(l)).ToArray(), b = endPolys.Skip(netS.CountA).Select(l => Line(l)).ToArray(),
+        support = new[] { Line(new[] { new Vec3d(0, 0, 0), new Vec3d(-0.25, -0.25, -0.35), new Vec3d(0.25, 0.25, -0.35), new Vec3d(0, 0, 0) }) },
+        pull = new[] { Line(new[] { new Vec3d(3, 3, 0), new Vec3d(3, 3, 1) }) },
+    };
+}
+
 // ---------- Mite Net: one value for surface + both families (+ profile); lath-end classification ----------
 {
     // (1) the saddle's classic (non-continuous) asymptotic net: T-junctions, compared with the bench's own Ends()

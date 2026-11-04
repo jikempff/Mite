@@ -3613,6 +3613,24 @@
     "desc": "Deploy: the flat state is a bifurcation — a solver started exactly flat never leaves the plane — so the start is kicked along the net's softest mode by Kick × the mean joint spacing; the sign picks the branch (the deployment or its mirror image), 0 shows the lock",
     "access": "item",
     "default": "0.5"
+   },
+   {
+    "name": "Supports",
+    "nick": "Su",
+    "type": "Generic",
+    "desc": "Kinetic Supports output: its fixed and sliding points join Fixed and Slide (its plane normal is used when it has sliding points)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Drivers",
+    "nick": "Dr",
+    "type": "Generic",
+    "desc": "Kinetic Drivers output: its moved points and cables join Move / To and Cables / Lengths",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -5307,6 +5325,15 @@
     "access": "item",
     "default": null,
     "optional": true
+   },
+   {
+    "name": "Supports",
+    "nick": "Su",
+    "type": "Generic",
+    "desc": "Kinetic Supports output: its fixed and sliding points join Fixed and Slide (its plane normal is used when it has sliding points)",
+    "access": "item",
+    "default": null,
+    "optional": true
    }
   ],
   "outputs": [
@@ -5488,6 +5515,155 @@
     "nick": "R",
     "type": "Text",
     "desc": "Where the reading lies in the motion and what it shows",
+    "access": "item",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "KineticDriversComponent.cs",
+  "name": "Kinetic Drivers",
+  "nick": "Drivers",
+  "desc": "What moves a scissor net, as one wire: Move points take their nearest joints to the To targets (paired by index, the last target repeats) and Cables between two joints shorten or lengthen to Lengths — both reached at Fold = 1 on Net Kinetics. The points snap to the net's nearest joints. Chain with Kinetic Supports through Setup, or wire both into Net Kinetics.",
+  "tab": "Kinetics",
+  "icon": "KineticDrivers",
+  "guid": "CD02CAFF-7A6C-4A08-930B-938888BF101C",
+  "inputs": [
+   {
+    "name": "Move",
+    "nick": "Mv",
+    "type": "Point",
+    "desc": "Points whose nearest joints are moved (paired with To by index)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "To",
+    "nick": "To",
+    "type": "Point",
+    "desc": "Target of each Move point at Fold = 1 (the last repeats)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Cables",
+    "nick": "C",
+    "type": "Line",
+    "desc": "Actuator cables: each line's ends snap to the nearest joints",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Lengths",
+    "nick": "Le",
+    "type": "Number",
+    "desc": "Length of each cable at Fold = 1 (the rest length is the line's; the last value repeats)",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Setup",
+    "nick": "Su",
+    "type": "Generic",
+    "desc": "Another Kinetic Supports or Kinetic Drivers output to combine with (optional)",
+    "access": "item",
+    "default": null
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Drivers",
+    "nick": "Dr",
+    "type": "Generic",
+    "desc": "The drivers as one wire: into Net Kinetics' Drivers input",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Paths",
+    "nick": "Pa",
+    "type": "Line",
+    "desc": "Each Move point to its target, for preview",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "What the setup drives",
+    "access": "item",
+    "default": null
+   }
+  ]
+ },
+ {
+  "file": "KineticSupportsComponent.cs",
+  "name": "Kinetic Supports",
+  "nick": "Supports",
+  "desc": "How a scissor net is held, as one wire: Fixed points hold their nearest joints, Slide points keep theirs on a plane of normal SlideNormal, free to slide on it. Wire the same Supports into Mechanism Modes (which motions they leave free) and Net Kinetics (the motion they allow) — the points snap to each net's nearest joints. Chain several setups through Setup to combine them.",
+  "tab": "Kinetics",
+  "icon": "KineticSupports",
+  "guid": "778A9EB9-78F8-4593-B6C6-E0F663639E45",
+  "inputs": [
+   {
+    "name": "Fixed",
+    "nick": "F",
+    "type": "Point",
+    "desc": "Support points: the nearest joints are held in place",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "Slide",
+    "nick": "Sl",
+    "type": "Point",
+    "desc": "Points whose nearest joints stay on a plane of normal SlideNormal, free to slide on it",
+    "access": "list",
+    "default": null,
+    "optional": true
+   },
+   {
+    "name": "SlideNormal",
+    "nick": "Sn",
+    "type": "Vector",
+    "desc": "Normal of the sliding plane (default world Z)",
+    "access": "item",
+    "default": "Vector3d.ZAxis"
+   },
+   {
+    "name": "Setup",
+    "nick": "Su",
+    "type": "Generic",
+    "desc": "Another Kinetic Supports or Kinetic Drivers output to combine with (optional)",
+    "access": "item",
+    "default": null,
+    "optional": true
+   }
+  ],
+  "outputs": [
+   {
+    "name": "Supports",
+    "nick": "Su",
+    "type": "Generic",
+    "desc": "The supports as one wire: into Net Kinetics' or Mechanism Modes' Supports input",
+    "access": "item",
+    "default": null
+   },
+   {
+    "name": "Points",
+    "nick": "P",
+    "type": "Point",
+    "desc": "Every support point (fixed, then sliding), for preview",
+    "access": "list",
+    "default": null
+   },
+   {
+    "name": "Report",
+    "nick": "R",
+    "type": "Text",
+    "desc": "What the setup holds",
     "access": "item",
     "default": null
    }

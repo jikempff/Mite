@@ -60,6 +60,7 @@ Open-source C# toolkit for mesh curvature analysis, form finding, gridshell net 
 
 ### Kinetics
 - **Net Kinetics** — moves a scissor-jointed asymptotic net as a mechanism (Schikore, Schling, Oberbichler & Bauer 2020; Wan, Crolla & Schling 2025): constant joint spacing along the laths, laths perpendicular to the moving surface normal, rest bend kept with a chosen stiffness; driven by fixed / sliding supports, moved points or actuator cables, with a `Fold` slider and per-state drift / deviation / miss diagnostics. Every state is read elastically: bending and twist utilization of the lath section, strain energy Π = ½∫(GJτ² + EIκ²) ds, the natural (least-energy) state along the motion, and the strain envelope — each lath's peak over the whole motion, where it occurs and whether bending or twist governs (coloured per state in the web app). Exact on the doubly ruled hyperboloid grid (1e-12), settles traced nets in one step
+- **Kinetic Supports** / **Kinetic Drivers** — how a scissor net is held (fixed and sliding points) and what moves it (points moved to targets, cables to lengths), each as one wire; the points snap to the nearest joints of whichever net they are wired into, so one setup feeds Mechanism Modes and Net Kinetics alike (appended `Supports` / `Drivers` inputs; the components' own inputs keep working and the setup's points join them)
 - **Mechanism Modes** — how a scissor net can move before any driver is set: its softest motions with their first-order cost against the net's mean stiffness, which of them are mechanisms (cost nothing), each drawn displaced; supports remove them (a hyperboloid grid has one, held along a ring none, a flat lattice of straight rods two: shear and hypar twist)
 - **Kinetic State** — one moment of a solved motion: Net Kinetics' Motion output read at any fold — laths, joints, angles, strain and energy, a Mite Net to pass on — exact at solved states, a second-order chord between them with its joint drift reported
 
@@ -78,7 +79,7 @@ Runtime messages say what was measured, why it matters and what to change, with 
 | Project | Target | Description |
 |---------|--------|-------------|
 | `Mite.Core` | net10.0 + net48 | Core library, no Rhino dependency |
-| `Mite.Grasshopper` | net48 | Grasshopper plugin (39 components) |
+| `Mite.Grasshopper` | net48 | Grasshopper plugin (41 components) |
 | `Mite.Tests` | net10.0 | Unit tests against analytic surfaces |
 
 ## Install
@@ -148,7 +149,7 @@ Components appear under the **Mite** tab:
 - **Gridshells** — Asymptotic Web, AGG Web, Web Propagation, Asymptotic Net, Geodesic Net, Chebyshev Net, Conjugate Net, Geodesic Path, Net Trim, Mite Net
 - **Analysis** — Lath Analysis, Gridshell Analysis, Net Distributions, Mesh Isocurves
 - **Fabrication** — Lath Sweep, Net Joints, Lath Unroll, Lath Strip, Lath Segment, Lath Labels, Lath Preview, Flat Kit, Net Topology
-- **Kinetics** — Net Kinetics, Mechanism Modes, Kinetic State
+- **Kinetics** — Net Kinetics, Kinetic Supports, Kinetic Drivers, Mechanism Modes, Kinetic State
 - **Util** — Mesh Cleanup, Pull To Mesh, Mesh Colour Map
 
 The Gridshells panel also holds the **Mite Net** parameter, the one wire that carries a net's surface, both families and their profiles.
@@ -171,6 +172,9 @@ a **Mite Net** in between adds the lath profile for all of them.
 
 ## Changelog
 
+### Unreleased
+- **Kinetic Supports and Kinetic Drivers** (new components, Mite > Kinetics; core `Kinetics/KineticSetup`, additions only). Supports (fixed and sliding points, the slide plane's normal) and drivers (Move points with their To targets, cables with their Lengths) as one wire each, chained through a `Setup` input. Net Kinetics gains the appended inputs `Supports` (30) and `Drivers` (31), Mechanism Modes `Supports` (13); a setup's points join the component's own Fixed / Slide / Move / To / Cables / Lengths, Move–To and Cable–Length pairs kept by padding before the join. `KineticSetup.Resolve` snaps the points with Net Kinetics' rules (a held joint is not also sliding or moved, a cable on one joint is dropped); a motion driven through the setup is bit-identical to the same motion from direct indices (tests and bench). Icons: the lattice standing on two supports; the lattice with a corner pulled towards a target.
+- Six compiler warnings cleared (an unused local function, a nullable read, a duplicated using, two xUnit assertion styles).
 ### 1.5.1
 - **Kinetics panel: Mechanism Modes and Kinetic State** (new components, Mite > Kinetics; core `Kinetics/MechanismModes`, `Kinetics/KineticMotion`, `ScissorNet.MeanStiffness`; additions only). Mechanism Modes reads how a net can move before any driver is set — the softest modes of `ScissorNet.SoftestModes` with their cost against the net's mean stiffness, a mode below 1e-6 of it being a mechanism (Pellegrino 1993; Schling & Schikore 2023): the hyperboloid grid has exactly one, the closed-form motion (cosine 1 − 1e-6, gap ×2e12 to the stiff modes), holding its bottom ring leaves none, a flat lattice of straight rods has two (in-plane shear, hypar twist). Kinetic State reads one moment of a motion: Net Kinetics gains an appended `Motion` output (18), read at any fold — exact at solved states, a chord between them whose error and joint drift fall with the square of the step (×3.97 and ×4.00 when halved, against the hyperboloid's closed form). The Kinetics panel's nets are built by one shared helper. Icons: Mechanism Modes (the lattice, the outline of its mode, a two-headed arrow), Kinetic State (the lattice under a fold slider); Net Kinetics' fold arrow gets a visible head.
 - **Web app: record the motion.** A *record* button beside *play* in the Kinetics block plays the motion there and back and downloads it as a video of the viewport (MediaRecorder: WebM, or MP4 in Safari), painted on the page colour so the clip is not black.

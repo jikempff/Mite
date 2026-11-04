@@ -43,11 +43,13 @@ public class MechanismModesComponent : MiteComponent
         pManager.AddNumberParameter("Sampling", "S", "Chord deviation for curve sampling (0 = automatic)", GH_ParamAccess.item, 0.0);
         pManager.AddMeshParameter("Mesh", "M", "Surface whose normals start the joint normals (optional; default from the crossing laths)", GH_ParamAccess.item);
         RegisterNetInput(pManager, "Its laths are the scissor grid and its surface starts the joint normals (unless Mesh is wired)"); // 12
+        pManager.AddGenericParameter("Supports", "Su", "Kinetic Supports output: its fixed and sliding points join Fixed and Slide (its plane normal is used when it has sliding points)", GH_ParamAccess.item); // 13
         pManager[0].Optional = true;
         pManager[1].Optional = true;
         pManager[2].Optional = true;
         pManager[3].Optional = true;
         pManager[11].Optional = true;
+        pManager[13].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -83,6 +85,15 @@ public class MechanismModesComponent : MiteComponent
         DA.GetData(9, ref tolerance);
         DA.GetData(10, ref sampling);
         DA.GetData(11, ref mesh);
+        if (!KineticSetupGoo.TryRead(this, DA, 13, out var supportsIn)) return;
+        if (supportsIn != null)
+        {
+            KineticSetupGoo.Report(this, supportsIn);
+            fixedPts.AddRange(supportsIn.Fixed.Select(MeshConvert.ToRhinoPoint));
+            slidePts.AddRange(supportsIn.Slide.Select(MeshConvert.ToRhinoPoint));
+            if (supportsIn.Slide.Count > 0 && supportsIn.SlideNormal.HasValue) slideNormal = MeshConvert.ToRhinoVector(supportsIn.SlideNormal.Value);
+            if (supportsIn.HasDrivers) AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, "The setup's drivers are not used here: Mechanism Modes shows the motions available before driving.");
+        }
         if (count < 1) { AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Count {count} computes nothing: using 1."); count = 1; }
         if (count > 24) { AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, $"Count {count} capped at 24 (each mode costs a full inverse iteration)."); count = 24; }
 

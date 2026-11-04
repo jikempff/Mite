@@ -141,7 +141,7 @@ public class HubPlateTests
         var p = kit.Plates[0];
         var hubStrips = kit.Strips.Where(s => s.Marks.Any(m => m.Label == "hub")).ToList();
         Assert.Equal(6, hubStrips.Count);
-        Assert.Empty(kit.Strips.SelectMany(s => s.Marks).Where(m => m.Kind == FlatKit.MarkKind.Hub)); // no common pin hole any more
+        Assert.DoesNotContain(kit.Strips.SelectMany(s => s.Marks), m => m.Kind == FlatKit.MarkKind.Hub); // no common pin hole any more
         foreach (var s in hubStrips)
         {
             var ray = p.Rays.Single(r => r.Lath == s.Lath);

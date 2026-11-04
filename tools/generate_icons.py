@@ -761,6 +761,27 @@ def icon_kinetic_state():
     finish(img, "KineticState")
 
 
+def icon_kinetic_supports():
+    """How a net is held: the scissor lattice standing on two support triangles over a ground line."""
+    img, d = canvas()
+    quad = [(4.5, 2.5), (19.5, 2.5), (19.5, 13.0), (4.5, 13.0)]
+    lattice(img, d, "white", 3, 2, nodes=True, quad=quad, famU="a", famV="b")
+    for x in (4.5, 19.5):
+        halo(d, lambda ld, x=x: ld.polygon([P(x, 13.4), P(x - 3.4, 19.0), P(x + 3.4, 19.0)], fill=INK_RGBA), 0.6)
+    mark(d, [P(1.2, 21.4), P(22.8, 21.4)], 1.3)
+    finish(img, "KineticSupports")
+
+
+def icon_kinetic_drivers():
+    """What moves a net: the scissor lattice with its far corner pulled towards a target ring."""
+    img, d = canvas()
+    quad = [(2.0, 9.0), (14.5, 9.0), (14.5, 21.5), (2.0, 21.5)]
+    lattice(img, d, "white", 3, 3, nodes=True, quad=quad, famU="a", famV="b")
+    arrow(d, 15.0, 8.5, 19.6, 3.9, "ink", 1.4, 3.2)
+    halo(d, lambda ld: ld.ellipse([P(18.4, 1.0), P(22.8, 5.4)], outline=INK_RGBA, width=max(1, int(1.2 * S))), 0.6)
+    finish(img, "KineticDrivers")
+
+
 # ================================================================ Util (grey)
 def icon_mesh_cleanup():
     img, d = canvas()
@@ -917,7 +938,7 @@ ALL = [icon_principal_curvature, icon_gaussian_curvature, icon_mean_curvature, i
        icon_agg_web, icon_web_propagation, icon_geodesic_net, icon_chebyshev_net, icon_conjugate_net, icon_geodesic_path, icon_net_trim,
        icon_mite_net, icon_mite_net_param, icon_lath_analysis, icon_gridshell_analysis, icon_net_distributions, icon_mesh_isocurves,
        icon_lath_sweep, icon_net_joints, icon_lath_unroll, icon_lath_strip, icon_lath_segment, icon_lath_preview,
-       icon_lath_labels, icon_flat_kit, icon_net_topology, icon_net_kinetics, icon_mechanism_modes, icon_kinetic_state, icon_mesh_cleanup, icon_pull_to_mesh,
+       icon_lath_labels, icon_flat_kit, icon_net_topology, icon_net_kinetics, icon_mechanism_modes, icon_kinetic_state, icon_kinetic_supports, icon_kinetic_drivers, icon_mesh_cleanup, icon_pull_to_mesh,
        icon_mesh_colour_map, icon_tab]
 
 if __name__ == "__main__":

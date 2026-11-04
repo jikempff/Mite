@@ -12,7 +12,7 @@ Mesh curvature analysis, form finding, asymptotic / geodesic / Chebyshev nets, l
 
 ## Description
 Mite is an open-source Grasshopper toolkit (Rhino 8, Windows and Mac) for
-designing gridshells from meshes: 39 components in seven panels, no external
+designing gridshells from meshes: 41 components in seven panels, no external
 dependencies, MIT licence.
 
 **Curvature.** Principal, Gaussian and mean curvature per vertex (Rusinkiewicz
@@ -61,8 +61,9 @@ BOM), Net Topology (nodes and members for any downstream solver).
 semi-compliant grid mechanism (fixed, sliding and moved nodes, cables, a fold
 slider) and reads every state elastically: bending and twist strains of each
 lath, the strain energy along the motion and the natural, least-energy state.
-Mechanism Modes shows how a net can move before you drive it; Kinetic State
-reads any moment of a motion to bake or pass on.
+Kinetic Supports and Kinetic Drivers set it up as one wire each, Mechanism
+Modes shows how a net can move before you drive it, Kinetic State reads any
+moment of a motion to bake or pass on.
 
 **Tested against analytic truth.** Cylinder, hyperboloid, catenoid, Enneper,
 ruled patches and Schwarz D are part of the test suite with closed-form

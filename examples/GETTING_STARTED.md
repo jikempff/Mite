@@ -543,6 +543,15 @@ subdivides the laths so they can bend between joints, at several times the
 solve time (the twist energy does not change: a lath twists uniformly between
 hinges).
 
+**One setup for every kinetic component: Kinetic Supports and Kinetic
+Drivers** (Mite > Kinetics). Instead of wiring the same Fixed / Slide points into
+every component, put them on **Kinetic Supports** (`F` fixed, `Sl` sliding on
+the plane of normal `Sn`) and the moved points and cables on **Kinetic Drivers**
+(`Mv` / `To`, `C` / `Le`). Their outputs go into the appended `Su` Supports and
+`Dr` Drivers inputs of Net Kinetics and `Su` of Mechanism Modes; the points snap
+to each net's nearest joints, and the components' own inputs still work (the
+setup's points join them). Chain setups through their `Su` input to combine them.
+
 **Before you drive it: Mechanism Modes** (Mite > Kinetics) takes the same
 `A` / `B` (or the Net), `F` fixed and `Sl` sliding points, and tells you how the
 net can move on its own: its `N` softest motions, each with its cost relative to

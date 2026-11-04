@@ -12,7 +12,6 @@ using Rhino.Geometry;
 using Mite.Core.Diagnostics;
 using Mite.Core;
 using Mite.Core.Geometry;
-using System.Linq;
 using Mite.Core.Fabrication;
 using Mite.Core.Gridshells;
 

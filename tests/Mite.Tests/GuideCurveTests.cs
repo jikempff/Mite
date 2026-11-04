@@ -339,7 +339,7 @@ public class GuideCurveTests
         var gapsAlong = Enumerable.Range(0, n - 1).Select(i => (oa.GuideNodes[i + 1] - oa.GuideNodes[i]).Length).ToList();
         _out.WriteLine($"{n} nodes along x = y, gaps {gapsAlong.Min():F5} … {gapsAlong.Max():F5} (Spacing {s}); A {A.Count} curve(s), B {B.Count}");
         Assert.True(gapsAlong.All(x => Math.Abs(x - s) < 1e-3), "node gaps are not Spacing");
-        Assert.Equal(1, A.Count);
+        Assert.Single(A);
         Assert.Equal(n, B.Count);
         double worstStraight = 0, worstThrough = 0;
         foreach (var c in B)

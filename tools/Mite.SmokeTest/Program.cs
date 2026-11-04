@@ -66,7 +66,7 @@ internal static class Tests
         var saddle = BuildSaddle(20, 2.0);
         var grid = BuildBumpyGrid(10, 10);
 
-        Check("Icons load for all 39 components and the Mite Net parameter", IconsLoad());
+        Check("Icons load for all 41 components and the Mite Net parameter", IconsLoad());
 
         TestComponent("Principal Curvature",
             new Mite.Grasshopper.Components.PrincipalCurvatureComponent(),
@@ -982,6 +982,7 @@ internal static class Tests
         // on the border (x = ±2), A's second lath starts on B (a T-junction)
         Check("Mite Net → Net Joints / Lath Labels / Net Topology (one wire)", NetWire());
         Check("Net Kinetics → Motion → Kinetic State (one moment of the motion)", KineticStateWire());
+        Check("Kinetic Supports / Drivers → Mechanism Modes and Net Kinetics (same as direct inputs)", KineticSetupWire());
         // Mode menus (ROADMAP B): the catalogue names live inputs of the right type and default
         Check("Mode menus: every catalogued input exists with its type and default", ModesMatch());
 
@@ -1077,6 +1078,55 @@ internal static class Tests
             bool between = mid.Count == 9 && mid.All(a => a > 59.5 && a < 90.5) && Numbers(state, 8)[0] < 0.05;
             return Expect(atEnd, $"Fold 1 = Net Kinetics' last state: 9 joints within 1e-9 of it, 60°; got {js.Count} joints, Δ {same:E1}")
                 && Expect(between, $"Fold 0.5 between 90° and 60°, small drift; got {string.Join(", ", mid.Select(a => a.ToString("F1")))}, drift {Numbers(state, 8).FirstOrDefault():E1}");
+        }
+        catch (System.Exception ex) { return Expect(false, "threw " + ex.Message); }
+    }
+
+    // Kinetic Supports / Kinetic Drivers → Mechanism Modes and Net Kinetics: the same flat lattice, held at a corner
+    // and its far corner pulled up 0.5, once through the setup wires and once through the components' own inputs —
+    // the modes and the motion must be identical
+    private static bool KineticSetupWire()
+    {
+        try
+        {
+            Rhino.Geometry.Curve[] A() => new Rhino.Geometry.Curve[] {
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(2, 0, 0)),
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 1, 0), new Rhino.Geometry.Point3d(2, 1, 0)),
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 2, 0), new Rhino.Geometry.Point3d(2, 2, 0)) };
+            Rhino.Geometry.Curve[] B() => new Rhino.Geometry.Curve[] {
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(0, 0, 0), new Rhino.Geometry.Point3d(0, 2, 0)),
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(1, 0, 0), new Rhino.Geometry.Point3d(1, 2, 0)),
+                new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(2, 0, 0), new Rhino.Geometry.Point3d(2, 2, 0)) };
+            var corner = new Rhino.Geometry.Point3d(0, 0, 0); var far = new Rhino.Geometry.Point3d(2, 2, 0); var up = new Rhino.Geometry.Point3d(2, 2, 0.5);
+            var doc = new Grasshopper.Kernel.GH_Document();
+            var sup = new Mite.Grasshopper.Components.KineticSupportsComponent();
+            var drv = new Mite.Grasshopper.Components.KineticDriversComponent();
+            var modesWired = new Mite.Grasshopper.Components.MechanismModesComponent();
+            var modesDirect = new Mite.Grasshopper.Components.MechanismModesComponent();
+            var kinWired = new Mite.Grasshopper.Components.NetKineticsComponent();
+            var kinDirect = new Mite.Grasshopper.Components.NetKineticsComponent();
+            foreach (var c in new Grasshopper.Kernel.GH_Component[] { sup, drv, modesWired, modesDirect, kinWired, kinDirect }) doc.AddObject(c, false);
+            SetPointList(sup, 0, corner);
+            SetPointList(drv, 0, far); SetPointList(drv, 1, up);
+            foreach (var c in new Grasshopper.Kernel.GH_Component[] { modesWired, modesDirect, kinWired, kinDirect }) { SetCurveList(c, 0, A()); SetCurveList(c, 1, B()); }
+            SetPointList(modesDirect, 2, corner);
+            SetPointList(kinDirect, 2, corner); SetPointList(kinDirect, 3, far); SetPointList(kinDirect, 4, up);
+            SetInputs(kinWired, (8, 4)); SetInputs(kinDirect, (8, 4));
+            modesWired.Params.Input[13].AddSource(sup.Params.Output[0]);
+            kinWired.Params.Input[30].AddSource(sup.Params.Output[0]);
+            kinWired.Params.Input[31].AddSource(drv.Params.Output[0]);
+            foreach (var c in new Grasshopper.Kernel.GH_Component[] { sup, drv, modesWired, modesDirect, kinWired, kinDirect }) { c.CollectData(); c.ComputeData(); }
+            foreach (var c in new Grasshopper.Kernel.GH_Component[] { sup, drv, modesWired, modesDirect, kinWired, kinDirect })
+            {
+                var errors = c.RuntimeMessages(Grasshopper.Kernel.GH_RuntimeMessageLevel.Error);
+                if (errors.Count > 0) return Expect(false, $"no error on {c.Name}: {errors[0]}");
+            }
+            var kw = Numbers(modesWired, 4); var kd = Numbers(modesDirect, 4);
+            bool sameModes = kw.Count == kd.Count && kw.Zip(kd, (a, b) => System.Math.Abs(a - b)).DefaultIfEmpty(0).Max() < 1e-12 && Bools(modesWired, 5).Count(x => x) == 2;
+            var jw = Points(kinWired, 2); var jd = Points(kinDirect, 2);
+            double dj = jw.Count == jd.Count ? jw.Zip(jd, (a, b) => a.DistanceTo(b)).DefaultIfEmpty(0).Max() : double.NaN;
+            return Expect(sameModes, $"Mechanism Modes through Supports = direct: 2 mechanisms, costs equal; got {string.Join(", ", kw.Select(k => k.ToString("E1")))} vs {string.Join(", ", kd.Select(k => k.ToString("E1")))}")
+                && Expect(jw.Count == 9 && dj < 1e-12, $"Net Kinetics through Supports + Drivers = direct: 9 joints, identical; got {jw.Count}, Δ {dj:E1}");
         }
         catch (System.Exception ex) { return Expect(false, "threw " + ex.Message); }
     }
@@ -1197,9 +1247,9 @@ internal static class Tests
         var comps = asm.GetTypes()
             .Where(t => !t.IsAbstract && typeof(Grasshopper.Kernel.GH_Component).IsAssignableFrom(t))
             .ToList();
-        if (comps.Count != 39)
+        if (comps.Count != 41)
         {
-            Console.WriteLine($"      expected 39 components, found {comps.Count}");
+            Console.WriteLine($"      expected 41 components, found {comps.Count}");
             return false;
         }
         var param = new Mite.Grasshopper.MiteNetParameter();

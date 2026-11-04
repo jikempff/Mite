@@ -84,6 +84,11 @@ public class NetKineticsComponent : MiteComponent
             "With Flatten on, the net is pressed flat first and deployed from there (the states are the deployment); otherwise the input curves are taken as the flat state (a Flat Kit's flat assembly).", GH_ParamAccess.item, 0);
         pManager.AddNumberParameter("Angle", "An", "Deploy 1: crossing angle (degrees) the scissors are opened to (90 on a minimal surface)", GH_ParamAccess.item, 90.0);
         pManager.AddNumberParameter("Kick", "Kk", "Deploy: the flat state is a bifurcation — a solver started exactly flat never leaves the plane — so the start is kicked along the net's softest mode by Kick × the mean joint spacing; the sign picks the branch (the deployment or its mirror image), 0 shows the lock", GH_ParamAccess.item, 0.5);
+        // one-wire setups (appended 2026-11-04): their points join Fixed / Slide / Move / To / Cables / Lengths
+        pManager.AddGenericParameter("Supports", "Su", "Kinetic Supports output: its fixed and sliding points join Fixed and Slide (its plane normal is used when it has sliding points)", GH_ParamAccess.item); // 30
+        pManager.AddGenericParameter("Drivers", "Dr", "Kinetic Drivers output: its moved points and cables join Move / To and Cables / Lengths", GH_ParamAccess.item); // 31
+        pManager[30].Optional = true;
+        pManager[31].Optional = true;
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -158,6 +163,25 @@ public class NetKineticsComponent : MiteComponent
         DA.GetData(27, ref deploy);
         DA.GetData(28, ref deployAngle);
         DA.GetData(29, ref kick);
+        if (!KineticSetupGoo.TryRead(this, DA, 30, out var supportsIn)) return;
+        if (!KineticSetupGoo.TryRead(this, DA, 31, out var driversIn)) return;
+        var wired = KineticSetup.Merge(supportsIn, driversIn);
+        if (wired != null && (wired.HasSupports || wired.HasDrivers))
+        {
+            KineticSetupGoo.Report(this, wired);
+            // pad the own To / Lengths to their partners so the appended pairs stay paired
+            while (toPts.Count > 0 && toPts.Count < movePts.Count) toPts.Add(toPts[toPts.Count - 1]);
+            while (lengths.Count > 0 && lengths.Count < cables.Count) lengths.Add(lengths[lengths.Count - 1]);
+            fixedPts.AddRange(wired.Fixed.Select(MeshConvert.ToRhinoPoint));
+            slidePts.AddRange(wired.Slide.Select(MeshConvert.ToRhinoPoint));
+            if (wired.Slide.Count > 0 && wired.SlideNormal.HasValue) slideNormal = MeshConvert.ToRhinoVector(wired.SlideNormal.Value);
+            movePts.AddRange(wired.Move.Select(MeshConvert.ToRhinoPoint));
+            var wto = wired.To.ToList(); while (wto.Count > 0 && wto.Count < wired.Move.Count) wto.Add(wto[wto.Count - 1]);
+            toPts.AddRange(wto.Select(MeshConvert.ToRhinoPoint));
+            cables.AddRange(wired.Cables.Select(c => new Line(MeshConvert.ToRhinoPoint(c.A), MeshConvert.ToRhinoPoint(c.B))));
+            var wl = wired.Lengths.ToList(); while (wl.Count > 0 && wl.Count < wired.Cables.Count) wl.Add(wl[wl.Count - 1]);
+            lengths.AddRange(wl);
+        }
         if (width <= 0 || thickness <= 0 || maxStrain <= 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Width, Thickness and MaxStrain must be positive.");

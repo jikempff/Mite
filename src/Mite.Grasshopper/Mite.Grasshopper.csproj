@@ -60,6 +60,8 @@
     <EmbeddedResource Include="Resources\NetKinetics.png" />
     <EmbeddedResource Include="Resources\MechanismModes.png" />
     <EmbeddedResource Include="Resources\KineticState.png" />
+    <EmbeddedResource Include="Resources\KineticSupports.png" />
+    <EmbeddedResource Include="Resources\KineticDrivers.png" />
     <EmbeddedResource Include="Resources\FlatKit.png" />
     <EmbeddedResource Include="Resources\MiteNet.png" />
     <EmbeddedResource Include="Resources\MiteNetParam.png" />

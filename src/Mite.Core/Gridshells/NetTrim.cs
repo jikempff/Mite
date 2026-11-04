@@ -406,10 +406,10 @@ public static class NetTrim
             // in the wall band: side of the nearest boundary segment
             if (NearestBoundarySegment(hit.Face, hit.Point, out int li, out int k, out Vec3d b, out Vec3d t))
             {
-                if (_insideIsLeft[li] == null) return false;
+                if (_insideIsLeft[li] is not bool insideIsLeft) return false;
                 double side = Vec3d.Dot(Vec3d.Cross(t, hit.Point - b), hit.Normal);
                 bool left = side >= 0;
-                return left == _insideIsLeft[li].Value;
+                return left == insideIsLeft;
             }
             int c = ComponentAt(hit.Face);
             return c >= 0 && _componentInside[c];

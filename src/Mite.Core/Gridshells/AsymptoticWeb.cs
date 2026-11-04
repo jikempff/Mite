@@ -552,7 +552,6 @@ public static class AsymptoticWeb
             (atNode.TryGetValue(edges[e].U, out var lu) ? lu : atNode[edges[e].U] = new List<int>()).Add(e);
             (atNode.TryGetValue(edges[e].V, out var lv) ? lv : atNode[edges[e].V] = new List<int>()).Add(e);
         }
-        Vec3d Dir(int e, int from) { int to = edges[e].U == from ? edges[e].V : edges[e].U; return (res.Nodes[to] - res.Nodes[from]).Normalized(); }
         // pair the diagonal edges at each node through opposite quads (quads
         // that share only the node, not an edge); a node with other than four
         // quads (border, singular seed) ends its diagonals, and so does a node
