@@ -60,6 +60,45 @@ namespace Mite.Core.Analysis;
 /// Solved by subspace iteration on K_e φ = λ (−K_g) φ (Bathe &amp; Wilson 1973)
 /// and verified by the Sturm sequence count of K_e − μ(−K_g) at μ just below
 /// λ_1 (no eigenvalue may lie there). Negative eigenvalues (buckling under the reversed load) are left out.
+///
+/// Flexural–torsional terms (2026-11-06, <see cref="Options.LateralTorsional"/>):
+/// the bending moments of the linear solve enter the geometric stiffness too,
+/// so a deep upright strip bent about its strong axis can buckle sideways with
+/// a twist — lateral–torsional buckling, the realistic failure of thin deep
+/// laths (Timoshenko &amp; Gere 1961 ch. 6; Trahair 1993, Flexural-Torsional
+/// Buckling of Structures). The second-order work of the initial stresses on
+/// an element with section coordinates (y, z), twist φ about the axis and the
+/// Vlasov kinematics (the section turns with the deformed axis, then twists
+/// about it; axial displacement u − y v′ − z w′ + (z v′ − y w′) φ) is
+/// U_σ = ∫ [ ½ N (v′² + w′²) + ½ N (I_p/A) φ′² + (M_y v″ + M_z w″) φ ] dx
+/// with the right-handed section moments M_y = ∫ z σ dA, M_z = −∫ y σ dA,
+/// linear along the element between its end values. Integrated with the
+/// cubic Hermite v, w and the linear φ it gives the entries of
+/// <see cref="GeometricStiffness(double, double, double, double, double, double, double)"/>
+/// (derived symbolically, checked against the closed forms below). Timoshenko's
+/// flange picture gives the same term: the compressed flange at +y carries
+/// −M_z/h and deflects w + φ h/2, the tension flange +M_z/h and w − φ h/2, so
+/// their second-order work is −M_z ∫ w′ φ′ dx = M_z ∫ w″ φ dx. Exact checks
+/// (<c>LateralTorsionalBucklingTests</c>): cantilever strip with a tip load,
+/// P_cr = 4.0126 √(E I_z G J) / L² (Timoshenko &amp; Gere eq. 6-30, the first
+/// zero of J_{−1/4}); uniformly loaded cantilever, (q L)_cr = 12.85
+/// √(E I_z G J) / L² (eq. 6-33); a span under uniform moment with its ends
+/// held against twist and lateral rotation, M_cr = 2π √(E I_z G J) / L
+/// (the warping-free thin rectangle, solved here from the coupled equations).
+/// Only the moment about a lath's strong axis is coupled: the classical
+/// theory neglects the prebuckling curvature, whose effect — the factor
+/// 1/(1 − I_minor/I_major) of Trahair &amp; Woolcock and of Vacharajittiphan,
+/// Woolcock &amp; Trahair 1974, refined by a GJ/EI_major term in Pi &amp;
+/// Trahair 1992 (Prebuckling deflections and lateral buckling, J. Struct.
+/// Eng. 118(11)); surveyed in Abu Reden &amp; Ádány 2025 (Periodica
+/// Polytechnica CE 69(3)) — raises M_cr by about 1 % for a 100 × 10 strip, so
+/// the classical factor is the safe side, and makes a beam bent about its
+/// minor axis, or a round or square bar, immune to lateral buckling (the factor
+/// is zero or negative); without that rule the classical terms would report a
+/// spurious factor for a flat lath bent flatwise. Left out: the prebuckling
+/// correction itself, the St. Venant torque's own second-order terms and the
+/// induced joint moments of Yang &amp; McGuire 1986 (members at angles carrying
+/// large torques), and warping stiffness (E I_w ≈ 0 for a thin rectangle).
 /// </summary>
 public static class FrameAnalysis
 {
@@ -147,6 +186,8 @@ public static class FrameAnalysis
         /// − <see cref="LathProfile.NormalLow"/>), outward.
         /// </summary>
         public IReadOnlyList<double>? AxisOffsets { get; set; }
+
+        /// <summary>
         /// Number of linear buckling modes to compute from the axial forces of
         /// the solve (0 = none, the default). The first positive factor λ_1
         /// times the applied load is the Euler critical load of the net; see
@@ -160,6 +201,17 @@ public static class FrameAnalysis
         /// the change when the spectrum is dense).
         /// </summary>
         public double BucklingTolerance { get; set; } = 1e-6;
+
+        /// <summary>
+        /// Flexural–torsional terms in the buckling (default true): the bending
+        /// moments of the solve couple each element's lateral bending with its
+        /// twist, so deep upright strips can buckle sideways under strong-axis
+        /// bending (lateral–torsional buckling; see the class remarks). False
+        /// keeps the axial forces alone — Euler buckling as in 1.6.0.
+        /// </summary>
+        public bool LateralTorsional { get; set; } = true;
+
+        /// <summary>
         /// Optional progress sink by stage: "joints" (lath polylines with
         /// the joints inserted), "assembling" (element stiffness), "solving"
         /// (factorisation of the free stiffness matrix, the costly step on a
@@ -745,6 +797,7 @@ public static class FrameAnalysis
         var bendY = new double[ne];
         var bendZ = new double[ne];
         var torsion = new double[ne];
+        var endMoments = new double[ne][]; // section moments [M_yA, M_yB, M_zA, M_zB] of each element (local axes)
         var elemLen = new double[ne];
         var elemRot = new Vec3d[ne][]; // local axes [ex, ey, ez] per element
         var elemArm = new Vec3d[ne][]; // rigid link from each end's node to the beam end (zero without offsets)
@@ -1018,6 +1071,10 @@ public static class FrameAnalysis
 
             axial[e] = -fl[0]; // tension positive at end 1
             torsion[e] = Math.Abs(fl[3]);
+            // section moments (the stress resultant on the face of outward normal
+            // +x): at end A the negative of the end force the node applies, at
+            // end B the end force itself
+            endMoments[e] = new[] { -fl[4], fl[10], -fl[5], fl[11] };
             bendY[e] = Math.Max(Math.Abs(fl[4]), Math.Abs(fl[10]));
             bendZ[e] = Math.Max(Math.Abs(fl[5]), Math.Abs(fl[11]));
 
@@ -1038,15 +1095,32 @@ public static class FrameAnalysis
             progress.Report(0.95);
             // B = −K_g on the free degrees of freedom: compression (N < 0) makes it positive
             var Bff = new SparseSymmetricSolver.Builder(nfree);
-            bool anyCompression = false;
+            bool anyCompression = false, anyMoment = false;
             for (int e = 0; e < ne; e++)
             {
                 if (elemRot[e] == null) continue;
                 double N = axial[e];
-                if (N == 0) continue;
-                if (N < 0) anyCompression = true;
                 int lcb = elemCurve[e];
-                var kg = GeometricStiffness(N, elemLen[e], (Iy[lcb] + Iz[lcb]) / A[lcb]); // polar radius² of this lath's section
+                // Only the moment about the lath's strong axis couples with the twist:
+                // a beam bent about its minor axis (or a round / square bar) does not
+                // buckle laterally — the prebuckling-curvature factor (1 − I_minor/I_major)
+                // of Trahair & Woolcock is zero or negative there. M_y bends about
+                // y and buckles about z, so it counts when I_y > I_z, M_z when I_z > I_y.
+                double[]? em = null;
+                if (options.LateralTorsional)
+                {
+                    var m4 = endMoments[e];
+                    bool yStrong = Iy[lcb] > Iz[lcb] * (1 + 1e-9), zStrong = Iz[lcb] > Iy[lcb] * (1 + 1e-9);
+                    em = new[] { yStrong ? m4[0] : 0.0, yStrong ? m4[1] : 0.0, zStrong ? m4[2] : 0.0, zStrong ? m4[3] : 0.0 };
+                }
+                bool bent = em != null && (em[0] != 0 || em[1] != 0 || em[2] != 0 || em[3] != 0);
+                if (N == 0 && !bent) continue;
+                if (N < 0) anyCompression = true;
+                if (bent) anyMoment = true;
+                double ipa = (Iy[lcb] + Iz[lcb]) / A[lcb]; // polar radius² of this lath's section
+                var kg = bent
+                    ? GeometricStiffness(N, elemLen[e], ipa, em![0], em[1], em[2], em[3])
+                    : GeometricStiffness(N, elemLen[e], ipa);
                 var rot = elemRot[e];
                 var dofs = ElemDofs(e);
                 // global axes, then — like K_e — through the rigid links of the beam ends
@@ -1082,7 +1156,7 @@ public static class FrameAnalysis
                     }
                 }
             }
-            if (anyCompression)
+            if (anyCompression || anyMoment)
             {
                 var eig = SubspaceEigen.Solve(Kff, Bff, options.BucklingModes, positiveOnly: true,
                     tolerance: options.BucklingTolerance, maxIterations: 300, startVectors: new[] { u });
@@ -1121,7 +1195,7 @@ public static class FrameAnalysis
                     }
                 }
             }
-            else bucklingConverged = true; // nothing in compression: no Euler buckling under this load
+            else bucklingConverged = true; // nothing in compression and no bending moment: no buckling under this load
         }
 
         progress.Done();
@@ -1313,14 +1387,45 @@ public static class FrameAnalysis
     /// bending terms 6/5, ±L/10, 2L²/15, −L²/30 in both planes, the axial term
     /// 1, −1 and the torsional (Wagner) term I_p/A = (Iy + Iz)/A (McGuire,
     /// Gallagher &amp; Ziemian 2000 eq. 9.19; Przemieniecki 1968 ch. 15).
-    /// Bending-moment coupling terms (lateral–torsional buckling of open
-    /// sections) are not included.
+    /// Bending-moment coupling terms (lateral–torsional buckling) are in the
+    /// overload with the end moments.
     /// </summary>
     public static double[,] GeometricStiffness(double N, double L, double IpOverA)
+    {
+        return GeometricStiffness(N, L, IpOverA, 0, 0, 0, 0);
+    }
+
+    /// <summary>
+    /// The geometric stiffness with the flexural–torsional coupling of the
+    /// section moments (see the class remarks): M_y and M_z are the
+    /// right-handed section moments about the local axes at the two ends
+    /// (stress resultants on the face of outward normal +x, linear between
+    /// them), and the second-order work ∫ (M_y v″ + M_z w″) φ dx with the
+    /// cubic Hermite v, w and the linear twist φ adds, for the DOF order
+    /// u v w θx θy θz per end:
+    /// (v₁,θx₁) −M_yA/L, (v₁,θx₂) M_yB/L, (v₂,θx₁) M_yA/L, (v₂,θx₂) −M_yB/L;
+    /// (w₁,θx₁) −M_zA/L, (w₁,θx₂) M_zB/L, (w₂,θx₁) M_zA/L, (w₂,θx₂) −M_zB/L;
+    /// (θx₁,θy₁) (5M_zA + M_zB)/6, (θx₁,θy₂) (M_zA − M_zB)/6, (θx₂,θy₁) (M_zA − M_zB)/6, (θx₂,θy₂) −(M_zA + 5M_zB)/6;
+    /// (θx₁,θz₁) −(5M_yA + M_yB)/6, (θx₁,θz₂) (M_yB − M_yA)/6, (θx₂,θz₁) (M_yB − M_yA)/6, (θx₂,θz₂) (M_yA + 5M_yB)/6.
+    /// With all four moments zero this is the axial-only matrix.
+    /// </summary>
+    public static double[,] GeometricStiffness(double N, double L, double IpOverA, double MyA, double MyB, double MzA, double MzB)
     {
         var k = new double[12, 12];
         double f = N / L, L2 = L * L;
         void Set(int i, int j, double v) { k[i, j] = v; k[j, i] = v; }
+        // Flexural–torsional coupling of the section moments with the twist
+        if (MyA != 0 || MyB != 0)
+        {
+            Set(1, 3, -MyA / L); Set(1, 9, MyB / L); Set(7, 3, MyA / L); Set(7, 9, -MyB / L);
+            Set(3, 5, -(5 * MyA + MyB) / 6); Set(3, 11, (MyB - MyA) / 6); Set(9, 5, (MyB - MyA) / 6); Set(9, 11, (MyA + 5 * MyB) / 6);
+        }
+        if (MzA != 0 || MzB != 0)
+        {
+            Set(2, 3, -MzA / L); Set(2, 9, MzB / L); Set(8, 3, MzA / L); Set(8, 9, -MzB / L);
+            Set(3, 4, (5 * MzA + MzB) / 6); Set(3, 10, (MzA - MzB) / 6); Set(9, 4, (MzA - MzB) / 6); Set(9, 10, -(MzA + 5 * MzB) / 6);
+        }
+        if (N == 0) return k;
         // Axial
         Set(0, 0, f); Set(0, 6, -f); Set(6, 6, f);
         // Torsion (Wagner)

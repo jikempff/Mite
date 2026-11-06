@@ -519,10 +519,56 @@ internal static class Tests
                 double err = System.Math.Abs(maxDisp - expected) / expected;
                 return Expect(CurveCount(c, 0) == 3, "3 deformed laths")
                     && Expect(err < 0.05, $"deflection {maxDisp:F3} vs analytic {expected:F3} ({err:P1})")
-                    // cantilevers under a transverse load carry no axial force: no Euler buckling factor
-                    && Expect(Numbers(c, 11).Count == 0 && Numbers(c, 12).Count == 0 && CurveCount(c, 13) == 0,
-                        "no buckling factor without compression");
+                    // flat cantilevers under a transverse load carry no axial force and bend about their
+                    // minor axis: no Euler factor and no lateral–torsional one (outputs 12 λ, 13 λs, 14 Bm)
+                    && Expect(Numbers(c, 12).Count == 0 && Numbers(c, 13).Count == 0 && CurveCount(c, 14) == 0,
+                        "no buckling factor without compression or strong-axis bending");
             });
+
+        TestComponent("Gridshell Analysis (lateral–torsional buckling of an upright strip)",
+            new Mite.Grasshopper.Components.GridshellAnalysisComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-2, -2, 0);
+                plane.Vertices.Add(2, -2, 0);
+                plane.Vertices.Add(2, 2, 0);
+                plane.Vertices.Add(-2, 2, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                // one upright 100 × 10 strip, 3 m, clamped at one end, 1 kN/m downward, 32 elements
+                SetInputs(c, (0, plane), (7, 0.1), (8, 0.01), (9, true), (12, 3.0 / 32));
+                SetCurveList(c, 1, new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1.5, 0, 0), new Rhino.Geometry.Point3d(1.5, 0, 0)));
+                SetPointList(c, 3, new Rhino.Geometry.Point3d(-1.5, 0, 0));
+            },
+            c =>
+            {
+                // Timoshenko & Gere 1961 eq. 6-33: (q L)_cr = 12.854 √(E I G J) / L² for the thin strip
+                // (I the weak-axis second moment, J Saint-Venant); the FE with 32 elements sits 1e-4 above it
+                var sec = new Mite.Core.Fabrication.LathProfile(0.1, 0.01, true).SectionProperties();
+                double E = 11e9, G = E / 2.6, L = 3.0, q = 1000;
+                double exact = 12.853763321383 * System.Math.Sqrt(E * System.Math.Min(sec.IA, sec.IB) * G * sec.J) / (L * L) / (q * L);
+                var factors = Numbers(c, 12);
+                double lam = factors.FirstOrDefault();
+                return Expect(factors.Count == 1 && System.Math.Abs(lam / exact - 1) < 2e-3,
+                        $"lateral–torsional factor λ = {lam:F5} vs 12.854 √(EIGJ)/(q L³) = {exact:F5}")
+                    && Expect(Texts(c, 10).Any(t => t.Contains("flexural–torsional")), "report names the flexural–torsional model");
+            });
+
+        TestComponent("Gridshell Analysis (Lateral off: the same strip reports no Euler factor)",
+            new Mite.Grasshopper.Components.GridshellAnalysisComponent(),
+            c =>
+            {
+                var plane = new Rhino.Geometry.Mesh();
+                plane.Vertices.Add(-2, -2, 0);
+                plane.Vertices.Add(2, -2, 0);
+                plane.Vertices.Add(2, 2, 0);
+                plane.Vertices.Add(-2, 2, 0);
+                plane.Faces.AddFace(0, 1, 2, 3);
+                SetInputs(c, (0, plane), (7, 0.1), (8, 0.01), (9, true), (29, false));
+                SetCurveList(c, 1, new Rhino.Geometry.LineCurve(new Rhino.Geometry.Point3d(-1.5, 0, 0), new Rhino.Geometry.Point3d(1.5, 0, 0)));
+                SetPointList(c, 3, new Rhino.Geometry.Point3d(-1.5, 0, 0));
+            },
+            c => Expect(Numbers(c, 12).Count == 0 && Texts(c, 10).Any(t => t.Contains("no Euler buckling")), "no factor with the axial forces alone"));
 
         TestComponent("Net Distributions",
             new Mite.Grasshopper.Components.NetDistributionsComponent(),
@@ -807,10 +853,9 @@ internal static class Tests
                 int zero = -1;
                 if (m != null) for (int i = 0; i < m.Vertices.Count; i++) if (System.Math.Abs(m.Vertices[i].Z) < 1e-12) { zero = i; break; }
                 var cz = zero >= 0 && m != null ? m.VertexColors[zero] : System.Drawing.Color.Empty;
-                return Expect(m != null && m.VertexColors.Count == saddle.Vertices.Count, "one colour per vertex")
-                    && Expect(zero < 0 || (cz.R == 247 && cz.G == 247 && cz.B == 247), $"z = 0 is the diverging map's white centre ({cz.R},{cz.G},{cz.B})");
                 var legend = MeshOut(c, 3); var ticks = Numbers(c, 4); var labels = Texts(c, 5); var pts = Points(c, 6);
                 return Expect(m != null && m.VertexColors.Count == saddle.Vertices.Count, "one colour per vertex")
+                    && Expect(zero < 0 || (cz.R == 247 && cz.G == 247 && cz.B == 247), $"z = 0 is the diverging map's white centre ({cz.R},{cz.G},{cz.B})")
                     && Expect(legend != null && legend.Faces.Count == 64 && legend.VertexColors.Count == legend.Vertices.Count, "legend strip of 64 coloured quads")
                     && Expect(ticks.Count > 0 && ticks.Any(t => System.Math.Abs(t) < 1e-12) && labels.Count == ticks.Count + 2 && pts.Count == labels.Count, "nice ticks including 0, a label and a point for each tick and both ends");
             });

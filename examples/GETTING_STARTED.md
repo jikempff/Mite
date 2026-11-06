@@ -340,13 +340,19 @@ sit around 0.8 × Spacing (Spacing is its widest tolerated gap), a web to show t
 surface's own spacing, and 90° crossings on minimal surfaces.
 
 The same component reports **buckling**: `λ` is the load factor at which the
-loaded net buckles elastically (Euler buckling from the axial forces of the
-solve), `λs` the factors of the first `Bk` modes and `Bm` the first mode shape
-drawn on the laths (5 % of the net's size, times `Sc`). Read `λ` together with
-`Um`: a net with `Um` 0.3 and `λ` 0.8 fails by buckling, not by stress. Below 1
-the component warns, below 3 it remarks — gridshells are usually designed for a
+loaded net buckles elastically (from the axial forces *and* the bending moments
+of the solve: Euler buckling of compressed laths and lateral–torsional buckling
+of deep upright strips bent about their strong axis, which slip sideways with a
+twist — Timoshenko & Gere's 4.0126 √(EIGJ)/L² cantilever is the check), `λs`
+the factors of the first `Bk` modes and `Bm` the first mode shape drawn on the
+laths (5 % of the net's size, times `Sc`). Read `λ` together with `Um`: a net
+with `Um` 0.3 and `λ` 0.8 fails by buckling, not by stress. Below 1 the
+component warns, below 3 it remarks — gridshells are usually designed for a
 linear factor of 3 or more before imperfections and large deflections are
-considered, and the factor ignores lateral–torsional effects of upright strips.
+considered. `Lt` (appended, default on) switches the moment terms off for the
+axial-only Euler factor of earlier versions; a lath bent about its weak axis (a
+flat lath loaded flatwise) or a round bar never buckles laterally and gets no
+moment terms either way.
 The report line also prints the Sturm check ("none missed below λ"): the solver
 proves no lower mode was skipped. Set `Bk` to 0 while iterating a dense design;
 the eigenvalue solve takes several times the static solve on nets with

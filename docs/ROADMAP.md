@@ -31,8 +31,9 @@ where they overlap
    semi-rigid), loads (done: self-weight, area, point), linear buckling (done
    2026-10-26, session 2: load factor, modes, Sturm check — see D); next: joint
    eccentricity, the AAG erection sequence, buckling in the web app's
-   structure block, lateral–torsional terms for upright strips, a geometrically
-   nonlinear (arc-length) check of the first mode's imperfection sensitivity.
+   structure block, lateral–torsional terms for upright strips (done
+   2026-11-06, see D), a geometrically nonlinear (arc-length) check of the
+   first mode's imperfection sensitivity.
 3. The kinetic behaviour of any web in the browser (done for scissor / lift /
    spread drives, 1.3.0; the flat state as the assembly state — press flat,
    the 3-fold Enneper web into a hexagon — 1.3.1; the deployment from the flat
@@ -1541,9 +1542,84 @@ remains the self-test review page.
       (reversed load); they are filtered, and with nothing in compression the
       solve is skipped. Open: bending-moment terms of the geometric stiffness
       (lateral–torsional buckling of upright laths, the realistic failure of
-      deep thin strips — Trahair 1993), the web app's structure block (payload
-      field + stats line, off by default for speed), imperfection sensitivity
-      by a nonlinear (arc-length) solve with the first mode as the shape.
+      deep thin strips — Trahair 1993; done 2026-11-06, next item), the web
+      app's structure block (payload field + stats line, off by default for
+      speed), imperfection sensitivity by a nonlinear (arc-length) solve with
+      the first mode as the shape.
+- [x] Lateral–torsional buckling: bending-moment terms of the geometric
+      stiffness — 2026-11-06 (session 1, D; José's priority 2 "lateral–torsional
+      terms for upright strips"). `FrameAnalysis.Options.LateralTorsional`
+      (default on), `GeometricStiffness(N, L, I_p/A, M_yA, M_yB, M_zA, M_zB)`,
+      Gridshell Analysis `Lateral` input appended (29), catalogued as a mode.
+      Read: Timoshenko & Gere 1961 ch. 6 (§6.1 the pure-bending case M_cr =
+      π√(EI_y C)/L from the equilibrium of the twisted section; §6.4 the
+      cantilever: eq. 6-30 P_cr = 4.013 √(EI_y C)/l², eq. 6-33 (ql)_cr = 12.85
+      √(EI_y C)/l² — both recomputed here by shooting on C φ″ + M(x)² φ/EI = 0,
+      φ(0) = 0, φ′(L) = 0: 4.0125993 = twice the first zero of J_{−1/4},
+      12.853763); Trahair 1993, Flexural-Torsional Buckling of Structures
+      (ch. 17 energy method: ½∫[EI_y u″² + EI_w φ″² + GJ φ′² + N(u′² + r₀²φ′²)
+      + 2 M_x u″ φ] dz — from memory of the edition, not re-read); the
+      prebuckling-deflection factor 1/(1 − I_y/I_x) of Trahair & Woolcock and
+      Vacharajittiphan, Woolcock & Trahair 1974, refined by a GJ/EI_x term in
+      Pi & Trahair 1992 (Prebuckling deflections and lateral buckling I,
+      J. Struct. Eng. 118(11) 2949; paywalled), read through the survey of
+      Abu Reden & Ádány 2025 (Periodica Polytechnica CE 69(3) 723–737, which
+      confirms the 1 − I_y/I_x factor for open sections of small torsional
+      rigidity and lists the Chwalla, Davidson, Clark & Knoll, Trahair &
+      Woolcock and Pi & Trahair forms); McGuire, Gallagher & Ziemian 2000 eq.
+      9.21 (the full K_g with moment terms — cited from the edition, not
+      transcribed: the entries here are derived from the energy); Gavin 2012
+      (Duke CEE 421L, checked: axial terms only, T·J_x/(A L) torsion term);
+      Yang & McGuire 1986, Stiffness matrix for geometric nonlinear analysis
+      (J. Struct. Eng. 112(4): induced joint moments of semitangential end
+      moments — paywalled, title and abstract only). Derivation: Vlasov
+      kinematics, the section turns with the deformed axis and twists about
+      it, axial displacement u − y v′ − z w′ + (z v′ − y w′) φ; Green strain
+      to second order ε₂ = ½(v′² + w′²) + ½(y² + z²) φ′² + (z v″ − y w″) φ
+      (the φ′ cross terms of V′², W′² cancel against the derivative of the
+      axial term); with σ = N/A + M_y z/I_y − M_z y/I_z (M_y = ∫zσ, M_z =
+      −∫yσ, right-handed) U_σ = ∫[½N(v′² + w′²) + ½N(I_p/A)φ′² + (M_y v″ +
+      M_z w″)φ] dx — the factor 1 (not ½) on the coupling is what gives
+      Timoshenko's π√(EIC)/L; the ½ of the rotation-vector parametrisation
+      would give 2π. Cubic Hermite v, w, linear φ, M linear along the element
+      → 16 coupling entries (sympy), e.g. (v₁,θx₁) −M_yA/L, (θx₁,θz₁)
+      −(5M_yA + M_yB)/6, (θx₂,θz₂) (M_yA + 5M_yB)/6. Section moments from the
+      element end forces: M_A = −f_A (the stress resultant on the +x face is
+      the negative of the end force at A), M_B = +f_B. Through the rigid end
+      offsets like K_e. Only the strong-axis moment is coupled (I_y > I_z →
+      M_y; I_z > I_y → M_z): the classical theory would otherwise report a
+      spurious factor for a flat lath bent flatwise and for round bars, which
+      Trahair's factor (1 − I_minor/I_major) ≤ 0 rules out. Measured
+      (`LateralTorsionalBucklingTests`, 6 tests): tip-loaded upright strip
+      100 × 10, L = 3: 49.82 / 49.26 / 49.12 / 49.08 N vs 49.069 (4 / 8 / 16 /
+      32 elements, errors 1.5e-2 / 3.9e-3 / 9.7e-4 / 2.4e-4, ratio 4.0 — the
+      linear twist is O(h²)), mode sideways (z < 1e-6), no axial force (< 1e-9);
+      uniform load 157.44 / 157.25 / 157.20 vs 157.186 N (1.6e-3 / 4.3e-4 /
+      1.1e-4 with 8 / 16 / 32); uniform-moment span with u = u′ = φ = 0 at the
+      ends (round Ø200 cross bars on pins through the strip's nodes, overhang
+      loads P at a = 0.3; the coupled equations give 2 − 2cos kL − kL sin kL
+      = 0, first root 2π): 234.31 / 231.46 / 230.74 vs 230.507 N·m (1.7e-2 /
+      4.1e-3 / 1.0e-3 with 10 / 20 / 40), midpoint moves most, bar nodes still;
+      ½qᵀK_g q = the quadrature of U_σ to 1e-12 on random q; rigid motions cost
+      the moment terms nothing; flat strip and round bar: no factor; Euler
+      column bit-identical with the terms on and off; bench saddle net (54
+      laths, 3013 nodes, 80 × 12 upright, 1 kN/m): λ₁ 32.65 → 30.15 (−7.7 %),
+      λ₂ 32.65 → 30.15, Sturm 0 missed, 64 iterations, 10 s; bench 233 PASS
+      light and dark. Findings: (1) the
+      classical formulas are the safe side by the prebuckling factor (about
+      +1 % for 100 × 10, +2 % for 80 × 12), so the factor stays a lower bound
+      of the exact value for strips, as long as the Euler part is not the
+      governing one; (2) the Sturm count works unchanged with the indefinite
+      −K_g of a pure-bending case (no compression anywhere); (3) a fork support
+      (twist held, both rotations free) does not exist among the support kinds
+      — the test builds it from pinned cross bars, and users wanting
+      Timoshenko's simply supported case need the same trick or a `Fork`
+      support kind. Open: the prebuckling-curvature correction (Pi & Trahair
+      1992), whose element form needs the paper itself; the
+      torque's second-order terms and the induced joint moments (Yang &
+      McGuire 1986) for members at angles carrying large torques; warping
+      stiffness for sections that have it; a `Fork` support kind; the web
+      app's structure block still has no buckling.
 - [ ] Form finding: Schek 1974 (Force density method); Barnes 1999
 - [x] Form finding: Schek 1974 (Force density method); Barnes 1999
       (Form finding and analysis of tension structures by dynamic

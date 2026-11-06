@@ -18,8 +18,8 @@ public class GridshellAnalysisComponent : MiteComponent
             "Linear static analysis of a lath network as a 3D beam frame. Laths become " +
             "Euler-Bernoulli beams with the strip section, coupled at net crossings (rigid, " +
             "scissor hinge or semi-rigid about the surface normal); supports are fixed or pinned points; " +
-            "loads per metre of lath, self-weight, area load and point loads; linear (Euler) buckling of the loaded net: " +
-            "the load factor at which the first mode buckles and its shape. Geometry is converted from the document units to " +
+            "loads per metre of lath, self-weight, area load and point loads; linear buckling of the loaded net from its axial forces " +
+            "and bending moments (Euler and lateral–torsional): the load factor at which the first mode buckles and its shape. Geometry is converted from the document units to " +
             "metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. " +
             "A first-order sanity check, not a full FE package. A second family (CurvesB) may carry its own " +
             "section (WidthB, ThicknessB, UprightB): upright asymptotic lamellas with flat geodesic slats — the " +
@@ -72,6 +72,8 @@ public class GridshellAnalysisComponent : MiteComponent
         pManager[26].Optional = true;
         pManager[27].Optional = true;
         pManager[28].Optional = true;
+        // Flexural–torsional buckling (appended 2026-11-06, after UprightB)
+        pManager.AddBooleanParameter("Lateral", "Lt", "Flexural–torsional terms in the buckling (default true): the bending moments of the solve couple lateral bending and twist, so deep upright strips bent about their strong axis buckle sideways (lateral–torsional buckling; checked against Timoshenko & Gere's 4.0126 √(EIGJ)/L² cantilever). False = the axial forces alone, Euler buckling as in 1.6.0", GH_ParamAccess.item, true);
     }
 
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
@@ -151,6 +153,8 @@ public class GridshellAnalysisComponent : MiteComponent
         if (!DA.GetData(26, ref widthB)) widthB = width;
         if (!DA.GetData(27, ref thicknessB)) thicknessB = thickness;
         if (!DA.GetData(28, ref uprightB)) uprightB = upright;
+        bool lateral = true;
+        DA.GetData(29, ref lateral);
         int countA = curves.Count;
         bool hybrid = curvesB.Count > 0;
         if (hybrid)
@@ -281,6 +285,7 @@ public class GridshellAnalysisComponent : MiteComponent
                     PointLoads = pointLoads,
                     AxisOffsets = axisOffsets,
                     BucklingModes = Math.Max(0, buckling),
+                    LateralTorsional = lateral,
                     Progress = Progress(),
                 });
         }
@@ -362,8 +367,8 @@ public class GridshellAnalysisComponent : MiteComponent
                 (profile.Upright != profileB.Upright ? " · asymptotic–geodesic hybrid (one family upright, one flat)" : "");
         }
         string buck = buckling <= 0 ? "buckling not computed"
-            : result.BucklingFactors.Length == 0 ? (result.BucklingConverged ? "buckling: nothing in compression, no Euler buckling under this load" : "buckling: no positive factor converged")
-            : $"buckling factor λ = {result.BucklingFactors[0]:0.###} (modes: {string.Join(", ", result.BucklingFactors.Select(f => f.ToString("0.###")))}; " +
+            : result.BucklingFactors.Length == 0 ? (result.BucklingConverged ? (lateral ? "buckling: nothing in compression and no bending, no buckling under this load" : "buckling: nothing in compression, no Euler buckling under this load") : "buckling: no positive factor converged")
+            : $"buckling factor λ = {result.BucklingFactors[0]:0.###} ({(lateral ? "flexural–torsional" : "Euler, axial forces only")}; modes: {string.Join(", ", result.BucklingFactors.Select(f => f.ToString("0.###")))}; " +
               $"{(result.BucklingMissed == 0 ? "Sturm check: none missed below λ" : result.BucklingMissed < 0 ? "Sturm check unavailable" : $"Sturm check: {result.BucklingMissed} lower mode(s) missed")}" +
               $"{(result.BucklingConverged ? "" : ", not converged")})";
         string stack = axisOffsets == null ? "lath axes on the curves"

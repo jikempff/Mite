@@ -597,6 +597,8 @@ var sw = Stopwatch.StartNew();
     var t3 = Stopwatch.StartNew();
     var frB = FrameAnalysis.Compute(saddle, laths, xs.Select(x => x.Point).ToList(), sup, new LathProfile(0.08, 0.012, true), new Vec3d(0, 0, -1000), new FrameAnalysis.Options { BucklingModes = 2 });
     t3.Stop();
+    // the same net with the axial forces alone (Euler, as 1.6.0): the flexural–torsional terms can only lower the first factor of a strip in bending
+    var frE = FrameAnalysis.Compute(saddle, laths, xs.Select(x => x.Point).ToList(), sup, new LathProfile(0.08, 0.012, true), new Vec3d(0, 0, -1000), new FrameAnalysis.Options { BucklingModes = 2, LateralTorsional = false });
     var defl = new List<double[][]>();
     var nodeOf = new Dictionary<(int, int), int>();
     for (int n = 0; n < fr.NodeMap.Length; n++) foreach (var (c, i) in fr.NodeMap[n]) nodeOf.TryAdd((c, i), n);
@@ -643,7 +645,8 @@ var sw = Stopwatch.StartNew();
         for (int c = 0; c < laths.Count; c++) { var l = new List<double[]>(); for (int i = 0; i < laths[c].Length; i++) { var d = nodeOf.TryGetValue((c, i), out int n) ? mode[n] : Vec3d.Zero; l.Add(P(laths[c][i] + amp * d)); } modeLines.Add(l.ToArray()); }
     }
     scenes["frameMode"] = new { original = laths.Select(l => Line(l)).ToArray(), mode = modeLines.ToArray(), supports = sup.Select(P).ToArray() };
-    numbers["frameBuckling"] = new { factors = frB.BucklingFactors.Select(f => R3(f)).ToArray(), missed = frB.BucklingMissed, iterations = frB.BucklingIterations, converged = frB.BucklingConverged, ms = t3.ElapsedMilliseconds - t2.ElapsedMilliseconds, minAxial = R3(frB.AxialForce.Min()), compressed = frB.AxialForce.Count(a => a < 0), elements = frB.AxialForce.Length };
+    numbers["frameBuckling"] = new { factors = frB.BucklingFactors.Select(f => R3(f)).ToArray(), missed = frB.BucklingMissed, iterations = frB.BucklingIterations, converged = frB.BucklingConverged, ms = t3.ElapsedMilliseconds - t2.ElapsedMilliseconds, minAxial = R3(frB.AxialForce.Min()), compressed = frB.AxialForce.Count(a => a < 0), elements = frB.AxialForce.Length,
+        eulerFactors = frE.BucklingFactors.Select(f => R3(f)).ToArray(), eulerMissed = frE.BucklingMissed };
     // Euler checks with closed forms: fixed-free column P_cr = π²EI/(4L²) (Timoshenko & Gere §2.2), a round bar's double
     // eigenvalue, and a fixed-base portal frame against the exact beam-column stability functions (Chen & Lui 1987 ch. 5)
     {
@@ -662,7 +665,17 @@ var sw = Stopwatch.StartNew();
         Vec3d[] Seg(Vec3d p0, Vec3d p1, int n) { var pts = new Vec3d[n + 1]; for (int i = 0; i <= n; i++) pts[i] = p0 + (double)i / n * (p1 - p0); return pts; }
         var portalLaths = new List<Vec3d[]> { Seg(new Vec3d(0, 2, 0.01), new Vec3d(h, 2, 0.01), 8), Seg(new Vec3d(0, 2 + lb, 0.01), new Vec3d(h, 2 + lb, 0.01), 8), Seg(new Vec3d(h, 2, 0.01), new Vec3d(h, 2 + lb, 0.01), 8) };
         var portal = FrameAnalysis.Compute(flat, portalLaths, null, new[] { new Vec3d(0, 2, 0.01), new Vec3d(0, 2 + lb, 0.01) }, new LathProfile(w, th, true), Vec3d.Zero, new FrameAnalysis.Options { E = E, BucklingModes = 1, BucklingTolerance = 1e-10, PointLoads = new List<(Vec3d, Vec3d)> { (new Vec3d(h, 2, 0.01), new Vec3d(-1, 0, 0)), (new Vec3d(h, 2 + lb, 0.01), new Vec3d(-1, 0, 0)) } });
-        numbers["buckling"] = new { cantileverErr = errs, cantileverExact = exact, roundFactors = rb.BucklingFactors, roundExact = exactR, roundMissed = rb.BucklingMissed, portalExact = exactPortal, portalFactor = portal.BucklingFactors.Length > 0 ? portal.BucklingFactors[0] : 0, portalExactDimless = exactPortal * h * h / EI, portalMissed = portal.BucklingMissed };
+        // lateral–torsional buckling of the upright strip (Timoshenko & Gere 1961 ch. 6; FrameAnalysis class remarks): a vertical
+        // tip load on the clamped strip, P_cr = 4.0126 √(E I G J)/L² (eq. 6-30), and a uniform load, (q L)_cr = 12.8538 √(E I G J)/L² (eq. 6-33)
+        var up = new LathProfile(w, th, true); var upSec = up.SectionProperties();
+        double rig = Math.Sqrt(E * Math.Min(upSec.IA, upSec.IB) * (E / 2.6) * upSec.J);
+        FrameAnalysis.Result Strip(int n, double tip, double q, bool lateral) { var lath = new Vec3d[n + 1]; for (int i = 0; i <= n; i++) lath[i] = new Vec3d(2 + L * i / n, 5, 0.01); return FrameAnalysis.Compute(flat, new[] { lath }, null, new[] { lath[0] }, up, new Vec3d(0, 0, q), new FrameAnalysis.Options { E = E, BucklingModes = 1, BucklingTolerance = 1e-10, LateralTorsional = lateral, PointLoads = tip != 0 ? new List<(Vec3d, Vec3d)> { (lath[n], new Vec3d(0, 0, tip)) } : null }); }
+        double ltbTipExact = 4.0125993435793 * rig / (L * L), ltbLoadExact = 12.853763321383 * rig / (L * L);
+        var ltbTipErr = new[] { 4, 8, 16, 32 }.Select(n => Math.Abs(Strip(n, -1.0, 0, true).BucklingFactors[0] / ltbTipExact - 1)).ToArray();
+        var ltbLoad = Strip(32, 0, -1.0, true);
+        var ltbOff = Strip(16, -1.0, 0, false);
+        numbers["buckling"] = new { cantileverErr = errs, cantileverExact = exact, roundFactors = rb.BucklingFactors, roundExact = exactR, roundMissed = rb.BucklingMissed, portalExact = exactPortal, portalFactor = portal.BucklingFactors.Length > 0 ? portal.BucklingFactors[0] : 0, portalExactDimless = exactPortal * h * h / EI, portalMissed = portal.BucklingMissed,
+            ltbTipErr, ltbTipExact, ltbLoadFactor = ltbLoad.BucklingFactors.Length > 0 ? ltbLoad.BucklingFactors[0] * L : 0, ltbLoadExact, ltbLoadMissed = ltbLoad.BucklingMissed, ltbOffFactors = ltbOff.BucklingFactors.Length };
 
     }
     // ---- Per-family profiles: the asymptotic–geodesic hybrid (Schling, Wang, Hoyer & Pottmann 2022; Schling, Wan, Wang & D'Acunto 2023)

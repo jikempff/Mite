@@ -1513,7 +1513,7 @@
   "file": "GridshellAnalysisComponent.cs",
   "name": "Gridshell Analysis",
   "nick": "GridFE",
-  "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the strip section, coupled at net crossings (rigid, scissor hinge or semi-rigid about the surface normal); supports are fixed or pinned points; loads per metre of lath, self-weight, area load and point loads; linear (Euler) buckling of the loaded net: the load factor at which the first mode buckles and its shape. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. A first-order sanity check, not a full FE package. A second family (CurvesB) may carry its own section (WidthB, ThicknessB, UprightB): upright asymptotic lamellas with flat geodesic slats — the asymptotic–geodesic hybrid — are analysed with each lath's own A, I and J.",
+  "desc": "Linear static analysis of a lath network as a 3D beam frame. Laths become Euler-Bernoulli beams with the strip section, coupled at net crossings (rigid, scissor hinge or semi-rigid about the surface normal); supports are fixed or pinned points; loads per metre of lath, self-weight, area load and point loads; linear buckling of the loaded net from its axial forces and bending moments (Euler and lateral–torsional): the load factor at which the first mode buckles and its shape. Geometry is converted from the document units to metres internally, so E / Allowable are in Pa and Load in N/m whatever the model units. A first-order sanity check, not a full FE package. A second family (CurvesB) may carry its own section (WidthB, ThicknessB, UprightB): upright asymptotic lamellas with flat geodesic slats — the asymptotic–geodesic hybrid — are analysed with each lath's own A, I and J.",
   "tab": "Analysis",
   "icon": "GridshellAnalysis",
   "guid": "B1C2D3E4-F5A6-7890-1234-567890ABCDF3",
@@ -1751,6 +1751,15 @@
     "desc": "Orientation of family B when it differs from A (unset: as Upright): upright asymptotic A with flat geodesic B is the asymptotic–geodesic hybrid",
     "access": "item",
     "default": null,
+    "optional": true
+   },
+   {
+    "name": "Lateral",
+    "nick": "Lt",
+    "type": "Boolean",
+    "desc": "Flexural–torsional terms in the buckling (default true): the bending moments of the solve couple lateral bending and twist, so deep upright strips bent about their strong axis buckle sideways (lateral–torsional buckling; checked against Timoshenko & Gere's 4.0126 √(EIGJ)/L² cantilever). False = the axial forces alone, Euler buckling as in 1.6.0",
+    "access": "item",
+    "default": "true",
     "optional": true
    }
   ],
