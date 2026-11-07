@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Reflection;
 using Grasshopper;
 using Grasshopper.Kernel;
+using Grasshopper.Kernel.Parameters;
 using Grasshopper.Kernel.Data;
 using Rhino;
 using Rhino.Geometry;
@@ -31,7 +32,27 @@ public abstract partial class MiteComponent : GH_Component
     {
         _iconResource = iconResource;
         _modeKey = name;
+        HidePreviewsBehindNet();
     }
+
+    /// <summary>
+    /// On a component with a <c>Net</c> output the plain curve outputs (A, B, G,
+    /// Cu, Cv) start with their preview off: the Mite Net preview draws the same
+    /// curves in the palette's family colours, which Grasshopper's own red
+    /// would otherwise cover. New instances only — a saved definition keeps each
+    /// output's own Preview setting; right-click an output › Preview shows it
+    /// again, and hiding the Net output shows the plain curves alone.
+    /// </summary>
+    private void HidePreviewsBehindNet()
+    {
+        if (!Params.Output.OfType<MiteNetParameter>().Any()) return;
+        foreach (var p in Params.Output)
+            if (p is Param_Curve c && c.Access == GH_ParamAccess.list && HiddenBehindNet.Contains(c.NickName))
+                c.Hidden = true;
+    }
+
+    /// <summary>Nicknames of the curve outputs the Net output previews in colour.</summary>
+    internal static readonly string[] HiddenBehindNet = { "A", "B", "G", "Cu", "Cv" };
 
     protected override Bitmap? Icon
     {

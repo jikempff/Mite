@@ -492,9 +492,17 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
 - [~] Custom viewport preview on the net components: done for every `Net`
       output and the Mite Net parameter (family A teal / B magenta,
       T-junction ends orange, free ends red, the web app's colours; selected
-      = Grasshopper's selection colour). Open: the component's plain curve
-      outputs still preview in Grasshopper green on top — a preview toggle,
-      contact dots, and the same colours in Net Joints / Net Topology outputs.
+      = Grasshopper's selection colour). 2026-11-07 (session 3, B): the
+      colours are the palette's roles against the viewport background (see
+      the C entry "Grasshopper previews" below) and the plain curve outputs
+      A / B / G / Cu / Cv behind a `Net` output start with their preview off
+      (`MiteComponent.HidePreviewsBehindNet`: new instances only, Grasshopper
+      stores each output's Preview flag in the definition; right-click ›
+      Preview brings them back). Open: contact dots (`LathNet.Joints()` is
+      cheap enough for the preview cache — decide whether they are on by
+      default or only while the owner is selected), the same colours in Net
+      Joints / Net Topology outputs, and a check in Rhino that an output
+      hidden by the constructor is listed as such in its context menu.
 - [x] Replace boolean switches that are really modes (AutoSpace,
       Continuous, Upright, MaxDir, Shape) by a right-click mode menu or an
       auto-attached value list; keep the inputs for compatibility.
@@ -672,8 +680,14 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       AutoSpace"-type notes from the catalogue's dependencies; (f) check in
       Rhino that long balloon texts wrap and that a message is not repeated
       for families A and B (deduplicated through RuntimeMessages(level)).
-- [ ] Interactive seed picking (Rhino point pick button on the component)
-      and a Bake that writes families to layers with their colours.
+- [~] Interactive seed picking (Rhino point pick button on the component)
+      and a Bake that writes families to layers with their colours. Bake done
+      2026-11-07 (session 3): `MiteNetGoo.BakeAll` puts the laths on
+      `Mite::A` / `Mite::B` (`LayerTable.AddPath`, Rhino 8; created in the
+      family colours for the application's viewport background, an existing
+      layer keeps its colour; objects coloured by layer, named A0 … / B0 …,
+      one group). Open: the seed picking; baking the lath ends as points on
+      `Mite::Ends`.
 - [ ] Example definitions per typology shipped in the yak package
       (`examples/*.gh`) and linked from the component tooltips; one per
       catalogue surface plus the kinetic canopy.
@@ -971,9 +985,50 @@ remains the self-test review page.
       and mark colours chosen against the surface rather than the paper —
       José to decide which; the pieces' pale shades (blends towards the
       page) are redrawn on toggle, not re-themed in place.
-- [ ] Grasshopper previews: the Mite Net preview (unmerged 2026-09-27 bundle)
-      should take `MitePalette.FamilyA/B` and the end-class colours once merged;
-      check them against Rhino's default grey viewport background.
+- [x] Grasshopper previews take the palette against the viewport background —
+      2026-11-07 (session 3, B / C). Core `Display/ViewportPalette` (new file,
+      nothing existing changed; `ViewportRole` FamilyA / FamilyB / FamilyG /
+      Mark / Warn / Ink): for a background of relative luminance Yb the page
+      theme is Light from CIELAB L* 50 (Yb ≥ 0.1842) and Dark below; a role's
+      page colour is kept when it has WCAG 2.1's 3:1 (SC 1.4.11) — so white
+      and black return MitePalette exactly, marks ink / #d9ff00 as the web
+      app's 11-07 rule — else both themes' colours are moved to 3:1 in the one
+      direction the background allows, darkened by the scale (Yb + 0.05)/3 −
+      0.05 over Y in linear light (CIE 15:2004: XYZ scale together, the
+      chromaticity stays — measured |Δx| + |Δy| ≤ 0.003) on light
+      backgrounds, mixed with white in linear light (hue kept within 5°) on
+      dark ones, and the one with the larger CIELAB chroma is drawn. Read:
+      Ware 1988 (IEEE CG&A 8(5): the luminance channel processes shape far
+      more effectively than the chromatic channels — a thin line needs
+      luminance contrast), Healey 1996 (UBC TR-96-10: distinguishability as
+      distance in a perceptual model), WCAG 2.1 (via ColourScience; w3.org
+      is unreachable from the sandbox). Grasshopper `ViewportColours` reads
+      the background the pipeline clears to (`DisplayPipelineAttributes`:
+      solid fill, the linear-light mean of a gradient, else
+      `AppearanceSettings.ViewportBackgroundColor`; bitmap / renderer /
+      transparent fills fall back to the latter) and caches one colour set
+      per background; `MiteNetGoo.Draw` takes it per frame. Measured on seven
+      backgrounds white … #404040: least contrast 3.00 (the 1.6.0 teal / plum
+      / amber / red read 2.09 / 2.63 / 1.22 / 2.07 on #a0a0a0, the amber
+      2.15 even on white); on #a0a0a0 (L* 65.9) A #2434e3, B #a3102f, G
+      #005f2d, marks ink 7.57:1, A–B ΔE 94.8 for dichromats, chroma kept
+      ≥ 67 %; #c0c0c0 keeps A (3.62) and darkens B / G; #606060 (L* 40.7)
+      lightens the dark theme to A #a9acff, B #ff959f. Tests
+      `ViewportPaletteTests` (17); bench: Mite Net self-test. Findings: (1)
+      McNeel's documentation does not state the default viewport background
+      colour (Options › Appearance › Colors lists the setting without its
+      value), which is why the plugin reads the live value instead of
+      assuming #a0a0a0; (2) on a mid grey (L* 50–54) everything must be dark
+      and B against G falls to ΔE 7.6–9.5 for deuteranopes — the known weak
+      pair of the page palette (ΔE 12.8 on white, see "Family G against B"
+      above), not made worse in kind; (3) a Grasshopper preview sits on the
+      mesh's own preview too (GH's translucent material), which no single
+      background accounts for. Open: Net Joints / Net Topology / Lath
+      Preview outputs through the same roles; the Rhino check that
+      `DisplayPipelineAttributes.FillMode` reports `DefaultColor` for the
+      stock modes (then the application colour is the right one); once the
+      11-07 viewer patch is merged, `ViewportPalette.PageColour(Mark)` can
+      delegate to `MitePalette.Mark`.
 - [ ] Icons in black / white / neon (`tools/generate_icons.py`) after the Mite
       Net bundle (two new icons) is merged, then the Food4Rhino screenshots.
       charts) — 2026-10-04 (session 2), `Analysis/NetDistributions`

@@ -402,7 +402,13 @@ once — `W`, `T`, `U`, `O`, `Sh`, `Sc`, and `Ub` to lay family B differently
 (asymptotic A upright, geodesic B flat) — and every downstream component uses
 it. Mite Net also joins two nets (`Nb`: its family A becomes family B, e.g. two
 Geodesic Nets) and sorts the lath ends: `Eb` on the border, `El` on another
-lath (T-junction, orange in the viewport), `Ef` free (red). Anything you wire
+lath (T-junction, marked in ink — neon yellow on a dark background), `Ef` free
+(the warning red). The Net wire previews family A in neon blue and B in neon
+red, chosen against your viewport's background so they keep 3:1 on Rhino's
+grey as on white or black; the components' plain curve outputs start with
+their preview off so the colours show (right-click an output › Preview to
+bring Grasshopper's red back). Bake a Net and the laths land on the layers
+`Mite::A` and `Mite::B` in those colours. Anything you wire
 next to a Net overrides that part of it. With a Net, Gridshell Analysis needs
 no Joints or Supports (every contact is coupled, every border end supported).
 For the asymptotic–geodesic hybrid give family B its own profile: `Wb`, `Tb`,

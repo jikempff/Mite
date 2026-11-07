@@ -2469,6 +2469,26 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         divProfileOld = OldProfile(oldDiv).Where((_, i) => i % 10 == 0).Select(x => Math.Round(x, 2)).ToArray(),
         seqProfileOld = LsOld.Where((_, i) => i % 10 == 0).Select(x => Math.Round(x, 2)).ToArray(),
     };
+    // the Grasshopper preview's roles against viewport backgrounds (ViewportPalette, 2026-11-07): the page colours
+    // on white and black, the neons darkened / lightened to WCAG's 3:1 on every grey; the 1.6.0 preview's teal /
+    // plum / amber / red for comparison
+    object Viewport(Rgb bg)
+    {
+        var c = ViewportPalette.Colours(bg);
+        double Cr(Rgb x) => Math.Round(ColourScience.ContrastRatio(x, bg), 2);
+        return new
+        {
+            bg = bg.Hex, lstar = Math.Round(ColourScience.Lightness(bg), 1), theme = ViewportPalette.ThemeFor(bg).ToString().ToLowerInvariant(),
+            famA = c[0].Hex, famB = c[1].Hex, famG = c[2].Hex, mark = c[3].Hex, warn = c[4].Hex, ink = c[5].Hex,
+            contrast = c.Select(Cr).ToArray(), minContrast = c.Min(Cr),
+            pageContrast = ViewportPalette.Roles.Select(r => Cr(ViewportPalette.PageColour(r, ViewportPalette.ThemeFor(bg)))).ToArray(),
+            old = new[] { new Rgb(15, 118, 110), new Rgb(157, 47, 107), new Rgb(245, 158, 13), new Rgb(204, 38, 38) }.Select(Cr).ToArray(),
+            abWorst = Math.Round(ColourScience.WorstCaseDeltaE(c[0], c[1]), 1), markBWorst = Math.Round(ColourScience.WorstCaseDeltaE(c[3], c[1]), 1),
+            chromaKept = Math.Round(ViewportPalette.Roles.Take(3).Min(r => ViewportPalette.Chroma(ViewportPalette.Colour(r, bg)) / Math.Max(1e-9, ViewportPalette.Chroma(ViewportPalette.PageColour(r, ViewportPalette.ThemeFor(bg))))), 3),
+            samePage = ViewportPalette.Roles.All(r => ViewportPalette.Colour(r, bg).Equals(ViewportPalette.PageColour(r, ViewportPalette.ThemeFor(bg)))),
+        };
+    }
+    pal["viewport"] = new[] { new Rgb(255, 255, 255), new Rgb(0, 0, 0), new Rgb(160, 160, 160), new Rgb(192, 192, 192), new Rgb(128, 128, 128), new Rgb(96, 96, 96), new Rgb(64, 64, 64) }.Select(Viewport).ToArray();
     numbers["palette"] = pal;
 }
 

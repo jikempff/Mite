@@ -62,7 +62,8 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   check(await page.isDisabled('[data-status="failing"]') === (fail === 0), 'a facet with no hits is disabled (no dead end)');
   await page.selectOption('#flt-tab', 'Kinetics');
   v = await visible();
-  check(v.length === 1 && v[0] === 'net-kinetics', 'tab facet: Kinetics \u2192 Net Kinetics');
+  // the Kinetics tab grew from one card (1.3.1) to Net Kinetics + Mechanism Modes, Kinetic State, Kinetic Supports, Kinetic Drivers, Flat Kit
+  check(v.length >= 1 && v.includes('net-kinetics') && v.every(id => !['asymptotic-net', 'principal-curvature', 'lath-sweep'].includes(id)), 'tab facet: Kinetics \u2192 the kinetics cards only (' + v.join(', ') + ')');
   const opts = await page.$$eval('#flt-tab option', os => os.map(o => o.textContent));
   check(opts[0] === `All tabs (${total})`, 'tab options carry counts: ' + opts.join(', '));
   await page.selectOption('#flt-tab', 'all');

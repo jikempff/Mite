@@ -2,10 +2,13 @@
 // the parameter that carries it (McNeel, Grasshopper SDK: "Simple Data
 // Types" — derive from GH_Goo<T>; "Simple Parameters" — derive from
 // GH_Param<T>, never implement IGH_Param directly). The goo previews the
-// families in the colours of the web app (A teal #0f766e, B magenta
-// #9d2f6b; T-junction ends orange, free ends red, as the app's end markers)
-// and bakes each family with its colour; internalised data is stored as
-// LathNet.ToBytes().
+// families in Mite.Core's palette — black, white and neon — as roles
+// (ViewportPalette: family A neon blue, family B neon red, T-junction ends
+// the mark colour, free ends the warning red) resolved against the viewport's
+// own background, so on Rhino's grey the neons are darkened to WCAG 2.1's
+// 3:1 and on a white or black background they are the web app's colours; it
+// bakes each family onto its own layer (Mite::A, Mite::B) in those colours.
+// Internalised data is stored as LathNet.ToBytes().
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -17,6 +20,7 @@ using Grasshopper.Kernel.Types;
 using Rhino;
 using Rhino.DocObjects;
 using Rhino.Geometry;
+using Mite.Core.Display;
 using Mite.Core.Geometry;
 using Mite.Core.Gridshells;
 
@@ -25,10 +29,9 @@ namespace Mite.Grasshopper;
 /// <summary>One Mite Net value on a Grasshopper wire.</summary>
 public sealed class MiteNetGoo : GH_Goo<LathNet>, IGH_PreviewData, IGH_BakeAwareData
 {
-    public static readonly Color ColorA = Color.FromArgb(15, 118, 110);
-    public static readonly Color ColorB = Color.FromArgb(157, 47, 107);
-    public static readonly Color ColorOnLath = Color.FromArgb(245, 158, 13);
-    public static readonly Color ColorFree = Color.FromArgb(204, 38, 38);
+    /// <summary>The layer a baked family lands on (a sublayer of "Mite").</summary>
+    public const string LayerRoot = "Mite";
+    public static string LayerPath(bool familyA) => LayerRoot + "::" + (familyA ? "A" : "B");
 
     // Preview cache, built once per value
     private Polyline[]? _a, _b;
@@ -111,25 +114,28 @@ public sealed class MiteNetGoo : GH_Goo<LathNet>, IGH_PreviewData, IGH_BakeAware
     public void DrawViewportWires(GH_PreviewWireArgs args) => Draw(args.Pipeline, null, args.Thickness);
 
     /// <summary>
-    /// Draws the families in their colours (or all in <paramref name="selected"/>
-    /// when the owner is selected) and marks T-junction ends orange and free
-    /// ends red; border ends need no marker.
+    /// Draws the families in the palette's colours for the viewport's background
+    /// (or all in <paramref name="selected"/> when the owner is selected), marks
+    /// T-junction ends in the mark colour (ink on a light background, neon
+    /// yellow on a dark one) and free ends in the warning red; border ends need
+    /// no marker.
     /// </summary>
     public void Draw(Rhino.Display.DisplayPipeline pipeline, Color? selected, int thickness)
     {
         EnsureCache();
         if (_a == null) return;
-        Color ca = selected ?? ColorA, cb = selected ?? ColorB;
+        var pal = ViewportColours.For(ViewportColours.Background(pipeline));
+        Color ca = selected ?? pal[(int)ViewportRole.FamilyA], cb = selected ?? pal[(int)ViewportRole.FamilyB];
         int w = Math.Max(2, thickness);
         foreach (var pl in _a) pipeline.DrawPolyline(pl, ca, w);
         foreach (var pl in _b!) pipeline.DrawPolyline(pl, cb, w);
-        if (_onLath!.Length > 0) pipeline.DrawPoints(_onLath, Rhino.Display.PointStyle.RoundSimple, 6, ColorOnLath);
-        if (_free!.Length > 0) pipeline.DrawPoints(_free, Rhino.Display.PointStyle.RoundSimple, 6, ColorFree);
+        if (_onLath!.Length > 0) pipeline.DrawPoints(_onLath, Rhino.Display.PointStyle.RoundSimple, 6, pal[(int)ViewportRole.Mark]);
+        if (_free!.Length > 0) pipeline.DrawPoints(_free, Rhino.Display.PointStyle.RoundSimple, 6, pal[(int)ViewportRole.Warn]);
     }
 
     public void DrawViewportMeshes(GH_PreviewMeshArgs args) { }
 
-    // ---------- bake: one group, family colours ----------
+    // ---------- bake: one group, each family on its layer in its colour ----------
 
     public bool BakeGeometry(RhinoDoc doc, ObjectAttributes att, out Guid obj_guid)
     {
@@ -140,19 +146,37 @@ public sealed class MiteNetGoo : GH_Goo<LathNet>, IGH_PreviewData, IGH_BakeAware
         return true;
     }
 
+    /// <summary>
+    /// Bakes every lath as a polyline named A0, A1, … / B0, B1, … on the layers
+    /// Mite::A and Mite::B (created when missing, in the family colours for the
+    /// application's viewport background; an existing layer keeps its colour),
+    /// all in one group; the objects take their colour from the layer, so
+    /// recolouring a family is one layer edit.
+    /// </summary>
     public List<Guid> BakeAll(RhinoDoc doc, ObjectAttributes? att)
     {
         var ids = new List<Guid>();
         if (Value == null) return ids;
         att ??= doc.CreateDefaultAttributes();
         int group = doc.Groups.Add();
-        foreach (var (family, color, name) in new[] { (Value.FamilyA, ColorA, "A"), (Value.FamilyB, ColorB, "B") })
+        foreach (var (family, role, isA) in new[] { (Value.FamilyA, ViewportRole.FamilyA, true), (Value.FamilyB, ViewportRole.FamilyB, false) })
         {
+            if (family.Count == 0) continue;
+            int layer = FamilyLayer(doc, isA, ViewportColours.OfApplication(role));
+            string name = isA ? "A" : "B";
             for (int i = 0; i < family.Count; i++)
             {
                 var a = att.Duplicate();
-                a.ColorSource = ObjectColorSource.ColorFromObject;
-                a.ObjectColor = color;
+                if (layer >= 0)
+                {
+                    a.LayerIndex = layer;
+                    a.ColorSource = ObjectColorSource.ColorFromLayer;
+                }
+                else
+                {
+                    a.ColorSource = ObjectColorSource.ColorFromObject;
+                    a.ObjectColor = ViewportColours.OfApplication(role);
+                }
                 a.Name = name + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 a.AddToGroup(group);
                 var id = doc.Objects.AddPolyline(family[i].Select(MeshConvert.ToRhinoPoint), a);
@@ -160,6 +184,19 @@ public sealed class MiteNetGoo : GH_Goo<LathNet>, IGH_PreviewData, IGH_BakeAware
             }
         }
         return ids;
+    }
+
+    /// <summary>The index of Mite::A or Mite::B, created with the colour when missing; −1 when the layer table refuses.</summary>
+    internal static int FamilyLayer(RhinoDoc doc, bool familyA, Color colour)
+    {
+        try
+        {
+            string path = LayerPath(familyA);
+            int index = doc.Layers.FindByFullPath(path, RhinoMath.UnsetIntIndex);
+            if (index == RhinoMath.UnsetIntIndex) index = doc.Layers.AddPath(path, colour);
+            return index == RhinoMath.UnsetIntIndex ? -1 : index;
+        }
+        catch (Exception) { return -1; }
     }
 }
 
