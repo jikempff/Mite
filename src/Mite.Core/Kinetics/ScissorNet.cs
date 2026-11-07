@@ -36,7 +36,11 @@ namespace Mite.Core.Kinetics;
 ///                hinges, and it fixes the otherwise free spin of those normals,
 /// minimised in the least-squares sense; Wan et al. use a trust-region
 /// reflective solver, here it is Levenberg–Marquardt on the sparse normal
-/// equations (envelope LDLᵀ). The mechanism reading — rigid shearing at the
+/// equations, factored in 3 × 3 blocks (a node's position, a node's normal)
+/// by the block up-looking LDLᵀ of <see cref="BlockLdl3"/> (Davis 2005,
+/// Algorithm 849; minimum-degree ordering of the block graph after Tinney
+/// &amp; Walker 1967) whose pattern is analysed once per motion and whose
+/// damping is a diagonal shift at factor time. The mechanism reading — rigid shearing at the
 /// hinges plus compliant bending/twisting of the strips, motion governed by
 /// geometry alone — is that of Schikore, Schling, Oberbichler &amp; Bauer 2020,
 /// "Kinetics and Design of Semi-Compliant Grid Mechanisms" (AAG 2020), whose
@@ -282,6 +286,24 @@ public sealed class ScissorNet
         public List<State> States = new List<State>();
         public bool Cancelled;
         public State Last => States[States.Count - 1];
+
+        /// <summary>Unknowns of the normal equations (three per free position, three per normal).</summary>
+        public int Unknowns;
+
+        /// <summary>Numeric factorizations of the normal equations over the whole motion (one per Levenberg–Marquardt trial).</summary>
+        public int Factorizations;
+
+        /// <summary>Times the block pattern was analysed (ordering, elimination tree): once per motion unless the Jacobian's structure changed.</summary>
+        public int PatternAnalyses;
+
+        /// <summary>Times the Jacobian's structure changed within the pattern (a contact switching) and only the row map was rebuilt.</summary>
+        public int PatternRemaps;
+
+        /// <summary>Stored 3 × 3 blocks of the factor's strictly lower part (the fill).</summary>
+        public long FactorBlocks;
+
+        /// <summary>Milliseconds spent in the normal-equation solves (assembly, factorization, substitution).</summary>
+        public long SolverMs;
     }
 
     // ------------------------------------------------------------------ construction
@@ -770,6 +792,9 @@ public sealed class ScissorNet
         }
 
         int steps = Math.Max(1, opt.Steps);
+        // the normal equations' block pattern and factor are analysed once for the whole motion (the
+        // Jacobian's structure is the net's; a contact switching on or off only remaps its row)
+        var normal = new BlockNormalEquations3(freeCount);
         _progress = new ProgressScope(opt.Progress, "folding");
         _progressStates = steps + 1;
         for (int k = 0; k <= steps; k++)
@@ -783,12 +808,18 @@ public sealed class ScissorNet
             _scissorAngles = opt.ScissorAnglesAt != null && scissors.Count > 0 ? opt.ScissorAnglesAt(t) : Array.Empty<double>();
             _scissors = scissors;
 
-            var st = SolveState(opt, t, pos, nrm, dof, ndof, freeCount, segs, fair, twistNodes, wF, wT, wC, targets, cableLen);
+            var st = SolveState(opt, t, pos, nrm, dof, ndof, freeCount, segs, fair, twistNodes, wF, wT, wC, targets, cableLen, normal);
             result.States.Add(st);
             if (opt.Cancel != null && opt.Cancel()) { result.Cancelled = true; break; }
         }
         if (!result.Cancelled) _progress.Done();
         _progress = null;
+        result.Unknowns = freeCount;
+        result.Factorizations = normal.Factorizations;
+        result.PatternAnalyses = normal.Analyses;
+        result.PatternRemaps = normal.Remaps;
+        result.FactorBlocks = normal.Factor?.FactorBlocks ?? 0;
+        result.SolverMs = normal.ElapsedMilliseconds;
         return result;
     }
 
@@ -809,7 +840,7 @@ public sealed class ScissorNet
 
     private State SolveState(Options opt, double t, Vec3d[] pos, Vec3d[] nrm, int[] dof, int[] ndof, int freeCount,
         List<(int a, int b, double l)> segs, List<Bend> fair, List<(int p, int v, int q, double lp, double lq)> twistNodes,
-        double wF, double wT, double wC, Vec3d[] targets, double[] cableLen)
+        double wF, double wT, double wC, Vec3d[] targets, double[] cableLen, BlockNormalEquations3 normal)
     {
         // residual blocks: per seg 3 (length, asym a, asym b); per node 1 (unit);
         // per fair 3; per driven 3; per cable 1
@@ -839,36 +870,24 @@ public sealed class ScissorNet
             if (opt.Cancel != null && (it & 3) == 0 && opt.Cancel()) break;
             if (_progress != null && _progress.Active)
                 _progress.Report((_progressState + ProgressScope.Converging(firstResidual, MaxAbs(r), opt.Tolerance, it, opt.MaxIterations)) / Math.Max(1, _progressStates));
-            // normal equations
-            var builder = new SparseSymmetricSolver.Builder(freeCount);
+            // normal equations JᵀJ (3 × 3 blocks, pattern and ordering reused) and gradient Jᵀ r
             var g = new double[freeCount];
-            for (int i = 0; i < m; i++)
-            {
-                var cols = rowsCols[i]; var vals = rowsVals[i];
-                double ri = r[i];
-                for (int p = 0; p < cols.Count; p++)
-                {
-                    g[cols[p]] += vals[p] * ri;
-                    for (int q = p; q < cols.Count; q++)
-                        builder.Add(cols[p], cols[q], vals[p] * vals[q]);
-                }
-            }
-            var diag = new double[freeCount];
-            double maxDiag = 0;
-            for (int c = 0; c < freeCount; c++) { diag[c] = builder.Get(c, c); maxDiag = Math.Max(maxDiag, diag[c]); }
+            double maxDiag = normal.Assemble(rowsCols, rowsVals, r, g);
             if (maxDiag <= 0) break;
+            var jtj = normal.Matrix!;
+            var diag = new double[freeCount];
+            for (int c = 0; c < freeCount; c++) diag[c] = jtj.Diagonal(c);
+            var shift = new double[freeCount];
 
             bool accepted = false;
             for (int attempt = 0; attempt < 12 && !accepted; attempt++)
             {
-                // damp in place (restored below) instead of copying the matrix
-                for (int c = 0; c < freeCount; c++) builder.Add(c, c, lambda * Math.Max(diag[c], 1e-12 * maxDiag) + 1e-14 * maxDiag);
-                var solver = SparseSymmetricSolver.Factor(builder, 1e-16);
-                for (int c = 0; c < freeCount; c++) builder.Rows[c][c] = diag[c];
-                if (solver == null) { lambda *= 10; continue; }
+                // Levenberg–Marquardt damping as a diagonal shift of the factorization; the matrix is untouched
+                for (int c = 0; c < freeCount; c++) shift[c] = lambda * Math.Max(diag[c], 1e-12 * maxDiag) + 1e-14 * maxDiag;
+                if (!normal.Factorize(shift, 1e-16)) { lambda *= 10; continue; }
                 var rhs = new double[freeCount];
                 for (int c = 0; c < freeCount; c++) rhs[c] = -g[c];
-                var delta = solver.Solve(rhs);
+                var delta = normal.Solve(rhs);
 
                 for (int v = 0; v < pos.Length; v++)
                 {

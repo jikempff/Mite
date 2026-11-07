@@ -1470,7 +1470,8 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     var rodEnv = Mite.Core.Kinetics.KineticStrain.Envelope(rodElastic);
     double s1h = rho * Math.Tan(Math.PI / n), bh0 = rho * Math.Sin(b0);
     var envHyp = new { max = rodEnv.MaxUtilization, theory = 0.01 / Math.Sqrt(3.0) * (Math.Atan(s1h / bh0) / s1h) / 0.005, states = rodEnv.LathState.Distinct().ToArray(), sources = rodEnv.LathSource.Select(x => x.ToString()).Distinct().ToArray(), buildable = rodEnv.BuildableLaths, laths = rodEnv.LathUtilization.Length };
-    numbers["kinHyp"] = new { rods = 2 * n, joints = nodes0.Length, states = res.States.Count, worstShape, worstDrift, worstAsym, worstCable, worstIt, ms = t.ElapsedMilliseconds, rows = stateRows, elastic = elasticRows, natural = Mite.Core.Kinetics.KineticStrain.NaturalState(rodElastic), envelope = envHyp };
+    numbers["kinHyp"] = new { rods = 2 * n, joints = nodes0.Length, states = res.States.Count, worstShape, worstDrift, worstAsym, worstCable, worstIt, ms = t.ElapsedMilliseconds, rows = stateRows, elastic = elasticRows, natural = Mite.Core.Kinetics.KineticStrain.NaturalState(rodElastic), envelope = envHyp,
+        solver = new { unknowns = res.Unknowns, factorizations = res.Factorizations, iterations = res.States.Sum(x => x.Iterations), analyses = res.PatternAnalyses, remaps = res.PatternRemaps, fill = res.FactorBlocks, ms = res.SolverMs } };
     scenes["kinHyp"] = new { states = stateScenes };
 
     // 2. A traced asymptotic net on the catenoid (the Studio X "concave cylinder") standing on the ground (bottom-rim
@@ -1627,6 +1628,7 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
             ["lockHeight"] = locked.Nodes.Max(q => Math.Abs(q.Z)), ["lockScissorMiss"] = R3(locked.ScissorMiss), ["lockMs"] = lockMs,
             ["designRise"] = R3(designRise), ["rms"] = R3(lrms / design.Scale), ["max"] = R3(lmax / design.Scale), ["corr"] = R3(Corr(designH, dLast.Nodes.Select(q => q.Z - dLast.Nodes[centre].Z).ToArray())),
             ["worstDrift"] = dep.States.Max(x => x.LengthDrift), ["worstAsym"] = dep.States.Max(x => x.AsymptoticDeviation), ["contacts"] = dLast.GroundContacts, ["scissorMiss"] = R3(dLast.ScissorMiss), ["depMs"] = depMs, ["rows"] = depRows,
+            ["solver"] = new { unknowns = dep.Unknowns, factorizations = dep.Factorizations, iterations = dep.States.Sum(x => x.Iterations), analyses = dep.PatternAnalyses, remaps = dep.PatternRemaps, fill = dep.FactorBlocks, ms = dep.SolverMs },
             ["pull"] = new { rise = R3(rise), lifted = R3(pulled.Nodes[centre].Z - pullNet.Nodes[centre].Z), miss = R3(pulled.TargetMiss), drift = pulled.LengthDrift, asymDeg = pulled.AsymptoticDeviation, rms = R3(prms / design.Scale), held = lowEnds.Length, ms = pullMs },
         };
         // the design aligned onto the deployed state for the overlay: mirror if the other branch came out, then the

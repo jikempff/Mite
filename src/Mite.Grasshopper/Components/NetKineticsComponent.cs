@@ -368,6 +368,7 @@ public class NetKineticsComponent : MiteComponent
         sb.AppendLine($"Drivers: {fixedIdx.Count} fixed, {slideIdx.Count} sliding, {driven.Count} moved, {cablePairs.Count} cables; {result.States.Count} states to Fold {last.Fold:0.##}, stiffness {stiffness:G3}");
         sb.AppendLine($"Rest state settled: joints moved up to {result.States[0].Nodes.Zip(net.Nodes, (a, b) => (a - b).Length).Max():G3}, deviation {result.States[0].AsymptoticDeviation:0.###}° from asymptotic");
         sb.AppendLine($"At Fold {last.Fold:0.##}: joint spacing drift {last.LengthDrift:E2}, asymptotic deviation {last.AsymptoticDeviation:0.###}°, driver miss {Math.Max(last.TargetMiss, last.CableMiss):G3}, {last.Iterations} iterations{(last.Converged ? "" : " (cap)")}");
+        sb.AppendLine($"Solver: {result.Unknowns} unknowns in 3 × 3 blocks, {result.Factorizations} factorizations over the motion, fill {result.FactorBlocks} blocks, pattern analysed {result.PatternAnalyses}×, {result.SolverMs} ms");
         sb.AppendLine($"Scissor angles at Fold {last.Fold:0.##}: {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Min():0.#}° … {angles.Where(a => !double.IsNaN(a)).DefaultIfEmpty(double.NaN).Max():0.#}°");
         if (deploy != 0)
         {

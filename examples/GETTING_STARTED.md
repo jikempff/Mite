@@ -472,7 +472,10 @@ Oberbichler & Bauer (2020) and Wan, Crolla & Schling (2025): joint spacing
 along every lath stays constant, every lath segment stays perpendicular to the
 moving surface normal (so upright laths remain straight-unrollable) and the
 laths keep their rest bend with the given `K` stiffness. Wire the `A` / `B`
-curves of an **Asymptotic Net**, then drive it:
+curves of an **Asymptotic Net**, then drive it (a few hundred joints move in
+about a second per state; the `Report` says how much of the time went into the
+solver, which factors the normal equations in 3 × 3 blocks and analyses their
+pattern once per motion):
 
 - `F` fixed points hold the nearest joints; `Sl` ground points let joints slide
   in the plane through their rest position (normal `Sn`, default Z);

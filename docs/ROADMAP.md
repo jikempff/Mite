@@ -39,10 +39,11 @@ where they overlap
    the 3-fold Enneper web into a hexagon — 1.3.1; the deployment from the flat
    grid — 2026-10-23, session 2, in the core and Grasshopper: the flat state is
    a bifurcation, the kit deploys by opening its scissors, and pulling the
-   singular node alone does not deploy it, see E); next: speed, strain
-   colouring per state, the deployment in the browser (press + deploy ≈ 15 s
-   natively on 451 nodes: needs the speed item first), the physical prototype
-   dimensions.
+   singular node alone does not deploy it, see E; speed done 2026-11-07:
+   the block LDLᵀ, press + deploy 18 → 3.3 s natively on 451 nodes, see E);
+   next: strain colouring per state, the deployment in the browser (not
+   timed in wasm this session; the damping and Jacobian follow-ups of the E
+   speed item come first), the physical prototype dimensions.
 6. The kit to build it (done 1.3.1: Flat Kit — flat assembly 1 : 1, strips
    with slots / holes / hub on laser sheets, deployment sequence, cut list,
    SVG / DXF / CSV); next: a physical prototype of the 3-fold Enneper to
@@ -2021,8 +2022,57 @@ Plan
 - [ ] Net Kinetics: append `Envelope` / `EnvelopeFold` outputs once the
       unmerged Mite Net bundle (2026-09-27, which appends `Net` to this
       component) is in, so the two do not claim the same output slot.
-- [ ] Speed: a block-aware ordering or a preconditioned CG on JᵀJ for nets
-      above ~500 nodes; reuse the symbolic envelope across iterations.
+- [x] Speed: a block-aware ordering and the symbolic analysis reused across
+      iterations — 2026-11-07 (session 2, E / José's priority 3 "next:
+      speed"). `Numerics/BlockLdl3` (new API, nothing existing changed):
+      `BlockSymmetricMatrix3` (upper block triangle, 3 × 3 blocks),
+      `BlockLdl3` (symbolic once: minimum-degree ordering of the block graph
+      — Tinney & Walker 1967, George & Liu 1989 — up to 8 192 blocks, above
+      it nested dissection with minimum-degree leaves, George & Liu 1981
+      ch. 8; block elimination tree and column counts as Davis 2005's
+      `ldl_symbolic`; numeric: the up-looking algorithm with every scalar a
+      3 × 3 block, Y_i = A_ki − Σ Y_j L_ijᵀ along the etree path, L_ki =
+      Y_i D_i⁻¹ through the block's own LDLᵀ — an explicit cofactor inverse
+      lost four digits on ill-conditioned blocks — D_k −= L_ki Y_iᵀ; the
+      damping as a diagonal shift at factor time) and `BlockNormalEquations3`
+      (JᵀJ and Jᵀr from the Jacobian rows through a cached map from the row
+      pattern to the block positions; a row whose columns change — a
+      one-sided contact — remaps within the pattern, a new block pair
+      re-analyses). `ScissorNet.Solve` uses it for every state; `Result`
+      reports `Unknowns`, `Factorizations`, `PatternAnalyses`,
+      `PatternRemaps`, `FactorBlocks`, `SolverMs` and Net Kinetics prints
+      them. Measured (this sandbox, Release): the 1.6.0 envelope solver spent
+      14.4 of the deployment's 17.8 s in 439 factorizations of 2 706 unknowns
+      (32 ms each: 12 ms ordering, 2 ms symbolic, 17 ms numeric, fill 375 k
+      entries); the scalar nested-dissection `SparseLdl` had the same cost
+      (fill 243 k, the same 32 ms); the block version on the same ordering
+      5.0 s, on minimum degree 2.4 s (fill 10 695 blocks = 96 k entries, 4 ms
+      per factorization). Hyperboloid grids 112 / 416 / 912 / 1 600 nodes:
+      0.70 → 0.31 s, 7.7 → 1.7 s, 34.0 → 5.0 s, 164 → 19 s, states identical
+      to 1e-12 (an exact mechanism); the flat 3-fold Enneper kit (451 nodes)
+      pressed 3.8 → 0.9 s, deployed 14.0 → 2.4 s with states within 4e-6
+      (2.6e-5 of the spacing) of the 1.6.0 ones — a mechanism's soft
+      directions are decided by round-off, both solvers reach the same
+      residual; the pressed state agrees to 7e-11. Findings: (1) nested
+      dissection on BFS level structures is a poor ordering for these block
+      graphs — on the 912-node hyperboloid its fill is 2.2× minimum degree's
+      (74 550 vs 33 382 blocks) and a leaf of 8 instead of 64 only takes a
+      quarter off; on a synthetic denser graph the two are level, so the
+      hybrid (dissection, minimum-degree leaves of 1 024) is kept for the
+      large sizes where the explicit elimination graph gets slow (2.7 s at
+      7 104 blocks, 31 s at 28 032); (2) the remaining time of the deployment
+      is now evaluation (0.8 s: the central differences of the rest-bend and
+      twist rows), assembly (0.5 s) and the factorizations (1.7 s);
+      (3) 439 factorizations for 198 iterations: the ×10 / ÷10 damping
+      rejects more than half of the trial steps on the kick states. Open:
+      Nielsen's gain-ratio damping update (Madsen, Nielsen & Tingleff 2004)
+      to cut the rejected trials; a flat (CSR) Jacobian instead of the per-row
+      lists; analytic Jacobians for the rest-bend and twist rows; the same
+      block solver and ordering for `SoftestModes` / `MechanismModes`
+      (envelope, once per call, 0.2 s) and for `AagWeb` / `AagRefinement`
+      (scalar `SparseLdl`, whose nested dissection should at least take
+      minimum-degree leaves — not measured here); supernodes (Ng & Peyton
+      1993) if the 3 × 3 blocks are not enough for the browser.
 - [x] Elastic reading of the states — 2026-09-26 (session 1b),
       `Kinetics/KineticStrain`: kn, kg from the lath's turning at each node
       split in the node's Darboux frame, τg from the normal's rotation about

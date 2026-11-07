@@ -181,7 +181,16 @@ public sealed class SparseLdl
     /// (recursively), the separator last. Parts below 64 vertices keep their
     /// breadth-first order.
     /// </summary>
-    internal static int[] NestedDissection(List<int>[] adj)
+    internal static int[] NestedDissection(List<int>[] adj) => NestedDissection(adj, 64, null);
+
+    /// <summary>
+    /// Nested dissection with the leaf size given and, optionally, an
+    /// ordering of each leaf part (adjacency, part ids, this part's id, its
+    /// vertices → the vertices in elimination order; the part ids tell which
+    /// neighbours lie outside the part): the hybrid of George &amp; Liu 1981
+    /// ch. 8 with minimum degree inside the leaves.
+    /// </summary>
+    internal static int[] NestedDissection(List<int>[] adj, int leaf, Func<List<int>[], int[], int, List<int>, List<int>>? leafOrder)
     {
         int n = adj.Length;
         var order = new int[n];
@@ -198,9 +207,9 @@ public sealed class SparseLdl
         while (stack.Count > 0)
         {
             var (id, verts, emit) = stack.Pop();
-            if (emit || verts.Count <= 64)
+            if (emit || verts.Count <= leaf)
             {
-                if (!emit && verts.Count > 1) verts = BfsOrder(adj, part, id, verts, level, queue);
+                if (!emit && verts.Count > 1) verts = leafOrder != null ? leafOrder(adj, part, id, verts) : BfsOrder(adj, part, id, verts, level, queue);
                 foreach (int v in verts) order[next++] = v;
                 continue;
             }
