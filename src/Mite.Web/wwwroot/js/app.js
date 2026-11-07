@@ -2,9 +2,9 @@
 // in a Web Worker) and the three.js viewer.
 
 import { Kernel } from './kernel.js';
-import { Viewer, FAMILY_A, FAMILY_B, FAMILY_G, NEON } from './viewer.js';
+import { Viewer } from './viewer.js';
 import { Color as THREE_COLOR } from 'three';
-import { diverging, sequential, utilizationColor, legendGradient, legendTicks, cssRgb, UTIL_STOPS } from './colormaps.js';
+import { diverging, sequential, utilizationColor, legendGradient, legendTicks, UTIL_STOPS } from './colormaps.js';
 import { Loft } from './loft.js';
 import { readMeshFile } from './loaders.js';
 import { drawLathPlot, drawUnroll } from './plots.js';
@@ -41,12 +41,13 @@ const NET_NOTES = {
 };
 
 const END_CLASS = [
-  { name: 'on the border', color: null, what: 'the curve reached the mesh border — no marker' },
-  { name: 'at the K = 0 line', color: [0.16, 0.24, 1.00], what: 'the curve stopped where the asymptotic directions cease to exist (K ≥ 0 or the families cross below the minimum angle): there is no asymptotic curve beyond' },
-  { name: 'on a neighbour (T-junction)', color: [0.85, 1.00, 0.00], what: 'the curve stopped on a neighbouring curve of its own family: the evenly spaced fill does this wherever the spacing closes; a web only where the family converges until two laths would touch' },
-  { name: 'step limit', color: [1.00, 0.12, 0.31], what: 'the curve hit the step budget without reaching a border (closed or very long surface)' },
+  { name: 'on the border', role: null, what: 'the curve reached the mesh border — no marker' },
+  { name: 'at the K = 0 line', role: 'famA', what: 'the curve stopped where the asymptotic directions cease to exist (K ≥ 0 or the families cross below the minimum angle): there is no asymptotic curve beyond' },
+  { name: 'on a neighbour (T-junction)', role: 'mark', what: 'the curve stopped on a neighbouring curve of its own family: the evenly spaced fill does this wherever the spacing closes; a web only where the family converges until two laths would touch' },
+  { name: 'step limit', role: 'famB', what: 'the curve hit the step budget without reaching a border (closed or very long surface)' },
 ];
-const SEED_COLOR = [0.00, 0.85, 0.42];
+// End markers and the seed are palette roles (Mite.Core MitePalette through palette.js): the viewer
+// resolves them per theme and app.css carries the same colours as --famA, --mark, --famB and --seed.
 
 // ---------------------------------------------------------------------------
 // State
@@ -290,12 +291,12 @@ async function applyMode() {
   if ($('umb').checked && c) {
     const flat = [];
     for (const i of c.umbilics) flat.push(S.vertices[3 * i], S.vertices[3 * i + 1], S.vertices[3 * i + 2]);
-    v.showPoints('umb', flat, NEON.yellow, 8);
+    v.showPoints('umb', flat, 'mark', 8);
     // the isolated umbilics (degenerate points of the direction field): lemons / monstars (+½) in red, stars (−½) in blue
     const lemons = [], stars = [];
     for (let i = 0; i < c.umbilicIndex.length; i++) (c.umbilicIndex[i] > 0 ? lemons : stars).push(c.umbilicPoints[3 * i], c.umbilicPoints[3 * i + 1], c.umbilicPoints[3 * i + 2]);
-    if (lemons.length) v.showPoints('umbLemon', lemons, NEON.red, 14); else v.clearOverlay('umbLemon');
-    if (stars.length) v.showPoints('umbStar', stars, NEON.blue, 14); else v.clearOverlay('umbStar');
+    if (lemons.length) v.showPoints('umbLemon', lemons, 'famB', 14); else v.clearOverlay('umbLemon');
+    if (stars.length) v.showPoints('umbStar', stars, 'famA', 14); else v.clearOverlay('umbStar');
   } else { v.clearOverlay('umb'); v.clearOverlay('umbLemon'); v.clearOverlay('umbStar'); }
   v.setWireframe($('wire').checked);
   if (!S.kin && !S.aag) v.setMeshOpacity(surfaceOpacity());
@@ -323,7 +324,7 @@ async function updateSeedHandle() {
   S.seedNormal = c ? [c.normals[3 * idx], c.normals[3 * idx + 1], c.normals[3 * idx + 2]] : [0, 0, 1];
   $('seed-label').textContent = S.seed >= 0 ? `vertex ${S.seed}` : `auto (vertex ${idx})`;
   if (directionRelevant()) v.setDirectionHandle(p, S.seedNormal, S.dir, 0.12 * S.size);
-  else v.showPoints('seed', p, NEON.green, 11);
+  else v.showPoints('seed', p, 'seed', 11);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,9 +380,9 @@ async function traceNet() {
     const showG = !!d.web && $('diagonals').checked && d.g?.length > 0;
     await K('useDiagonals', showG);
     drawNetCurves();
-    if ($('crossings').checked && d.crossings) v.showPoints('crossings', d.crossings.points, v.ink(), 3.5); else v.clearOverlay('crossings');
+    if ($('crossings').checked && d.crossings) v.showPoints('crossings', d.crossings.points, 'ink', 3.5); else v.clearOverlay('crossings');
     // the guide's nodes (layout 4): every node carries a crossing of both families
-    if (d.guideNodes?.length) v.showPoints('guide', d.guideNodes, v.ink(), 5); else v.clearOverlay('guide');
+    if (d.guideNodes?.length) v.showPoints('guide', d.guideNodes, 'ink', 5); else v.clearOverlay('guide');
     showEndMarkers();
     showAngleMap(); showIsoLabels();
     const closed = S.stats.boundaryVertices === 0;
@@ -586,9 +587,9 @@ function renderEndLegend(d) {
   if (d?.endClasses?.length) {
     const counts = [0, 0, 0, 0];
     for (const c of d.endClasses) counts[c] = (counts[c] || 0) + 1;
-    for (let k = 1; k < END_CLASS.length; k++) if (counts[k]) items.push(`<div><i style="background:${cssRgb(END_CLASS[k].color)}"></i><b>${counts[k]} end${counts[k] > 1 ? 's' : ''} ${END_CLASS[k].name}</b> — ${END_CLASS[k].what}</div>`);
+    for (let k = 1; k < END_CLASS.length; k++) if (counts[k]) items.push(`<div><i style="background:var(--${END_CLASS[k].role})"></i><b>${counts[k]} end${counts[k] > 1 ? 's' : ''} ${END_CLASS[k].name}</b> — ${END_CLASS[k].what}</div>`);
   }
-  if (seedRelevant()) items.push(`<div><i class="knob" style="background:${cssRgb(SEED_COLOR)}"></i><b>seed</b> — the green dot is where the net starts (shift-click the surface to move it)${directionRelevant() ? '; the knob on the ring sets the first direction (drag it)' : ''}</div>`);
+  if (seedRelevant()) items.push(`<div><i class="knob" style="background:var(--seed)"></i><b>seed</b> — the green dot is where the net starts (shift-click the surface to move it)${directionRelevant() ? '; the knob on the ring sets the first direction (drag it)' : ''}</div>`);
   if ($('crossings').checked && d?.crossings) items.push('<div><i style="background:var(--ink)"></i><b>crossings</b> — where the two families meet (joints)</div>');
   el.innerHTML = items.join('');
   el.classList.toggle('hidden', items.length === 0);
@@ -598,14 +599,14 @@ function showEndMarkers() {
   const d = S.netData; const v = S.viewer;
   renderEndLegend(d);
   if (!d || !d.endPoints?.length) { v.clearOverlay('ends'); return; }
-  const pts = [], cols = [];
+  const pts = [], roles = [];
   for (let i = 0; i < d.endClasses.length; i++) {
     const cls = END_CLASS[d.endClasses[i]];
-    if (!cls.color) continue; // border ends need no marker
+    if (!cls.role) continue; // border ends need no marker
     pts.push(d.endPoints[3 * i], d.endPoints[3 * i + 1], d.endPoints[3 * i + 2]);
-    cols.push(...cls.color);
+    roles.push(cls.role);
   }
-  v.showPoints('ends', pts, 0xffffff, 7, cols);
+  v.showPoints('ends', pts, 'mark', 7, roles);
 }
 
 function drawHistogram(canvas, bins, color, marker = null) {
@@ -624,18 +625,18 @@ function drawQuality(d, closed) {
   const hasW = d.widths && d.widths.histogram?.length, hasA = d.angleHistogram?.length && d.crossings;
   if (!hasW && !hasA) { q.classList.add('hidden'); return; }
   q.classList.remove('hidden');
-  const famColor = getComputedStyle(document.documentElement).getPropertyValue('--famA').trim() || '#0f766e';
+  const famColor = getComputedStyle(document.documentElement).getPropertyValue('--famA').trim();
   if (hasW) {
     $('q-width-txt').textContent = `${fmt(d.widths.min, 2)} … ${fmt(d.widths.max, 2)} · mean ${fmt(d.widths.mean / (d.resolvedSpacing || 1), 2)} × spacing · variation ${(d.widths.cv * 100).toFixed(0)} %`;
     drawHistogram($('q-width'), d.widths.histogram, famColor, 0.5);
   } else { $('q-width-txt').textContent = 'n/a'; drawHistogram($('q-width'), [0], famColor); }
   if (hasA) {
     $('q-angle-txt').textContent = `${fmt(d.crossings.minAngle, 0)}° … ${fmt(d.crossings.maxAngle, 0)}°`;
-    drawHistogram($('q-angle'), d.angleHistogram, getComputedStyle(document.documentElement).getPropertyValue('--famB').trim() || '#9d2f6b');
+    drawHistogram($('q-angle'), d.angleHistogram, getComputedStyle(document.documentElement).getPropertyValue('--famB').trim());
   } else { $('q-angle-txt').textContent = 'one family'; drawHistogram($('q-angle'), [0], famColor); }
   const e = d.ends;
-  const rows = [[`border`, e.border, null], [`K = 0 line`, e.regionEdge, END_CLASS[1].color], [`on a neighbour (T)`, e.onCurve, END_CLASS[2].color], [closed ? 'step limit' : 'floating', e.floating, END_CLASS[3].color], ['closed loops', e.closed, null]];
-  $('q-ends').innerHTML = rows.filter((r) => r[1] > 0 || r[0] === 'border').map(([n, c, col]) => `<div>${col ? `<i style="background:${cssRgb(col)}"></i>` : '<i style="background:var(--line)"></i>'}${n}: <b>${c}</b></div>`).join('');
+  const rows = [[`border`, e.border, null], [`K = 0 line`, e.regionEdge, END_CLASS[1].role], [`on a neighbour (T)`, e.onCurve, END_CLASS[2].role], [closed ? 'step limit' : 'floating', e.floating, END_CLASS[3].role], ['closed loops', e.closed, null]];
+  $('q-ends').innerHTML = rows.filter((r) => r[1] > 0 || r[0] === 'border').map(([n, c, col]) => `<div>${col ? `<i style="background:var(--${col})"></i>` : '<i style="background:var(--line)"></i>'}${n}: <b>${c}</b></div>`).join('');
   $('q-build-txt').textContent = S.lathUtil ? `${Math.round(100 * S.lathUtil.filter((u) => u <= 1).length / S.lathUtil.length)} %` : '—';
   $('q-build').innerHTML = S.lathUtil ? `<i style="width:${Math.round(100 * S.lathUtil.filter((u) => u <= 1).length / S.lathUtil.length)}%"></i>` : '';
 }
@@ -701,7 +702,7 @@ async function runLathAll() {
   if (!r || gen !== S.gen || S.netData !== data || S.aag !== aag) return;
   S.lathUtil = r.utilization;
   if ($('colorutil').checked) colourLaths(r.utilization, 'lath strain utilization · 1 = limit'); else { S.viewer.colorCurves(null, null, null); showUtilLegend(false); }
-  if (sweep && r.sweepVertices.length) S.viewer.showSolid('sweepAll', r.sweepVertices, r.sweepFaces, S.viewer.dark ? 0xe6e6e6 : 0x1a1a1a); else S.viewer.clearOverlay('sweepAll');
+  if (sweep && r.sweepVertices.length) S.viewer.showSolid('sweepAll', r.sweepVertices, r.sweepFaces, 'solid'); else S.viewer.clearOverlay('sweepAll');
   const n = r.utilization.length, m = toMetres();
   $('laths-stats').innerHTML = `<b>${n}</b> laths · total <b>${fmt(r.totalLength * m, 1)} m</b> of ${$('width').value} × ${$('thick').value} mm · buildable <b class="${r.buildable === n ? 'ok' : 'bad'}">${r.buildable} / ${n}</b> · peak utilization <b>${fmt(r.maxUtilization, 2)}</b> · ${r.ms} ms`;
   drawQuality(data, S.stats.boundaryVertices === 0);
@@ -732,7 +733,7 @@ function togglePicked(p) {
 
 function showPicked() {
   $('pick-count').textContent = S.picked.length ? `${S.picked.length} picked` : '';
-  if (S.picked.length) S.viewer.showPoints('picked', S.picked.flat(), NEON.green, 12); else S.viewer.clearOverlay('picked');
+  if (S.picked.length) S.viewer.showPoints('picked', S.picked.flat(), 'seed', 12); else S.viewer.clearOverlay('picked');
 }
 
 function frameOptions() {
@@ -760,7 +761,7 @@ async function runFrame() {
       `load <b>${fmt(r.totalLoad / 1000, 2)} kN</b> = reactions <b>${fmt(r.reactionSum / 1000, 2)} kN</b> (equilibrium ${r.equilibriumError.toExponential(0)})\n` +
       `max deflection <b>${(r.maxDisplacement * 1000).toFixed(1)} mm</b> · peak utilization <b class="${r.maxUtilization <= 1 ? 'ok' : 'bad'}">${fmt(r.maxUtilization, 2)}</b> · max torsion <b>${fmt(r.maxTorsion, 1)} N·m</b>` +
       (r.floatingLaths ? `\n<span class="bad">${r.floatingLaths} lath${r.floatingLaths > 1 ? 's' : ''} reach no support through the net and were left out</span>` : '');
-    S.viewer.showPoints('supports', r.supportPoints, S.viewer.ink(), 10);
+    S.viewer.showPoints('supports', r.supportPoints, 'ink', 10);
     colourLaths(r.lathUtilization, 'frame stress utilization · 1 = allowable');
     // deformed at a readable scale: largest displacement drawn as 5 % of the size
     if (r.maxDisplacement > 0) { const k = 0.05 * S.size / (r.maxDisplacement / toMetres()); $('defscale').value = k >= 10 ? Math.round(k) : +k.toPrecision(2); }
@@ -774,7 +775,7 @@ function showDeformed() {
   if (!S.frame || S.frame.error || !$('deformed').checked) { v.clearOverlay('deformed'); return; }
   const k = +$('defscale').value || 1;
   const curves = S.frame.deformed.map((pts) => pts.map((q) => [q[0] + k * q[3], q[1] + k * q[4], q[2] + k * q[5]]));
-  v.showPolylines('deformed', curves, v.ink(), 1.1, false);
+  v.showPolylines('deformed', curves, 'ink', 1.1, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -983,7 +984,7 @@ async function runPieces() {
     $('pieces-boards-txt').textContent = `${r.boards} × ${stockM} m · ${(100 * r.material).toFixed(0)} % used`;
     drawBoards(r);
     $('pieces-legend').innerHTML = `<div><i style="background:var(--famA)"></i><i style="background:var(--famA);opacity:.45"></i><b>pieces</b> — consecutive pieces of a lath alternate full and pale in the family colour; <i style="background:var(--ink)"></i><b>cuts</b> — where two pieces meet, lapping over the splice length</div>` +
-      (opts.notches ? `<div><i style="background:#ffb000"></i><b>notches</b> — the half-lap solids Net Joints and Lath Segment subtract from the swept laths</div>` : '');
+      (opts.notches ? `<div><i style="background:var(--warn)"></i><b>notches</b> — the half-lap solids Net Joints and Lath Segment subtract from the swept laths</div>` : '');
     updateRecipe();
   });
 }
@@ -997,14 +998,14 @@ function drawPieces() {
     for (let parity = 0; parity < 2; parity++) {
       const curves = [];
       for (let i = 0; i < r.piecePolylines.length; i++) if (r.pieceFamily[i] === f && (r.pieceOrdinal[i] & 1) === parity) curves.push(r.piecePolylines[i]);
-      const c = new THREE_COLOR(col[f]); if (parity) c.lerp(new THREE_COLOR(v.dark ? '#000000' : '#ffffff'), 0.55);
+      const c = new THREE_COLOR(col[f]); if (parity) c.lerp(new THREE_COLOR(v.hex('paper')), 0.55);
       v.showPolylines(`piece${fam[f]}${parity}`, curves, c.getHex(), 2.4);
     }
     v.setFamilyVisible(fam[f], false);
   }
   for (const [f, id] of [['A', 'famA'], ['B', 'famB'], ['G', 'famG']]) { v.setOverlayVisible(`piece${f}0`, $(id).checked); v.setOverlayVisible(`piece${f}1`, $(id).checked); }
-  v.showPoints('cuts', r.cutPoints, v.ink(), 6);
-  if (r.notchVertices.length) v.showSolid('notches', r.notchVertices, r.notchFaces, 0xffb000); else v.clearOverlay('notches');
+  v.showPoints('cuts', r.cutPoints, 'ink', 6);
+  if (r.notchVertices.length) v.showSolid('notches', r.notchVertices, r.notchFaces, 'warn'); else v.clearOverlay('notches');
 }
 
 function drawBoards(r) {
@@ -1144,7 +1145,6 @@ async function main() {
     if (S.netData) drawQuality(S.netData, S.stats.boundaryVertices === 0);
     if (S.kin) drawKinPlot();
     if (S.pieces) { drawPieces(); drawBoards(S.pieces); }
-    if (S.frame && !S.frame.error) { S.viewer.showPoints('supports', S.frame.supportPoints, S.viewer.ink(), 10); showDeformed(); }
   });
 
   S.viewer = new Viewer($('gl'));
@@ -1237,7 +1237,7 @@ async function main() {
   for (const id of ['continuous', 'jacobi']) $(id).addEventListener('change', () => { if (S.net !== 'none') traceNet(); });
   $('fromborder').addEventListener('change', () => { showNetParams(); if (S.net !== 'none') traceNet(); });
   $('crossings').addEventListener('change', () => {
-    if (S.netData?.crossings && $('crossings').checked) S.viewer.showPoints('crossings', S.netData.crossings.points, S.viewer.ink(), 3.5); else S.viewer.clearOverlay('crossings');
+    if (S.netData?.crossings && $('crossings').checked) S.viewer.showPoints('crossings', S.netData.crossings.points, 'ink', 3.5); else S.viewer.clearOverlay('crossings');
   });
   $('panels').addEventListener('change', () => runPanels(false));
   $('panels-fixborder').addEventListener('change', () => { if (S.panels?.planarized) runPanels(true); });

@@ -10,6 +10,8 @@
 //     and no icon fails to load.
 //  4. The section choice reaches the kernel (1.2.5's binding dropped it):
 //     a round bar sweeps as a tube and gets its own utilization.
+//  4c. The theme toggle recolours the 3D viewer through Mite.Core's palette:
+//     dark-theme family colours on the black page, marks and seed per theme.
 //  5. Layouts: the border web ends every curve on the border (no T-junctions),
 //     the guide web crosses at every node of the section through the seed,
 //     the fill still traces, the legend explains the viewport markers.
@@ -96,6 +98,25 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
   const x0 = 1.5 * Math.sqrt((2.25 - 1) / (2.25 - 0.49)), z0 = 0.7 * Math.sqrt((1 - 0.49) / (2.25 - 0.49));
   const worst = umb && umb.n ? Math.max(...[...Array(umb.n).keys()].map((i) => Math.abs(Math.abs(umb.pts[3 * i]) - x0) + Math.abs(umb.pts[3 * i + 1]) + Math.abs(Math.abs(umb.pts[3 * i + 2]) - z0))) : 99;
   check(umb && umb.n === 4 && Math.abs(umb.sum - 2) < 1e-9 && worst < 0.15, `ellipsoid: four isolated umbilics, index sum 2, at (±${x0.toFixed(3)}, 0, ±${z0.toFixed(3)}) (${umb?.n} found, sum ${umb?.sum}, worst offset ${worst.toFixed(3)})`);
+  // 4c. the theme toggle recolours the viewer through Mite.Core's palette (palette.js): the dark page gets the dark
+  //     theme's family colours (famA #5b6bff, not the light theme's #2a3cff as before 2026-11-07), the umbilic marks
+  //     turn neon yellow (ink on white), and the seed the brand neon; toggling back restores the light colours
+  const themeColours = () => page.evaluate(() => {
+    const v = window.__mite.viewer, hex = (c) => '#' + c.getHex().toString(16).padStart(6, '0');
+    const line = (fam) => { const o = v.curveObjects.find((c) => c.family === fam); return o && hex(o.line.material.color); };
+    const overlay = (tag) => { const o = v.overlayGroup.children.find((c) => c.userData.tag === tag); return o && hex(o.material.color); };
+    return { theme: document.documentElement.dataset.theme || 'light', dark: v.dark, A: line('A'), B: line('B'), umb: overlay('umb'), lemon: overlay('umbLemon'), seed: v.dirHandle ? hex(v.dirHandle.material.color) : overlay('seed'), wire: v.wire && hex(v.wire.material.color), css: getComputedStyle(document.documentElement).getPropertyValue('--famA').trim() };
+  });
+  const themeLight = await themeColours();
+  await page.click('#theme'); await page.waitForTimeout(300);
+  const themeDark = await themeColours();
+  await page.click('#theme'); await page.waitForTimeout(300);
+  const themeBack = await themeColours();
+  const light = { A: '#2a3cff', B: '#ff1f4f', umb: '#0a0a0a', lemon: '#ff1f4f', seed: '#00a653' }, darkExp = { A: '#5b6bff', B: '#ff3d6a', umb: '#d9ff00', lemon: '#ff3d6a', seed: '#00ff85' };
+  const same = (a, e) => Object.keys(e).every((k) => a[k] === e[k]);
+  check(themeLight.theme === 'light' && same(themeLight, light) && themeDark.theme === 'dark' && themeDark.dark && same(themeDark, darkExp) && themeDark.css === darkExp.A,
+    `theme toggle recolours the families, marks and seed per theme (light A ${themeLight.A} B ${themeLight.B} marks ${themeLight.umb} seed ${themeLight.seed} → dark A ${themeDark.A} B ${themeDark.B} marks ${themeDark.umb} seed ${themeDark.seed})`);
+  check(themeBack.theme === 'light' && same(themeBack, light) && themeBack.wire === (themeLight.wire || themeBack.wire), 'toggling back restores the light theme colours');
   await pickShape('torus'); await idle(180000);
   const umbT = await page.evaluate(() => window.__mite.curv && window.__mite.curv.umbilicIndex.length);
   check(umbT === 0, `torus: no isolated umbilic (${umbT})`);
@@ -318,7 +339,7 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
     for (const o of S.viewer.curveObjects) {
       const l = (o.family === 'A' ? 0 : na) + o.index, c = o.line.material.color;
       const d = (x) => Math.max(Math.abs(c.r - x[0]), Math.abs(c.g - x[1]), Math.abs(c.b - x[2]));
-      const fam = c.clone().setHex(o.color);   // the family colour as three.js stores it (colour-managed)
+      const fam = c.clone().setHex(S.viewer.colour(o.role));   // the family's theme colour as three.js stores it (colour-managed)
       dState = Math.max(dState, d(col(st.lathUtil[l]))); dEnv = Math.max(dEnv, d(col(k.envelope[l]))); dFam = Math.max(dFam, d([fam.r, fam.g, fam.b]));
     }
     return { dState, dEnv, dFam, legend: document.getElementById('ulegend').classList.contains('hidden') ? '' : document.getElementById('ulegend-title').textContent, bar: document.getElementById('ulegend-bar').getBoundingClientRect().width, shown: S.kinShown };

@@ -10,9 +10,14 @@ algorithms, same numbers as the Grasshopper plugin; nothing is uploaded.
   companions and inflates them in the browser (static hosts do not compress
   `.wasm`).
 - `wwwroot/js/viewer.js` — three.js scene: vertex-colour analysis, zebra
-  shader, fat-line curve families, picking, draggable loft handles.
+  shader, fat-line curve families, picking, draggable loft handles. Colours
+  are palette roles (`famA`, `seed`, `mark`, `ink`, `solid`, …) resolved per
+  theme through `palette.js`.
 - `wwwroot/js/app.js` — panel wiring; `loft.js`, `loaders.js` (OBJ/STL/PLY),
   `plots.js`, `export.js`, `colormaps.js`.
+- `wwwroot/js/colormap-lut.js`, `wwwroot/js/palette.js` — generated from
+  Mite.Core (`ColourMap`, `MitePalette`) by `tools/webgen` (`dotnet run`);
+  do not edit — the tests check they are current.
 - `wwwroot/vendor` — three.js r170 (MIT).
 
 Build and deploy:

@@ -9,12 +9,14 @@
 :root {
   --bg: #ffffff; --surface: #fafafa; --surface2: #f1f1f1; --line: #e2e2e2; --ink: #0a0a0a; --muted: #6b6b6b; --faint: #a0a0a0;
   --famA: #2a3cff; --famB: #ff1f4f; --famG: #00a653; --neon: #00ff85; --accent: #0a0a0a; --warn: #ff1f4f; --ok: #00a653;
+  --seed: #00a653; --mark: #0a0a0a; /* the viewer's seed and marks (MitePalette.Seed / Mark); palette.js carries the same */
   --sans: 'Sohne', 'Helvetica Neue', Helvetica, Arial, sans-serif; --mono: 'Sohne', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --panel-w: 360px;
 }
 :root[data-theme="dark"] {
   --bg: #000000; --surface: #0b0b0b; --surface2: #151515; --line: #262626; --ink: #ffffff; --muted: #9a9a9a; --faint: #666666;
   --famA: #5b6bff; --famB: #ff3d6a; --famG: #00ff85; --neon: #00ff85; --accent: #e8eaed; --warn: #ff3d6a; --ok: #00ff85;
+  --seed: #00ff85; --mark: #d9ff00;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }

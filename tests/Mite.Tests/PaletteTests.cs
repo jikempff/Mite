@@ -203,16 +203,75 @@ public class PaletteTests
             Assert.Equal(MitePalette.FamilyG(th).Hex, v["famG"]);
             Assert.Equal(MitePalette.Ok(th).Hex, v["ok"]);
             Assert.Equal(MitePalette.Warn(th).Hex, v["warn"]);
+            Assert.Equal(MitePalette.Seed(th).Hex, v["seed"]);
+            Assert.Equal(MitePalette.Mark(th).Hex, v["mark"]);
         }
 
-        // the 3D viewer's family colours are the light theme's
+        // the 3D viewer draws roles, resolved per theme through palette.js (2026-11-07; before, the light theme's
+        // constants were hard-coded and drawn on the dark page too): no colour literal apart from its lights
         string viewer = File.ReadAllText(RepoFile("src", "Mite.Web", "wwwroot", "js", "viewer.js"));
-        foreach (var (name, c) in new[] { ("FAMILY_A", MitePalette.FamilyA(Theme.Light)), ("FAMILY_B", MitePalette.FamilyB(Theme.Light)), ("FAMILY_G", MitePalette.FamilyG(Theme.Light)) })
+        Assert.Contains("from './palette.js'", viewer);
+        var literals = Regex.Matches(viewer, @"0x[0-9a-fA-F]{6}|'#[0-9a-fA-F]{6}'").Cast<Match>().Select(m => m.Value.ToLowerInvariant()).Distinct().OrderBy(x => x).ToArray();
+        Assert.Equal(new[] { "0x000000", "0x8a8f99", "0xffffff" }, literals); // transparent clear / emissive off, the hemisphere light's ground, white lights and the vertex-colour multiplier
+        foreach (string role in new[] { "'famA'", "'famB'", "'famG'", "'seed'", "'solid'", "'highlight'", "'ink'", "'mesh'", "'paper'" }) Assert.Contains(role, viewer);
+        Assert.DoesNotContain("FAMILY_A", viewer); Assert.DoesNotContain("NEON", viewer);
+        // app.js passes roles too: no colour literal, no viewer constants
+        string app = File.ReadAllText(RepoFile("src", "Mite.Web", "wwwroot", "js", "app.js"));
+        Assert.Empty(Regex.Matches(app, @"0x[0-9a-fA-F]{6}|'#[0-9a-fA-F]{6}'|#[0-9a-fA-F]{6}\b"));
+        Assert.DoesNotContain("NEON", app); Assert.DoesNotContain("FAMILY_", app); Assert.DoesNotContain("SEED_COLOR", app);
+        foreach (string role in new[] { "'mark'", "'seed'", "'famA'", "'famB'", "'ink'", "'solid'", "'warn'", "var(--seed)", "var(--${" }) Assert.Contains(role, app);
+    }
+
+    [Fact]
+    public void JavaScriptTwin_OnDiskIsCurrent()
+    {
+        // src/Mite.Web/wwwroot/js/palette.js is generated from MitePalette by the bench generator; the viewer resolves its roles through it
+        string path = RepoFile("src", "Mite.Web", "wwwroot", "js", "palette.js");
+        Assert.True(File.Exists(path), path + " is missing: run `cd tools/webgen && dotnet run -c Release`");
+        string expected = MitePalette.JavaScriptModule().Replace("\r\n", "\n"), actual = File.ReadAllText(path).Replace("\r\n", "\n");
+        Assert.True(expected == actual, "palette.js is stale: run `cd tools/webgen && dotnet run -c Release`");
+        foreach (var th in new[] { Theme.Light, Theme.Dark })
         {
-            var m = Regex.Match(viewer, @"export const " + name + @" = 0x([0-9a-fA-F]{6});");
-            Assert.True(m.Success, name);
-            Assert.Equal(c.Hex, "#" + m.Groups[1].Value.ToLowerInvariant());
+            string block = Regex.Match(actual, @"export const " + (th == Theme.Light ? "LIGHT" : "DARK") + @" = \{(.*?)\};", RegexOptions.Singleline).Groups[1].Value;
+            var pairs = Regex.Matches(block, @"(\w+): '(#[0-9a-f]{6})'").Cast<Match>().ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
+            Assert.Equal(MitePalette.ThemeColourNames, pairs.Keys.ToArray());
+            Assert.Equal(MitePalette.FamilyA(th).Hex, pairs["famA"]); Assert.Equal(MitePalette.FamilyB(th).Hex, pairs["famB"]); Assert.Equal(MitePalette.FamilyG(th).Hex, pairs["famG"]);
+            Assert.Equal(MitePalette.Seed(th).Hex, pairs["seed"]); Assert.Equal(MitePalette.Mark(th).Hex, pairs["mark"]); Assert.Equal(MitePalette.Solid(th).Hex, pairs["solid"]);
+            Assert.Equal(MitePalette.Mesh.Hex, pairs["mesh"]); Assert.Equal(MitePalette.Highlight.Hex, pairs["highlight"]);
+            var export = (Dictionary<string, string>)MitePalette.Export()[th == Theme.Light ? "light" : "dark"];
+            Assert.Equal(export.OrderBy(kv => kv.Key), pairs.OrderBy(kv => kv.Key));
         }
+        Assert.Contains("export function colour(theme, role)", actual); Assert.Contains("export function palette(dark)", actual);
+    }
+
+    [Fact]
+    public void ViewerRoles_ReadOnTheirPage_AndTheDarkPageGainsOverTheLightConstants()
+    {
+        // 1.6.0 drew the light theme's family colours, neon green seeds (#00d86b) and neon yellow marks (#d9ff00) on both pages
+        var black = MitePalette.Paper(Theme.Dark); var white = MitePalette.Paper(Theme.Light);
+        double C(Rgb a, Rgb b) => ColourScience.ContrastRatio(a, b);
+        Assert.Equal(3.19, C(MitePalette.FamilyA(Theme.Light), black), 2); Assert.Equal(4.99, C(MitePalette.FamilyA(Theme.Dark), black), 2);
+        Assert.Equal(5.56, C(MitePalette.FamilyB(Theme.Light), black), 2); Assert.Equal(6.13, C(MitePalette.FamilyB(Theme.Dark), black), 2);
+        Assert.Equal(6.58, C(MitePalette.FamilyG(Theme.Light), black), 2); Assert.Equal(15.64, C(MitePalette.FamilyG(Theme.Dark), black), 2);
+        Assert.Equal(1.90, C(Rgb.FromHex("#00d86b"), white), 2); Assert.Equal(3.19, C(MitePalette.Seed(Theme.Light), white), 2);
+        Assert.Equal(1.15, C(Rgb.FromHex("#d9ff00"), white), 2); Assert.Equal(19.80, C(MitePalette.Mark(Theme.Light), white), 2);
+        foreach (var th in new[] { Theme.Light, Theme.Dark })
+        {
+            var paper = MitePalette.Paper(th);
+            // WCAG 2.1 SC 1.4.11: 3:1 for graphical objects against the adjacent colour
+            Assert.True(C(MitePalette.Seed(th), paper) >= 3.0, $"{th} seed {C(MitePalette.Seed(th), paper):F2}");
+            Assert.True(C(MitePalette.Mark(th), paper) >= 3.0, $"{th} mark {C(MitePalette.Mark(th), paper):F2}");
+            Assert.True(C(MitePalette.Solid(th), paper) >= 7.0);
+            // the marks tell apart from every family for simulated protanopes and deuteranopes (Crameri et al. 2020):
+            // on black neon yellow ΔE ≥ 37, on white ink ΔE ≥ 42 — an olive dark enough for 3:1 on white would sit at ΔE ≤ 24 from family B
+            foreach (var fam in new[] { MitePalette.FamilyA(th), MitePalette.FamilyB(th), MitePalette.FamilyG(th) })
+                Assert.True(ColourScience.WorstCaseDeltaE(MitePalette.Mark(th), fam) >= 35, $"{th} mark vs {fam}: {ColourScience.WorstCaseDeltaE(MitePalette.Mark(th), fam):F1}");
+        }
+        Assert.InRange(ColourScience.WorstCaseDeltaE(Rgb.FromHex("#5f6e00"), MitePalette.FamilyB(Theme.Light)), 10, 24); // the olive that was not chosen
+        Assert.Equal(MitePalette.Ink(Theme.Light), MitePalette.Mark(Theme.Light)); Assert.Equal("#d9ff00", MitePalette.Mark(Theme.Dark).Hex);
+        Assert.Equal(MitePalette.Ok(Theme.Light), MitePalette.Seed(Theme.Light)); Assert.Equal(MitePalette.Neon, MitePalette.Seed(Theme.Dark));
+        Assert.Equal("#dbdbdb", MitePalette.Mesh.Hex); // 0.86 × 255, the viewer's grey since 1.3.0
+        Assert.Equal(MitePalette.ThemeColourNames.Length, ((Dictionary<string, string>)MitePalette.Export()["light"]).Count);
     }
 
     [Fact]

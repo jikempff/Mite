@@ -13,11 +13,14 @@ import { LineGeometry } from '../vendor/lines/LineGeometry.js';
 import { LineSegments2 } from '../vendor/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from '../vendor/lines/LineSegmentsGeometry.js';
 
-// kempff/seleme palette: black, white and neon
-export const FAMILY_A = 0x2a3cff; // neon blue
-export const FAMILY_B = 0xff1f4f; // neon red
-export const FAMILY_G = 0x00a653; // neon green (geodesic diagonals) — Mite.Core MitePalette.FamilyG(Light), 3.2:1 on white
-export const NEON = { blue: 0x2a3cff, red: 0xff1f4f, green: 0x00d86b, yellow: 0xd9ff00 };
+import { palette, colour as paletteColour, rgb as paletteRgb, hex as paletteHex } from './palette.js';
+
+// Colours are roles, not numbers: every object the viewer draws carries the
+// role it was drawn with ('famA', 'famB', 'famG', 'seed', 'mark', 'ink',
+// 'solid', 'warn', …) and setTheme() resolves the roles again through
+// Mite.Core's palette (palette.js, generated) — the dark page gets the dark
+// theme's family colours instead of the light theme's. A '#rrggbb' string or
+// a 0xrrggbb number passes through unchanged and is not re-themed.
 
 export class Viewer {
   constructor(canvas) {
@@ -67,6 +70,7 @@ export class Viewer {
     this.pointer = new THREE.Vector2();
     this.dragging = null;
     this.dark = false;
+    this.theme = palette(false);
     this.zebra = false;
     this.sceneRadius = 1;
 
@@ -78,17 +82,45 @@ export class Viewer {
   }
 
   /** Ink of the current theme: black on white, white on black (selection, seed, supports). */
-  ink() { return this.dark ? 0xffffff : 0x0a0a0a; }
+  ink() { return this.colour('ink'); }
 
+  /** A role's colour in the current theme as the 0xrrggbb number three.js takes ('#rrggbb' and numbers pass through). */
+  colour(role) { return paletteColour(this.theme, role); }
+  /** A role's colour in the current theme as '#rrggbb'. */
+  hex(role) { return paletteHex(this.theme, role); }
+
+  /**
+   * Switches the page theme: the families, marks, seeds, handles, wireframe and
+   * every overlay drawn with a role take the theme's colours (Mite.Core
+   * MitePalette, dark page: famA #5b6bff, famB #ff3d6a, famG #00ff85);
+   * per-curve overrides (colorCurves) and raw colours stay as they are.
+   */
   setTheme(dark) {
     this.dark = dark;
+    this.theme = palette(dark);
     this.renderer.setClearColor(0x000000, 0);
     if (this.mesh) this.mesh.material.needsUpdate = true;
+    for (const o of this.curveObjects) this._applyCurveColour(o);
+    if (this.wire) this.wire.material.color.setHex(this.colour('ink'));
+    const retheme = (obj) => {
+      const m = obj.material; if (!m) return;
+      if (typeof m.userData?.role === 'string') { m.color.setHex(this.colour(m.userData.role)); m.needsUpdate = true; }
+      if (obj.userData?.roles) { obj.geometry.getAttribute('color').array.set(this._rgbOfRoles(obj.userData.roles)); obj.geometry.getAttribute('color').needsUpdate = true; }
+    };
+    this.overlayGroup.children.forEach(retheme);
+    this.handlesGroup.children.forEach(retheme);
+  }
+
+  /** Flat [r, g, b, …] (0..1) of one role per point. */
+  _rgbOfRoles(roles) {
+    const out = new Float32Array(roles.length * 3);
+    roles.forEach((r, i) => { const c = typeof r === 'string' ? paletteRgb(this.theme, r) : r; out[3 * i] = c[0]; out[3 * i + 1] = c[1]; out[3 * i + 2] = c[2]; });
+    return out;
   }
 
   /** Paint the page colour behind the scene (on) or keep it transparent (off): a recorded video has no alpha, so a transparent canvas would come out black. */
   opaqueBackground(on, cssColour) {
-    if (on) this.renderer.setClearColor(new THREE.Color(cssColour || (this.dark ? '#000000' : '#ffffff')), 1);
+    if (on) this.renderer.setClearColor(new THREE.Color(cssColour || this.hex('paper')), 1);
     else this.renderer.setClearColor(0x000000, 0);
   }
 
@@ -117,7 +149,7 @@ export class Viewer {
     g.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
     g.setIndex(new THREE.BufferAttribute(triangles, 1));
     g.computeVertexNormals();
-    const colors = new Float32Array(vertices.length).fill(0.86);
+    const colors = new Float32Array(vertices.length); this._fillMeshGrey(colors);
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     const mat = this._material();
     this.mesh = new THREE.Mesh(g, mat);
@@ -138,6 +170,9 @@ export class Viewer {
     this.mesh.geometry.computeBoundingSphere();
     if (this.wire) { this.root.remove(this.wire); this.wire.geometry.dispose(); this.wire = null; this.setWireframe(this.wireVisible); }
   }
+
+  /** The uncoloured surface: the palette's mesh grey (#dbdbdb, the same on both pages — a lit object, not ink). */
+  _fillMeshGrey(arr) { const c = paletteRgb(this.theme, 'mesh'); for (let i = 0; i + 2 < arr.length; i += 3) { arr[i] = c[0]; arr[i + 1] = c[1]; arr[i + 2] = c[2]; } }
 
   _material() {
     const mat = new THREE.MeshStandardMaterial({
@@ -174,7 +209,7 @@ export class Viewer {
   setColors(colors) {
     if (!this.mesh) return;
     const attr = this.mesh.geometry.getAttribute('color');
-    if (colors) attr.array.set(colors); else attr.array.fill(0.86);
+    if (colors) attr.array.set(colors); else this._fillMeshGrey(attr.array);
     attr.needsUpdate = true;
   }
 
@@ -183,7 +218,7 @@ export class Viewer {
     if (!this.mesh) return;
     if (on && !this.wire) {
       const eg = new THREE.EdgesGeometry(this.mesh.geometry, 1);
-      this.wire = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: this.dark ? 0x9aa3ad : 0x3b4048, transparent: true, opacity: 0.35 }));
+      this.wire = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: this.colour('ink'), transparent: true, opacity: 0.35 }));
       this.root.add(this.wire);
     }
     if (this.wire) this.wire.visible = on;
@@ -237,45 +272,53 @@ export class Viewer {
     this.clearOverlay('sweep');
   }
 
-  _lineMaterial(color, width) {
-    const m = new LineMaterial({ color, linewidth: width, worldUnits: false, alphaToCoverage: false });
+  _lineMaterial(role, width) {
+    const m = new LineMaterial({ color: this.colour(role), linewidth: width, worldUnits: false, alphaToCoverage: false });
+    m.userData.role = role;
     m.resolution.set(this.canvas.clientWidth, this.canvas.clientHeight);
     this.lineMaterials.push(m);
     return m;
   }
 
+  /** A curve's colour: its override (colorCurves), or its family's role in the current theme. */
+  _applyCurveColour(o) {
+    if (o === this.selected) return;
+    const c = o.override;
+    if (c) o.line.material.color.setRGB(c[0], c[1], c[2]); else o.line.material.color.setHex(this.colour(o.role));
+    o.line.material.needsUpdate = true;
+  }
+
   setCurves(familyA, familyB, { widthA = 2.2, widthB = 2.2, familyG = null } = {}) {
     this.clearCurves();
-    const add = (curves, family, color, width) => {
+    const add = (curves, family, role, width) => {
       curves.forEach((pts, index) => {
         if (pts.length < 2) return;
         const flat = new Float32Array(pts.length * 3);
         pts.forEach((p, i) => { flat[3 * i] = p[0]; flat[3 * i + 1] = p[1]; flat[3 * i + 2] = p[2]; });
         const g = new LineGeometry();
         g.setPositions(flat);
-        const line = new Line2(g, this._lineMaterial(color, width));
+        const line = new Line2(g, this._lineMaterial(role, width));
         line.computeLineDistances();
         line.userData = { family, index };
         this.curvesGroup.add(line);
-        this.curveObjects.push({ line, family, index, points: pts, color });
+        this.curveObjects.push({ line, family, index, points: pts, role, override: null });
       });
     };
-    add(familyA || [], 'A', FAMILY_A, widthA);
-    add(familyB || [], 'B', FAMILY_B, widthB);
-    add(familyG || [], 'G', FAMILY_G, 1.8);
+    add(familyA || [], 'A', 'famA', widthA);
+    add(familyB || [], 'B', 'famB', widthB);
+    add(familyG || [], 'G', 'famG', 1.8);
   }
 
-  colorCurves(colorsA, colorsB, colorsG = null) { // arrays of [r,g,b] per curve, or null to reset
+  colorCurves(colorsA, colorsB, colorsG = null) { // arrays of [r,g,b] per curve, or null to reset to the family colours
     this.colorsG = colorsG;
     for (const o of this.curveObjects) {
-      const c = o.family === 'A' ? colorsA?.[o.index] : o.family === 'B' ? colorsB?.[o.index] : this.colorsG?.[o.index];
-      if (c) o.line.material.color.setRGB(c[0], c[1], c[2]); else o.line.material.color.setHex(o.color);
-      o.line.material.needsUpdate = true;
+      o.override = (o.family === 'A' ? colorsA?.[o.index] : o.family === 'B' ? colorsB?.[o.index] : this.colorsG?.[o.index]) || null;
+      this._applyCurveColour(o);
     }
   }
 
   selectCurve(obj) {
-    if (this.selected) { const s = this.selected; s.line.material.color.setHex(s.color); s.line.material.linewidth = 2.2; }
+    if (this.selected) { const s = this.selected; this.selected = null; this._applyCurveColour(s); s.line.material.linewidth = 2.2; }
     this.selected = obj;
     if (obj) { obj.line.material.color.setHex(this.ink()); obj.line.material.linewidth = 4.5; }
   }
@@ -291,15 +334,19 @@ export class Viewer {
     for (const c of this.overlayGroup.children) if (c.userData.tag === tag) c.visible = visible;
   }
 
-  showPoints(tag, flat, color, size, colors = null) {
+  /** Points in one role (or raw colour), or with `colors`: one role per point (re-themed) or flat [r, g, b, …] (kept as given). */
+  showPoints(tag, flat, role, size, colors = null) {
     this.clearOverlay(tag);
     if (!flat || !flat.length) return;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(flat), 3));
-    if (colors) g.setAttribute('color', new THREE.BufferAttribute(Float32Array.from(colors), 3));
-    const m = new THREE.PointsMaterial({ color: colors ? 0xffffff : color, size, sizeAttenuation: false, depthTest: true, vertexColors: !!colors });
+    const roles = Array.isArray(colors) && typeof colors[0] === 'string' ? colors : null;
+    if (colors) g.setAttribute('color', new THREE.BufferAttribute(roles ? this._rgbOfRoles(roles) : Float32Array.from(colors), 3));
+    const m = new THREE.PointsMaterial({ color: colors ? 0xffffff : this.colour(role), size, sizeAttenuation: false, depthTest: true, vertexColors: !!colors });
+    if (!colors) m.userData.role = role;
     const p = new THREE.Points(g, m);
     p.userData.tag = tag;
+    if (roles) p.userData.roles = roles;
     this.overlayGroup.add(p);
   }
 
@@ -321,14 +368,14 @@ export class Viewer {
     let d = new THREE.Vector3(...dir); d.addScaledVector(n, -d.dot(n)); if (d.lengthSq() < 1e-12) d.set(1, 0, 0).addScaledVector(n, -n.x); d.normalize();
     const tip = p.clone().addScaledVector(d, length);
     const g = new LineGeometry(); g.setPositions([p.x, p.y, p.z, tip.x, tip.y, tip.z]);
-    const m = this._lineMaterial(this.ink(), 3); m.userData.keep = true;
+    const m = this._lineMaterial('ink', 3); m.userData.keep = true;
     const line = new Line2(g, m); line.computeLineDistances(); line.userData.tag = 'dirline';
     this.overlayGroup.add(line);
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(length * 0.12, 16, 12), new THREE.MeshStandardMaterial({ color: NEON.green, roughness: 0.4, emissive: 0x000000 }));
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(length * 0.12, 16, 12), this._solidMaterial('seed', 0.4));
     knob.position.copy(tip);
     knob.userData = { handle: -1, kind: 'dir', origin: p, normal: n, length };
     this.handlesGroup.add(knob);
-    const base = new THREE.Mesh(new THREE.SphereGeometry(length * 0.08, 12, 10), new THREE.MeshStandardMaterial({ color: this.ink() }));
+    const base = new THREE.Mesh(new THREE.SphereGeometry(length * 0.08, 12, 10), this._solidMaterial('solid'));
     base.position.copy(p); base.userData.tag = 'dirbase';
     this.overlayGroup.add(base);
     this.dirHandle = knob;
@@ -358,25 +405,32 @@ export class Viewer {
     this.controls.update();
   }
 
-  showSegments(tag, flat, color, width = 1.2) {
+  /** A lit material in a role (handles, swept solids); the role is kept for setTheme. */
+  _solidMaterial(role, roughness = 0.6, side = THREE.FrontSide) {
+    const m = new THREE.MeshStandardMaterial({ color: this.colour(role), roughness, emissive: 0x000000, side });
+    m.userData.role = role;
+    return m;
+  }
+
+  showSegments(tag, flat, role, width = 1.2) {
     this.clearOverlay(tag);
     if (!flat || !flat.length) return;
     const g = new LineSegmentsGeometry();
     g.setPositions(Float32Array.from(flat));
-    const m = this._lineMaterial(color, width);
+    const m = this._lineMaterial(role, width);
     const l = new LineSegments2(g, m);
     l.userData.tag = tag;
     this.overlayGroup.add(l);
   }
 
-  showPolylines(tag, curves, color, width = 1.6, dashed = false) {
+  showPolylines(tag, curves, role, width = 1.6, dashed = false) {
     this.clearOverlay(tag);
     for (const pts of curves) {
       if (pts.length < 2) continue;
       const flat = new Float32Array(pts.length * 3);
       pts.forEach((p, i) => { flat[3 * i] = p[0]; flat[3 * i + 1] = p[1]; flat[3 * i + 2] = p[2]; });
       const g = new LineGeometry(); g.setPositions(flat);
-      const m = this._lineMaterial(color, width);
+      const m = this._lineMaterial(role, width);
       if (dashed) { m.dashed = true; m.dashSize = 0.05 * this.sceneRadius; m.gapSize = 0.03 * this.sceneRadius; m.defines.USE_DASH = ''; }
       const line = new Line2(g, m); line.computeLineDistances();
       line.userData.tag = tag;
@@ -384,14 +438,14 @@ export class Viewer {
     }
   }
 
-  showSolid(tag, vertices, triangles, color) {
+  showSolid(tag, vertices, triangles, role) {
     this.clearOverlay(tag);
     if (!vertices?.length) return;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(vertices), 3));
     g.setIndex(new THREE.BufferAttribute(Uint32Array.from(triangles), 1));
     g.computeVertexNormals();
-    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.6, side: THREE.DoubleSide });
+    const m = this._solidMaterial(role, 0.6, THREE.DoubleSide);
     const mesh = new THREE.Mesh(g, m);
     mesh.userData.tag = tag;
     this.overlayGroup.add(mesh);
@@ -425,7 +479,7 @@ export class Viewer {
     const mesh = new THREE.Mesh(g, m);
     mesh.userData.tag = tag; mesh.renderOrder = 5;
     this.overlayGroup.add(mesh);
-    this.showSegments(tag + 'Edges', edges, this.ink(), 0.8);
+    this.showSegments(tag + 'Edges', edges, 'ink', 0.8);
   }
 
   /**
@@ -510,7 +564,7 @@ export class Viewer {
     }
   }
 
-  /** Principal direction glyphs: short segments along d1 (teal) and d2 (plum) at a subset of vertices */
+  /** Principal direction glyphs: short segments along d1 (family A) and d2 (family B) at a subset of vertices */
   showDirections(vertices, d1, d2, normals, every, length) {
     const segA = [], segB = [];
     const n = vertices.length / 3;
@@ -521,8 +575,8 @@ export class Viewer {
       segA.push(px + ox - d1[3 * i] * h, py + oy - d1[3 * i + 1] * h, pz + oz - d1[3 * i + 2] * h, px + ox + d1[3 * i] * h, py + oy + d1[3 * i + 1] * h, pz + oz + d1[3 * i + 2] * h);
       segB.push(px + ox - d2[3 * i] * h, py + oy - d2[3 * i + 1] * h, pz + oz - d2[3 * i + 2] * h, px + ox + d2[3 * i] * h, py + oy + d2[3 * i + 1] * h, pz + oz + d2[3 * i + 2] * h);
     }
-    this.showSegments('dirA', segA, FAMILY_A, 1.4);
-    this.showSegments('dirB', segB, FAMILY_B, 1.4);
+    this.showSegments('dirA', segA, 'famA', 1.4);
+    this.showSegments('dirB', segB, 'famB', 1.4);
   }
 
   hideDirections() { this.clearOverlay('dirA'); this.clearOverlay('dirB'); }
@@ -533,7 +587,7 @@ export class Viewer {
     this.clearHandles();
     const geo = new THREE.SphereGeometry(radius, 16, 12);
     points.forEach((p, i) => {
-      const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.4, emissive: 0x000000 }));
+      const m = new THREE.Mesh(geo, this._solidMaterial('solid', 0.4));
       m.position.set(p[0], p[1], p[2]);
       m.userData = { handle: i };
       this.handlesGroup.add(m);
@@ -566,7 +620,7 @@ export class Viewer {
         this.dragging = { obj: hit.object, plane, offset: isDir ? new THREE.Vector3() : hit.object.position.clone().sub(hit.point) };
         this.controls.enabled = false;
         this.canvas.setPointerCapture(e.pointerId);
-        hit.object.material.emissive.setHex(0x00ff85);
+        hit.object.material.emissive.setHex(this.colour('highlight'));
       }
     });
     this.canvas.addEventListener('pointermove', (e) => {

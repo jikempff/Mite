@@ -938,9 +938,38 @@ remains the self-test review page.
       keeping 3:1 on white; a teal G (#029ebf, ΔE ≥ 42 to A and B) or a lime G
       on black (#aff803, ΔE 57) would, or a dashed line style for G. José to
       choose; then change `MitePalette.FamilyG` (tests follow).
-- [ ] App 3D viewer: family colours per theme (it draws the light-theme
-      colours on the dark theme too) and the remaining hard-coded neon
-      constants (`NEON.yellow`, the seed green) through the palette.
+- [x] App 3D viewer: family colours per theme and the hard-coded neon
+      constants through the palette — 2026-11-07 (session 1). `MitePalette`
+      gains the viewer's roles `Seed`, `Mark`, `Mesh`, `Solid`, `Highlight`
+      and `JavaScriptModule()`; the bench generator writes
+      `src/Mite.Web/wwwroot/js/palette.js` next to `colormap-lut.js`, and
+      `viewer.js` draws roles it resolves again on `setTheme` (materials and
+      per-point role arrays keep their role; `colorCurves` overrides and raw
+      colours stay). Measured (WCAG 2.1 contrast, Machado dichromacy): on the
+      black page family A 3.19 → 4.99, B 5.56 → 6.13, G 6.58 → 15.64; the
+      seed #00d86b on white 1.90 → 3.19 (`Ok` green); marks: neon yellow is
+      1.15:1 on white and no olive with 3:1 keeps ΔE > 24 from B for
+      protanopes, so the light theme's marks are ink (19.8:1, ΔE ≥ 43) and
+      the dark theme's neon yellow (18.3:1, ΔE ≥ 37). Replaced off-palette
+      constants: the slate wireframe (#3b4048 / #9aa3ad → ink at 0.35), the
+      slate loft handles (#1f2937 → solid), amber notches (#ffb000 → warn),
+      the 1.3.0 teal / plum fallbacks in `plots.js` and `app.js`. Tests:
+      `PaletteTests` (the generated file current, CSS `--seed` / `--mark`,
+      no colour literal left in `viewer.js` / `app.js`, the contrasts);
+      `tools/web-smoke.js` 4c toggles the theme live; bench check on the
+      Mesh Colour Map card. Open: the marks on the light page share ink with
+      the crossing dots (sizes 7 vs 3.5 tell them apart; a dark olive would
+      not read for protanopes — José to decide if yellow is wanted there);
+      the uncoloured mesh stays #dbdbdb on both pages (a lit object), so
+      markers on the surface read against L* 87 whatever the page — the
+      dark theme's A / B / G are 3.0 / 2.5 / 1.0:1 on it (the light ones
+      4.8 / 2.7 / 2.3): the neon green G of an AAG web nearly vanishes on
+      the grey surface of the dark page, as it did before this change, and
+      the neon yellow marks are 1.2:1 on it on either page. Follow-up: a
+      darker surface on the dark page (`Mesh(Theme)`), or dark-page family
+      and mark colours chosen against the surface rather than the paper —
+      José to decide which; the pieces' pale shades (blends towards the
+      page) are redrawn on toggle, not re-themed in place.
 - [ ] Grasshopper previews: the Mite Net preview (unmerged 2026-09-27 bundle)
       should take `MitePalette.FamilyA/B` and the end-class colours once merged;
       check them against Rhino's default grey viewport background.

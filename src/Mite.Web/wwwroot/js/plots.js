@@ -22,9 +22,9 @@ export function drawLathPlot(canvas, lath) {
   const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
   const arc = lath.arc, L = arc[arc.length - 1] || 1;
   const series = [
-    { v: lath.kn, color: css('--famA') || '#0f766e', label: 'kn' },
-    { v: lath.kg, color: css('--famB') || '#9d2f6b', label: 'kg' },
-    { v: lath.tg, color: css('--muted') || '#6b7280', label: 'tg' },
+    { v: lath.kn, color: css('--famA'), label: 'kn' },
+    { v: lath.kg, color: css('--famB'), label: 'kg' },
+    { v: lath.tg, color: css('--muted'), label: 'tg' },
   ];
   let amax = 1e-9;
   for (const s of series) for (const x of s.v) if (Number.isFinite(x)) amax = Math.max(amax, Math.abs(x));
@@ -40,7 +40,7 @@ export function drawLathPlot(canvas, lath) {
   // axes
   ctx.strokeStyle = css('--line') || '#ddd'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(pad.l, Y(0)); ctx.lineTo(w - pad.r, Y(0)); ctx.stroke();
-  ctx.fillStyle = css('--muted') || '#6b7280'; ctx.font = '10px Sohne, Helvetica, Arial, sans-serif'; ctx.textAlign = 'right';
+  ctx.fillStyle = css('--muted'); ctx.font = '10px Sohne, Helvetica, Arial, sans-serif'; ctx.textAlign = 'right';
   ctx.fillText((+amax.toPrecision(2)).toString(), pad.l - 4, pad.t + 8);
   ctx.fillText('0', pad.l - 4, Y(0) + 3);
   ctx.fillText((-amax).toPrecision(2), pad.l - 4, pad.t + ph);
@@ -60,7 +60,7 @@ export function drawLathPlot(canvas, lath) {
   // legend
   ctx.font = '11px Sohne, Helvetica, Arial, sans-serif'; ctx.textAlign = 'left';
   let lx = pad.l + 4;
-  for (const s of series) { ctx.fillStyle = s.color; ctx.fillRect(lx, pad.t, 12, 3); ctx.fillStyle = css('--muted') || '#6b7280'; ctx.fillText(s.label, lx + 16, pad.t + 5); lx += 44; }
+  for (const s of series) { ctx.fillStyle = s.color; ctx.fillRect(lx, pad.t, 12, 3); ctx.fillStyle = css('--muted'); ctx.fillText(s.label, lx + 16, pad.t + 5); lx += 44; }
 }
 
 export function drawUnroll(canvas, lath) {
@@ -74,15 +74,15 @@ export function drawUnroll(canvas, lath) {
   const s = Math.min(sx, sy);
   const ox = pad + ((w - 2 * pad) - s * (maxX - minX)) / 2, oy = pad + ((h - 2 * pad) - s * (maxY - minY)) / 2;
   const P = ([x, y]) => [ox + (x - minX) * s, h - (oy + (y - minY) * s)];
-  ctx.fillStyle = css('--surface2') || '#f3f4f6';
+  ctx.fillStyle = css('--surface2');
   ctx.beginPath();
   lath.unrollA.forEach((p, i) => { const q = P(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
   [...lath.unrollB].reverse().forEach((p) => { const q = P(p); ctx.lineTo(q[0], q[1]); });
   ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = css('--famA') || '#0f766e'; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.strokeStyle = css('--muted') || '#6b7280'; ctx.setLineDash([4, 3]); ctx.beginPath();
+  ctx.strokeStyle = css('--famA'); ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.strokeStyle = css('--muted'); ctx.setLineDash([4, 3]); ctx.beginPath();
   lath.unrollCenter.forEach((p, i) => { const q = P(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
   ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = css('--muted') || '#6b7280'; ctx.font = '10px Sohne, Helvetica, Arial, sans-serif';
+  ctx.fillStyle = css('--muted'); ctx.font = '10px Sohne, Helvetica, Arial, sans-serif';
   ctx.fillText(`flat ${lath.flatLength.toFixed(3)} × bow ${lath.bow.toFixed(3)}`, pad, h - 4);
 }

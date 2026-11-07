@@ -2435,8 +2435,22 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
         abWorst = Math.Round(ColourScience.WorstCaseDeltaE(MitePalette.FamilyA(th), MitePalette.FamilyB(th)), 1),
         agWorst = Math.Round(ColourScience.WorstCaseDeltaE(MitePalette.FamilyA(th), MitePalette.FamilyG(th)), 1),
         bgWorst = Math.Round(ColourScience.WorstCaseDeltaE(MitePalette.FamilyB(th), MitePalette.FamilyG(th)), 1),
+        // the 3D viewer's roles on the page (seed, marks) and the marks against the families for dichromats
+        contrastSeed = Math.Round(ColourScience.ContrastRatio(MitePalette.Seed(th), MitePalette.Paper(th)), 2),
+        contrastMark = Math.Round(ColourScience.ContrastRatio(MitePalette.Mark(th), MitePalette.Paper(th)), 2),
+        markWorst = Math.Round(new[] { MitePalette.FamilyA(th), MitePalette.FamilyB(th), MitePalette.FamilyG(th) }.Min(c => ColourScience.WorstCaseDeltaE(MitePalette.Mark(th), c)), 1),
+    };
+    // what the app's viewer drew before 2026-11-07: the light theme's constants on both pages, neon green seeds and neon yellow marks
+    object Viewer1_6(Theme th) => new
+    {
+        contrastA = Math.Round(ColourScience.ContrastRatio(MitePalette.FamilyA(Theme.Light), MitePalette.Paper(th)), 2),
+        contrastB = Math.Round(ColourScience.ContrastRatio(MitePalette.FamilyB(Theme.Light), MitePalette.Paper(th)), 2),
+        contrastG = Math.Round(ColourScience.ContrastRatio(MitePalette.FamilyG(Theme.Light), MitePalette.Paper(th)), 2),
+        contrastSeed = Math.Round(ColourScience.ContrastRatio(Rgb.FromHex("#00d86b"), MitePalette.Paper(th)), 2),
+        contrastMark = Math.Round(ColourScience.ContrastRatio(Rgb.FromHex("#d9ff00"), MitePalette.Paper(th)), 2),
     };
     var pal = MitePalette.Export();
+    pal["viewer160"] = new { light = Viewer1_6(Theme.Light), dark = Viewer1_6(Theme.Dark) };
     pal["old"] = new { diverging = OldStops(oldDiv), sequential = OldStops(oldSeq) };
     double R2(double v) => Math.Round(v, 2);
     pal["check"] = new
@@ -2868,6 +2882,10 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     File.WriteAllText(Path.Combine(OutDir, "colormap-lut.js"), js);
     string appJs = Path.GetFullPath(Path.Combine(OutDir, "..", "..", "src", "Mite.Web", "wwwroot", "js"));
     if (Directory.Exists(appJs)) File.WriteAllText(Path.Combine(appJs, "colormap-lut.js"), js);
+    // the theme colours' twin: the app's 3D viewer resolves every object's role through it per theme
+    string pal = MitePalette.JavaScriptModule();
+    File.WriteAllText(Path.Combine(OutDir, "palette.js"), pal);
+    if (Directory.Exists(appJs)) File.WriteAllText(Path.Combine(appJs, "palette.js"), pal);
 }
 
 
