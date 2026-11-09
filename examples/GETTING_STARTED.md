@@ -615,6 +615,16 @@ use: Width 80 on laths a few metres long reads "if you meant millimetres,
 enter Width 0.08 and Thickness 0.012"; a Spacing below the mesh edge names
 the edge and how many subdivisions would make it fit; a MinAngle that leaves
 out the whole saddle names the angles at which the families actually cross.
+The material inputs of Gridshell Analysis and Net Kinetics are in pascals,
+kg/m³ and N/m²; a value typed from a data sheet in GPa, N/mm², t/m³ or kN/m²
+is named with the value to enter ("E 11 reads as 11 Pa … if you typed
+gigapascals, enter 11e9 (11 GPa)"; "Allowable 20 … enter 20e6"; "Density 0.45
+… enter 450"; "AreaLoad 1.5 … enter 1500"). Every mesh input is checked on
+intake: edges shared by three or more faces, faces winding the opposite way
+and separate parts are counted and the message says what to run in Mesh
+Cleanup. An input you set for a mode that is off — Spacing with AutoSpace
+off, Angle with AAG off, a Section curve with Shape 0 — gets a remark naming
+the mode it waits for.
 Hover the orange or grey balloon on the component to read the message.
 
 ## Form finding

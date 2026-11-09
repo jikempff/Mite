@@ -698,6 +698,57 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       AutoSpace"-type notes from the catalogue's dependencies; (f) check in
       Rhino that long balloon texts wrap and that a message is not repeated
       for families A and B (deduplicated through RuntimeMessages(level)).
+      Done 2026-11-09 (session 1, B): (a), (b), (d), (e) —
+      `InputAdvice.Mesh.cs`, `InputAdvice.Materials.cs`, `Modes/ModeDependents.cs`,
+      `MeshCleanup.Inspect` (the census alone, public), `InputAdvice.Spacing`
+      with a name / what / reason (Asymptotic Web "Spacing … nodes", Chebyshev
+      "EdgeLength … compass intersection"). (b) `MiteComponent.LoadMesh` runs
+      the census on every mesh input: non-manifold edges (count, the first
+      edge's vertices, "run Mesh Cleanup, its NonManifold output marks the
+      edges"), faces winding the opposite way (count of conflicting edges,
+      "UnifyWinding"), separate parts (count, closed, border loops, "Cracks" or
+      feed one part); 24 ms on 65 536 faces, silent on 12 bench shapes (the
+      hole of the annulus is a border loop, not a part). The welded soup is
+      still the weld's own remark. (d) windows from EN 338:2016 Tables 1 / 3
+      (C14 … D80: f_m,k 14 … 80 N/mm², E_0,mean 7 … 24 kN/mm², ρ_mean 350 …
+      1 080 kg/m³ — read from the Blueprints transcription), EN 1993-1-1
+      (E = 210 000 N/mm², f_y 235 … 460), EN 13706-3 (GFRP E23: 23 GPa, 240
+      MPa), Ashby's charts (E 1e-4 … 1e3 GPa, elastic limit 0.1 … a few
+      thousand MPa, density 0.01 … 20 Mg/m³, σ_f/E 1e-4 … 1e-1): E in
+      [0.1, 1 200] GPa, Allowable in [0.1 MPa, 5 GPa], Allowable / E in
+      [1e-4, 0.1] when both pass singly, Density in [10, 25 000] kg/m³,
+      AreaLoad in [50, 1e5] N/m² (Remark below: 0.05 kN/m² is lighter than
+      cladding), MaxStrain in [1e-4, 0.05]. Each note names the reading
+      ("E 11 reads as 11 Pa"), the consequence (deflections 1e7× too large)
+      and the value to enter for the likeliest unit (GPa below 1 000, N/mm²
+      above: 11 → 11e9, 11 000 → 11e9; 20 → 20e6; 24 000 kPa → 24e6; 0.45 →
+      450; 1.5 → 1500; 0.5 → 0.005 (percent), 5 → 0.005 (per mille)); every
+      suggested value passes the check, 7 real materials (C14 … D80, S235,
+      E23, a 3 GPa plastic, CFRP) raise none. The ratio check: 11 GPa with
+      0.2 MPa passes both single checks but fails at 1.8e-5 → "enter Allowable
+      200e6 with this E" (E / 1 000 = 11 MPa does not fit, so only one fix is
+      offered). (e) `ModeDependent` table (17 inputs on 9 components: Spacing
+      and MaxCurves behind AutoSpace on three components, BorderAngle behind
+      FromBorder, Iterations / Proximity / Angle behind AAG, Net Kinetics'
+      Angle behind Deploy 1 and Kick behind Deploy 1 or 2, Section behind
+      Shape 2 on five components), checked against the component sources
+      (registered default = the table's neutral value, the controller a
+      catalogued mode with those options). `ModeCatalog.InactiveInputs` gives
+      one Remark per mode input holding a non-default value while its
+      controller is off and per dependent input the user set (wired, or typed
+      away from its default), naming the enabling value, the current one and
+      the two ways out; a chain says "itself not used while AutoSpace is …";
+      Mixed controllers stay silent. Wired through `ShowModes` after every
+      solve. Tests `InputAdviceIntakeTests` (26), bench +3 (234). Literature:
+      Botsch et al. 2010 §1.3 (two-manifold), Norman 1983 / Nielsen 1994
+      (mode errors, visibility of status, error prevention), the Mars Climate
+      Orbiter Phase I report 1999 (the unit mismatch no check caught).
+      Still open: (c), (f); and (g) the kinetic solver's Stiffness, the AAG
+      Proximity and the joint stiffness have no physical range to check
+      against; (h) the dependents table should feed the mode menu too (grey
+      the input's name in the menu while it is not used); (i) `Inspect` could
+      also count degenerate faces and isolated vertices (the weld drops them
+      silently today).
 - [~] Interactive seed picking (Rhino point pick button on the component)
       and a Bake that writes families to layers with their colours. Bake done
       2026-11-07 (session 3): `MiteNetGoo.BakeAll` puts the laths on

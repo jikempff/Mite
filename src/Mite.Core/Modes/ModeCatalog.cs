@@ -127,7 +127,7 @@ public sealed class ModeInput
 /// Grasshopper name. Inputs keep their registered type and default; only
 /// their presentation changes.
 /// </summary>
-public static class ModeCatalog
+public static partial class ModeCatalog
 {
     private static ModeInput Bool(string input, bool def, ModeOption off, ModeOption on,
         string? activeWhen = null) =>

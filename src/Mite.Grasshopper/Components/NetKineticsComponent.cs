@@ -188,6 +188,7 @@ public class NetKineticsComponent : MiteComponent
             return;
         }
         CheckSection(width, thickness, System.Linq.Enumerable.Concat(curvesA, curvesB));
+        Report(Mite.Core.Diagnostics.InputAdvice.KineticMaterial(modulus, maxStrain, density));
         if (!SectionInput.TryBuild(this, shape, section, width, thickness, upright, 0.0, 1.0, curvesA.Count + curvesB.Count, out Mite.Core.Fabrication.LathProfile profile)) return;
         var netProfile = NetProfile(netIn, 0, 17, 18, 19, 23, 24);
         if (netProfile != null) { profile = netProfile.Value; upright = profile.Upright; width = profile.Width; thickness = profile.Thickness; }

@@ -62,7 +62,7 @@ public sealed class Advice
 /// Checks of component inputs against the mesh and the geometry, each
 /// returning advice with the fix in the message. Pure functions: no Rhino.
 /// </summary>
-public static class InputAdvice
+public static partial class InputAdvice
 {
     /// <summary>
     /// Numbers in messages: three significant digits, current culture (as
@@ -116,8 +116,11 @@ public static class InputAdvice
     /// <param name="stepGiven">True when the user set it.</param>
     /// <param name="meanEdge">Mean mesh edge length.</param>
     /// <param name="regionSize">Diagonal of the region the family can fill (see <see cref="RegionSize"/>).</param>
+    /// <param name="name">The input's name in the message ("Spacing"; Chebyshev Net's "EdgeLength").</param>
+    /// <param name="what">What the input spaces: "curves" (a family), "nodes" (a web's node distance).</param>
+    /// <param name="reason">Why the mesh edge is the resolution (null: the interpolated curvature directions).</param>
     public static List<Advice> Spacing(double spacing, bool spacingGiven, double step, bool stepGiven,
-        double meanEdge, double regionSize)
+        double meanEdge, double regionSize, string name = "Spacing", string what = "curves", string? reason = null)
     {
         var list = new List<Advice>();
         if (!(spacing > 0) || !(meanEdge > 0)) return list;
@@ -126,10 +129,10 @@ public static class InputAdvice
         {
             int subdivisions = (int)Math.Ceiling(Math.Log(meanEdge / spacing, 2));
             list.Add(new Advice("spacing-below-edge", AdviceLevel.Warning,
-                $"Spacing {Format(spacing)} is below the mean mesh edge {Format(meanEdge)}. " +
-                "The curvature directions are known at the vertices and interpolated inside each face, " +
-                "so curves closer than one edge are placed by the facets, not by the surface. " +
-                $"Raise Spacing to {Format(meanEdge)} or more, or subdivide the mesh {subdivisions}× " +
+                $"{name} {Format(spacing)} is below the mean mesh edge {Format(meanEdge)}. " +
+                (reason ?? "The curvature directions are known at the vertices and interpolated inside each face, ") +
+                $"so {what} closer than one edge are placed by the facets, not by the surface. " +
+                $"Raise {name} to {Format(meanEdge)} or more, or subdivide the mesh {subdivisions}× " +
                 "(each subdivision halves the edges).",
                 spacing, meanEdge, meanEdge));
         }
@@ -138,9 +141,9 @@ public static class InputAdvice
         {
             double suggested = RoundSignificant(regionSize / 10.0, 2);
             list.Add(new Advice("spacing-exceeds-region", AdviceLevel.Warning,
-                $"Spacing {Format(spacing)} is more than half the size of the region the curves can run in " +
-                $"({Format(regionSize)} across), so each family gets one or two curves. " +
-                $"Lower Spacing to about {Format(suggested)} (a tenth of the region) for a full net.",
+                $"{name} {Format(spacing)} is more than half the size of the region the {what} can run in " +
+                $"({Format(regionSize)} across), so each family gets one or two {what}. " +
+                $"Lower {name} to about {Format(suggested)} (a tenth of the region) for a full net.",
                 spacing, 0.5 * regionSize, suggested));
         }
 

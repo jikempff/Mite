@@ -208,6 +208,19 @@ public static class MeshCleanup
     public static Result Compute(MeshData mesh, double weldTolerance = 0.0, bool unifyWinding = true) =>
         Compute(mesh, new Options { WeldTolerance = weldTolerance, UnifyWinding = unifyWinding });
 
+    /// <summary>
+    /// The census alone, on the mesh as it is (nothing welded or repaired):
+    /// non-manifold edges, winding conflicts, parts, border loops. One pass
+    /// over the faces, so every component can run it on its mesh input and
+    /// say "run Mesh Cleanup" with the numbers (InputAdvice.MeshIntake).
+    /// </summary>
+    public static Diagnostics Inspect(MeshData mesh)
+    {
+        var info = new Diagnostics();
+        if (mesh != null && mesh.FaceCount > 0) Census(mesh, info);
+        return info;
+    }
+
     /// <summary>Cleans a mesh with the given options.</summary>
     public static Result Compute(MeshData mesh, Options options)
     {

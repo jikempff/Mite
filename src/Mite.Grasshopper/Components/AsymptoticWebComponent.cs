@@ -98,6 +98,11 @@ public class AsymptoticWebComponent : MiteComponent
             Progress = Progress("web", 0.02, aag ? 0.4 : 1)
         });
         foreach (var n in web.Notes) AddRuntimeMessage(GH_RuntimeMessageLevel.Remark, n);
+        // Node distance against the mesh edge and the saddle region (the same rules as the nets' Spacing)
+        var saddle = new bool[data.VertexCount];
+        for (int i = 0; i < saddle.Length; i++) saddle[i] = pc.K1[i] * pc.K2[i] < 0;
+        Report(Mite.Core.Diagnostics.InputAdvice.Spacing(web.Spacing, spacing > 0, 0, false, proj.AverageEdgeLength,
+            Mite.Core.Diagnostics.InputAdvice.RegionSize(data, saddle), "Spacing", "nodes"));
         if (web.Nodes.Count == 0)
         {
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "No web: the seed has no asymptotic directions (K ≥ 0) — move it onto the saddle-shaped part.");

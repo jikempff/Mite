@@ -174,6 +174,7 @@ public class GridshellAnalysisComponent : MiteComponent
             return;
         }
         CheckSection(width, thickness, curves);
+        Report(Mite.Core.Diagnostics.InputAdvice.Material(e, allowable, density, areaLoad));
 
         var proj = new MeshProjection(input.Data);
         double chord = ResolveSampling(sampling, proj);

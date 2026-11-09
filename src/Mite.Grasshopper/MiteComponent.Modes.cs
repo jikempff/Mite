@@ -34,7 +34,34 @@ public abstract partial class MiteComponent
     /// <summary>The mode line shown under the component after every solution (called from AfterSolveInstance, once the progress text is cleared).</summary>
     private void ShowModes()
     {
-        if (Modes.Count > 0) Message = ModeCatalog.Message(_modeKey, CurrentValue);
+        if (Modes.Count > 0)
+        {
+            Message = ModeCatalog.Message(_modeKey, CurrentValue);
+            // An input set for a mode that is off gets a remark naming the mode it waits for
+            Report(ModeCatalog.InactiveInputs(_modeKey, CurrentValue, IsSetByUser));
+        }
+    }
+
+    /// <summary>
+    /// True when the named input carries a value the user chose: a wire, or a
+    /// typed value other than the registered default in the catalogue.
+    /// </summary>
+    private bool IsSetByUser(string input)
+    {
+        var p = FindInput(input);
+        if (p == null) return false;
+        if (p.SourceCount > 0) return true;
+        var dep = ModeCatalog.DependentsOf(_modeKey).FirstOrDefault(d => d.Input == input);
+        if (dep == null || !dep.Neutral.HasValue) return false;
+        IEnumerable<IGH_Goo> data = p is GH_PersistentParam<GH_Number> pn ? pn.PersistentData.AllData(true)
+            : p is GH_PersistentParam<GH_Integer> pi ? pi.PersistentData.AllData(true)
+            : Enumerable.Empty<IGH_Goo>();
+        foreach (var goo in data)
+        {
+            double v = goo switch { GH_Number n => n.Value, GH_Integer i => i.Value, _ => double.NaN };
+            if (!double.IsNaN(v) && Math.Abs(v - dep.Neutral.Value) > 1e-12 * Math.Max(1, Math.Abs(dep.Neutral.Value))) return true;
+        }
+        return false;
     }
 
     /// <summary>

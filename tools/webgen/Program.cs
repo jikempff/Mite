@@ -2721,6 +2721,78 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
     numbers["advice"] = new { minAngle = minAngleRow, spacing = spacingRow, units = unitsRow, falseAlarms = alarms, falseAlarmText = alarmText };
 }
 
+// ---- Runtime messages, round two: mesh intake, material units, inputs set for a mode that is off ----
+{
+    // (b) the intake census on a fin, two parts, mixed winding; silent on every bench shape; its cost
+    var sad = TestMeshes.CreateSaddle(12);
+    var v = sad.Vertices.ToList(); var f = sad.Faces.Select(x => (int[])x.Clone()).ToList();
+    var use = new Dictionary<(int, int), int>();
+    foreach (var face in sad.Faces) for (int i = 0; i < face.Length; i++) { int a0 = face[i], b0 = face[(i + 1) % face.Length]; var k = (Math.Min(a0, b0), Math.Max(a0, b0)); use[k] = use.TryGetValue(k, out int c) ? c + 1 : 1; }
+    foreach (var (a0, b0) in use.Where(e => e.Value == 2).Select(e => e.Key).OrderBy(e => e.Item1).ThenBy(e => e.Item2).Take(3))
+    { v.Add(0.5 * (sad.Vertices[a0] + sad.Vertices[b0]) + new Vec3d(0, 0, 0.3)); f.Add(new[] { a0, b0, v.Count - 1 }); }
+    var fin = new MeshData(v.ToArray(), f.ToArray());
+    var finAdv = Mite.Core.Diagnostics.InputAdvice.MeshIntake(MeshCleanup.Inspect(fin), fin.FaceCount);
+    int n0 = sad.VertexCount;
+    var two = new MeshData(sad.Vertices.Concat(sad.Vertices.Select(p => p + new Vec3d(5, 0, 0))).ToArray(),
+        sad.Faces.Concat(sad.Faces.Select(x => x.Select(i => i + n0).ToArray())).ToArray());
+    var twoAdv = Mite.Core.Diagnostics.InputAdvice.MeshIntake(MeshCleanup.Inspect(two), two.FaceCount);
+    var sph = TestMeshes.CreateUnitSphere(8);
+    var mixed = new MeshData(sph.Vertices, sph.Faces.Select((x, i) => i % 4 == 0 ? x.Reverse().ToArray() : x).ToArray());
+    var mixedInfo = MeshCleanup.Inspect(mixed);
+    var mixedAdv = Mite.Core.Diagnostics.InputAdvice.MeshIntake(mixedInfo, mixed.FaceCount);
+    var mixedFixed = Mite.Core.Diagnostics.InputAdvice.MeshIntake(MeshCleanup.Inspect(MeshCleanup.Compute(mixed, 0, true).Mesh), mixed.FaceCount);
+    int silentOn = 0; var loud = new List<string>();
+    foreach (var (name, mesh) in new (string, MeshData)[] {
+        ("saddle", TestMeshes.CreateSaddle(30, 2.0)), ("sphere", TestMeshes.CreateUnitSphere(16)), ("torus", TestMeshes.CreateTorus()),
+        ("hyperboloid", TestMeshes.CreateHyperboloid()), ("catenoid", TestMeshes.CreateCatenoid()), ("Enneper 3", TestMeshes.CreateEnneper(3)),
+        ("cone", TestMeshes.CreatePolyCone()), ("Schwarz D", TestMeshes.CreateSchwarzD(0, Math.PI, 12, 2)), ("quad grid", TestMeshes.CreateQuadGrid(6, 6)),
+        ("ellipsoid", TestMeshes.CreateEllipsoid()), ("monkey saddle", AnalyticShapes.Build("monkey", 2.0, 1.0, 0, 48)), ("wave", AnalyticShapes.Build("wave", 0, 0, 0, 48)) })
+    {
+        var l = Mite.Core.Diagnostics.InputAdvice.MeshIntake(MeshCleanup.Inspect(mesh), mesh.FaceCount);
+        if (l.Count == 0) silentOn++; else loud.AddRange(l.Select(x => name + ": " + x.Code));
+    }
+    var big = TestMeshes.CreateCatenoid(1.0, 2.0, 256, 128);
+    var tInspect = Stopwatch.StartNew(); var bigInfo = MeshCleanup.Inspect(big); long msInspect = tInspect.ElapsedMilliseconds;
+    var intakeRow = new
+    {
+        finEdges = MeshCleanup.Inspect(fin).NonManifoldEdges.Length, finCode = finAdv.Count == 1 ? finAdv[0].Code : "", finMessage = finAdv.Count == 1 ? finAdv[0].Message : "",
+        parts = MeshCleanup.Inspect(two).Components, partsCode = twoAdv.Count == 1 ? twoAdv[0].Code : "", partsMessage = twoAdv.Count == 1 ? twoAdv[0].Message : "",
+        conflicts = mixedInfo.OrientationConflicts, mixedCode = mixedAdv.Count == 1 ? mixedAdv[0].Code : "", mixedFixed = mixedFixed.Count,
+        silentOn, shapes = 12, loud, bigFaces = big.FaceCount, bigParts = bigInfo.Components, msInspect
+    };
+
+    // (d) material and load units: each slip named with the value that passes
+    var slips = Mite.Core.Diagnostics.InputAdvice.Material(11, 20, 0.45, 1.5);
+    var fixedMat = slips.Count == 4 ? Mite.Core.Diagnostics.InputAdvice.Material(slips[0].Suggested, slips[1].Suggested, slips[2].Suggested, slips[3].Suggested) : slips;
+    var ratio = Mite.Core.Diagnostics.InputAdvice.Material(11e9, 2e5, 0, 0);
+    var kin = Mite.Core.Diagnostics.InputAdvice.KineticMaterial(11, 0.5, 0.45);
+    int okMaterials = new (double e, double al, double rho, double q)[] {
+        (11e9, 20e6, 0, 0), (11e9, 24e6, 420, 1500), (210e9, 235e6, 7850, 750), (23e9, 240e6, 1900, 500), (3e9, 40e6, 1050, 100), (150e9, 1500e6, 1600, 5000), (7e9, 14e6, 350, 50) }
+        .Count(m => Mite.Core.Diagnostics.InputAdvice.Material(m.e, m.al, m.rho, m.q).Count == 0);
+    var unitsRow2 = new
+    {
+        codes = slips.Select(x => x.Code).ToArray(), suggested = slips.Select(x => x.Suggested).ToArray(), messages = slips.Select(x => x.Message).ToArray(),
+        fixedSilent = fixedMat.Count == 0, ratioCode = ratio.Count == 1 ? ratio[0].Code : "", ratioSuggested = ratio.Count == 1 ? ratio[0].Suggested : double.NaN, ratioMessage = ratio.Count == 1 ? ratio[0].Message : "",
+        kineticCodes = kin.Select(x => x.Code).ToArray(), kineticSuggested = kin.Select(x => x.Suggested).ToArray(), okMaterials, okOf = 7
+    };
+
+    // (e) an input set for a mode that is off
+    int? Vals(string n, params (string, int)[] v) { foreach (var (k, x) in v) if (k == n) return x; return null; }
+    var layoutOff = Mite.Core.Modes.ModeCatalog.InactiveInputs("Asymptotic Net", n => Vals(n, ("AutoSpace", 0), ("Layout", 1)), n => false);
+    var spacingOff = Mite.Core.Modes.ModeCatalog.InactiveInputs("Asymptotic Net", n => Vals(n, ("AutoSpace", 0)), n => n == "Spacing");
+    var chain = Mite.Core.Modes.ModeCatalog.InactiveInputs("Geodesic Net", n => Vals(n, ("AutoSpace", 0), ("FromBorder", 1)), n => n == "BorderAngle");
+    var on = Mite.Core.Modes.ModeCatalog.InactiveInputs("Asymptotic Net", n => Vals(n, ("AutoSpace", 1), ("Layout", 1)), n => n == "Spacing");
+    var sectionOff = Mite.Core.Modes.ModeCatalog.InactiveInputs("Lath Sweep", n => Vals(n, ("Shape", 0)), n => n == "Section");
+    int dependents = Mite.Core.Modes.ModeCatalog.ComponentsWithDependents.Sum(c => Mite.Core.Modes.ModeCatalog.DependentsOf(c).Count);
+    var modesRow = new
+    {
+        layoutOff = layoutOff.Count == 1 ? layoutOff[0].Message : "", spacingOff = spacingOff.Count == 1 ? spacingOff[0].Message : "",
+        chain = chain.Count, chainLast = chain.Count == 2 ? chain[1].Message : "", silentWhenOn = on.Count == 0,
+        sectionOff = sectionOff.Count == 1 ? sectionOff[0].Message : "", dependents, components = Mite.Core.Modes.ModeCatalog.ComponentsWithDependents.Count
+    };
+    numbers["advice2"] = new { intake = intakeRow, units = unitsRow2, modes = modesRow };
+}
+
 // ---------- Farthest-point seeding (Layout 3; Mebarki, Alliez & Devillers 2005) ----------
 {
     var t = Stopwatch.StartNew();

@@ -100,9 +100,10 @@ public class ChebyshevNetComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Error, $"Seed must be a vertex index between 0 and {input.RhinoVertexCount - 1}, or provide a SeedPoint.");
             return;
         }
-        if (edgeLength < 0.5 * new MeshProjection(data).AverageEdgeLength)
-            AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
-                "EdgeLength is smaller than the mesh edges; the compass construction will be noisy. Use a finer mesh or a larger EdgeLength.");
+        // EdgeLength against the mesh edge and the mesh size, with the numbers (the nets' Spacing rules)
+        Report(Mite.Core.Diagnostics.InputAdvice.Spacing(edgeLength, true, 0, false, new MeshProjection(data).AverageEdgeLength,
+            Mite.Core.Diagnostics.InputAdvice.RegionSize(data, null), "EdgeLength", "nodes",
+            "Every node is the compass intersection of two spheres with the faceted surface, "));
 
         var opts = new ChebyshevNet.Options
         {

@@ -278,6 +278,8 @@ public abstract partial class MiteComponent : GH_Component
             AddRuntimeMessage(GH_RuntimeMessageLevel.Remark,
                 $"Welded {input.RhinoVertexCount - input.Data.VertexCount} coincident vertices " +
                 "(seams / duplicate vertices) so the algorithms see one connected surface.");
+        // What welding cannot mend: non-manifold edges, mixed winding, several parts (→ Mesh Cleanup)
+        Report(InputAdvice.MeshIntake(MeshCleanup.Inspect(input.Data), input.Data.FaceCount));
         return input;
     }
 
