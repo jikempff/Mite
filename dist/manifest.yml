@@ -1,5 +1,5 @@
 name: mite
-version: 1.6.0
+version: 1.7.0
 authors:
   - Mite Contributors
 description: >-
@@ -11,15 +11,18 @@ description: >-
   guide curves and trimming; Schling's symmetric asymptotic webs, AAG and AGG
   webs of straight flat slats, tri-hex webs and webs grown from a boundary strip.
   Buildability: lath strain checks and a beam-frame analysis of the whole net with
-  per-family sections, stacked layers and linear buckling. Fabrication: one
+  per-family sections, stacked layers, linear and lateral–torsional buckling,
+  and runtime messages that name the value to enter (unit slips, mesh defects,
+  inputs set for a mode that is off). Fabrication: one
   profile per family swept and checked, half-lap, egg-crate and threaded joints,
   unrolled strips, stock lengths packed on boards, labels, net topology and a
   flat kit with nested sheets and laser-cut hub plates. Kinetics: Net Kinetics
   moves a scissor-jointed net as a mechanism (press flat, deploy, cables),
   Kinetic Supports and Kinetic Drivers set it up as one wire each, Mechanism
   Modes shows how a net can move before you drive it, Kinetic State reads any
-  moment of the motion. Mesh cleanup, pull-to-mesh and colour maps
-  with legends.
+  moment of the motion; scissors open to their own design angles. Previews in
+  the black, white and neon palette, families baked to layers. Mesh cleanup,
+  pull-to-mesh and colour maps with legends.
 url: https://github.com/jikempff/Mite
 icon: icon.png
 keywords:

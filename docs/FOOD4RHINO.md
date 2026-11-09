@@ -1,9 +1,9 @@
-# Food4Rhino listing — Mite 1.6.0
+# Food4Rhino listing — Mite 1.7.0
 
 Paste-ready copy for https://www.food4rhino.com/en/app/mite-curvature-form-finding-and-gridshell-nets-grasshopper
 (edit form; the address follows the title since 1.5.1 — the old /en/app/mite still shows the 1.3.2 page). Images
 to upload are listed at the end; the package itself goes up with
-`yak push dist/mite-1.6.0-rh8_0-any.yak`, which also sets the package icon (1.5.1 is on the server; 1.6.0 adds Kinetic Supports and Kinetic Drivers).
+`yak push dist/mite-1.7.0-rh8_0-any.yak`, which also sets the package icon (1.6.0 is on the server; 1.7.0 adds lateral–torsional buckling, faster kinetics, the deployment in the browser, runtime messages that name the value to enter and the previews in the palette).
 
 ## Title
 Mite — curvature, form finding and gridshell nets for Grasshopper
@@ -49,7 +49,10 @@ to bending and twist strains for the chosen section — flat or upright strip,
 round bar or your own profile; Gridshell Analysis solves the whole net as a
 beam frame with one section per lath family (crossings and T-junctions coupled,
 laths stacked in layers joined through their lever arm, supports on the border,
-utilisation per lath, linear buckling factors and mode shapes).
+utilisation per lath, linear and lateral–torsional buckling factors and mode
+shapes). Runtime messages say what was measured and the value to enter: a
+modulus typed in GPa, a mesh with non-manifold edges or separate parts, an input
+set for a mode that is off.
 
 **Fabrication.** Lath Sweep (rectangular, round or custom sections, flat or
 upright — one profile for every curve, and the same profile the strain check
@@ -64,7 +67,8 @@ slider) and reads every state elastically: bending and twist strains of each
 lath, the strain energy along the motion and the natural, least-energy state.
 Kinetic Supports and Kinetic Drivers set it up as one wire each, Mechanism
 Modes shows how a net can move before you drive it, Kinetic State reads any
-moment of a motion to bake or pass on.
+moment of a motion to bake or pass on. A flat kit deploys by opening every
+scissor to its own design angle — in Grasshopper and in the browser.
 
 **Tested against analytic truth.** Cylinder, hyperboloid, catenoid, Enneper,
 ruled patches and Schwarz D are part of the test suite with closed-form
@@ -73,6 +77,14 @@ where the answer is exact. The same library runs in the browser at
 kempffsele.me/mite — try a net on your own OBJ before installing anything.
 
 Source, examples and roadmap: https://github.com/jikempff/Mite
+
+## Version notes — 1.7.0
+- Gridshell Analysis: lateral–torsional buckling — the bending moments of the solve enter the geometric stiffness, so upright laths (tall, thin strips) buckle sideways at the load they really do, not only by Euler; a new `Lateral` input switches back to Euler buckling for comparison.
+- Net Kinetics 3–9× faster on large nets (the solver factors in 3 × 3 blocks and reuses its analysis over the motion), and `Angle` ≤ 0 opens every scissor to its own design angle — the drive that reproduces any anticlastic design.
+- Runtime messages, round two: material and load inputs typed in another unit are named with the value to enter (E 11 → "enter 11e9"), every mesh input is checked for non-manifold edges, mixed winding and separate parts ("run Mesh Cleanup"), and an input set for a mode that is off says which mode it waits for.
+- The Mite Net preview draws the black, white and neon palette against the viewport's own background (darkened to 3:1 on Rhino's grey), marks T-junction ends as squares and free ends as crosses, shows joint dots on request, and bakes the families to the layers Mite::A and Mite::B; the curve outputs it duplicates start with their preview off.
+- Web app: the deployment from the flat kit (pressed flat, kicked out of the flat state, every scissor opened on a table, the design as a dashed ghost and the shape error against it), percent done in the status line, and the 3D viewer in each theme's colours.
+- 41 components; saved definitions open unchanged (every new input is appended).
 
 ## Version notes — 1.6.0
 - Kinetics: Kinetic Supports and Kinetic Drivers set up a scissor net as one wire each — fixed and sliding points, points moved to targets, cables to lengths. The points snap to the nearest joints of whichever net they are wired into, so one setup feeds Mechanism Modes (which motions are left free) and Net Kinetics (the motion under the drivers); both gain appended Supports / Drivers inputs, and their own inputs keep working. A motion driven through the setup is identical to the same motion set up by hand.
