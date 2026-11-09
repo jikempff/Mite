@@ -186,9 +186,10 @@ public class ViewportPaletteTests
         string comp = File.ReadAllText(RepoFile("src", "Mite.Grasshopper", "MiteComponent.cs"));
         Assert.Contains("HidePreviewsBehindNet()", comp);
         Assert.Contains("c.Hidden = true", comp);
-        // every curve output the rule hides is one of the Net's families: A, B, G, Cu, Cv — the nicknames the components use
+        // every output the rule hides is one of the Net's families (A, B, G, Cu, Cv) or a marked lath end (El, Ef) — the nicknames the components use
         var nick = Regex.Matches(comp, @"HiddenBehindNet = \{([^}]*)\}").Cast<Match>().Single().Groups[1].Value;
-        Assert.Equal(new[] { "A", "B", "G", "Cu", "Cv" }, Regex.Matches(nick, "\"(\\w+)\"").Cast<Match>().Select(m => m.Groups[1].Value).ToArray());
+        Assert.Equal(new[] { "A", "B", "G", "Cu", "Cv", "El", "Ef" }, Regex.Matches(nick, "\"(\\w+)\"").Cast<Match>().Select(m => m.Groups[1].Value).ToArray());
+        Assert.Contains("pt.Hidden = true", comp); // the point outputs too
         foreach (var (file, nicks) in new[] { ("AsymptoticNetComponent.cs", "A|B"), ("ConjugateNetComponent.cs", "A|B"), ("ChebyshevNetComponent.cs", "Cu|Cv"), ("GeodesicNetComponent.cs", "G"), ("MiteNetComponent.cs", "A|B"), ("NetKineticsComponent.cs", "A|B"), ("KineticStateComponent.cs", "A|B") })
         {
             string src = File.ReadAllText(RepoFile("src", "Mite.Grasshopper", "Components", file));
@@ -196,6 +197,44 @@ public class ViewportPaletteTests
             foreach (var n in nicks.Split('|'))
                 Assert.True(Regex.IsMatch(src, "AddCurveParameter\\(\"\\w+\", \"" + n + "\""), file + " output " + n);
         }
+    }
+
+    [Fact]
+    public void MarkersHaveShapes_JointsAreAMenuToggle_SavedWithTheFile()
+    {
+        // the three markers differ in shape as well as colour (Bertin 1967: shape is its own retinal variable),
+        // so a T-junction square, a free-end cross and a joint dot stay apart where the colours cannot
+        string goo = File.ReadAllText(RepoFile("src", "Mite.Grasshopper", "MiteNet.cs"));
+        Assert.Matches(@"DrawPoints\(_onLath, Rhino\.Display\.PointStyle\.Square, MarkSize, pal\[\(int\)ViewportRole\.Mark\]\)", goo);
+        Assert.Matches(@"DrawPoints\(_free, Rhino\.Display\.PointStyle\.X, WarnSize, pal\[\(int\)ViewportRole\.Warn\]\)", goo);
+        Assert.Matches(@"DrawPoints\(joints, Rhino\.Display\.PointStyle\.RoundSimple, JointSize, pal\[\(int\)ViewportRole\.Ink\]\)", goo);
+        var sizes = Regex.Match(goo, @"MarkSize = (\d+), WarnSize = (\d+), JointSize = (\d+)");
+        Assert.True(sizes.Success);
+        int mark = int.Parse(sizes.Groups[1].Value), warn = int.Parse(sizes.Groups[2].Value), joint = int.Parse(sizes.Groups[3].Value);
+        Assert.True(joint < mark && mark < warn, "a joint dot is smaller than an end mark, a cross larger than a square of the same visual weight");
+        Assert.True(joint >= 3 && warn <= 12);
+        // the joints are off by default, found once per value (LathNet.Joints) and only when drawn
+        Assert.Contains("public bool ShowJoints { get; set; }", goo);
+        Assert.Contains("if (showJoints)", goo);
+        Assert.Contains("Value.Joints()", goo);
+        Assert.Contains("goo.Draw(args.Display, selected ? args.WireColour_Selected : (Color?)null, thickness, ShowJoints)", goo);
+        // a right-click item with undo, and both the toggle and the preview switch saved with the definition
+        Assert.Contains("Menu_AppendItem(menu, \"Show joints\"", goo);
+        Assert.Contains("RecordUndoEvent(\"Show joints\")", goo);
+        Assert.Contains("ExpirePreview(true)", goo);
+        foreach (var key in new[] { "MiteNetShowJoints", "MiteNetHidden" })
+        {
+            Assert.Contains("writer.SetBoolean(\"" + key + "\"", goo);
+            Assert.Contains("reader.TryGetBoolean(\"" + key + "\", ref v)", goo);
+        }
+        // Mite Net's marked-end outputs say what the preview draws them as
+        string mite = File.ReadAllText(RepoFile("src", "Mite.Grasshopper", "Components", "MiteNetComponent.cs"));
+        Assert.Contains("\"LathEnds\", \"El\", \"Lath ends on another lath (T-junctions; squares in the Net preview)\"", mite);
+        Assert.Contains("\"FreeEnds\", \"Ef\", \"Lath ends that are neither (red crosses in the Net preview)\"", mite);
+        // the smoke test (Windows) checks the hidden outputs and the bake's layers
+        string smoke = File.ReadAllText(RepoFile("tools", "Mite.SmokeTest", "Program.cs"));
+        Assert.Contains("NetPreviewAndBake()", smoke);
+        Assert.Contains("MiteNetGoo.LayerPath(isA)", smoke);
     }
 
     private static string RepoFile(params string[] parts)

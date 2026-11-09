@@ -503,6 +503,24 @@ truth is exact. Add each to `tests/Mite.Tests/TestMeshes.cs` and to the bench.
       default or only while the owner is selected), the same colours in Net
       Joints / Net Topology outputs, and a check in Rhino that an output
       hidden by the constructor is listed as such in its context menu.
+      2026-11-09 (session 1, B): the contact dots are a menu toggle, *Show
+      joints*, on the Mite Net parameter (off by default — a dense net's
+      crossings would hide the laths; found once per value, only when drawn;
+      undoable; saved with the definition, and the parameter's `Hidden`
+      is now saved too, it was a plain property), drawn as 3 px dots in the
+      `Ink` role. The end markers got shapes as well as colours — T-junction
+      ends 7 px squares in `Mark`, free ends 9 px crosses in `Warn` — so the
+      three markers stay apart from each other where the colours cannot
+      (Bertin 1967: shape is its own retinal variable). Mite Net's `El` /
+      `Ef` point outputs join the hidden-behind-the-Net list (`Eb` stays);
+      the smoke test checks the hidden outputs, a joint and the bake's
+      layers (Windows). This session first built the same item independently
+      (a two-theme switch at L* 50 without the 3:1 adaptation, found the
+      mid-grey problem — family B 1.05–1.44 : 1 on greys 118–160 — and left
+      it to José) before the 11-07c patch surfaced in the project; that
+      version was withdrawn and this follow-up kept, since 11-07c's
+      adaptation answers the finding. Open: the same colours in Net Joints /
+      Net Topology outputs; the Rhino checks above.
 - [x] Replace boolean switches that are really modes (AutoSpace,
       Continuous, Upright, MaxDir, Shape) by a right-click mode menu or an
       auto-attached value list; keep the inputs for compatibility.

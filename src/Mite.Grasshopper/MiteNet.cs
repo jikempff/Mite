@@ -8,7 +8,11 @@
 // own background, so on Rhino's grey the neons are darkened to WCAG 2.1's
 // 3:1 and on a white or black background they are the web app's colours; it
 // bakes each family onto its own layer (Mite::A, Mite::B) in those colours.
-// Internalised data is stored as LathNet.ToBytes().
+// The markers have shapes, not only colours (Bertin 1967, Ware 2012: shape is
+// a separable visual channel, so a square, a cross and a dot stay apart where
+// the colours cannot): T-junction ends are squares, free ends crosses, and
+// the joints — on request, the parameter's "Show joints" menu item — dots in
+// ink. Internalised data is stored as LathNet.ToBytes().
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -33,9 +37,12 @@ public sealed class MiteNetGoo : GH_Goo<LathNet>, IGH_PreviewData, IGH_BakeAware
     public const string LayerRoot = "Mite";
     public static string LayerPath(bool familyA) => LayerRoot + "::" + (familyA ? "A" : "B");
 
-    // Preview cache, built once per value
+    /// <summary>Marker sizes in pixels: T-junction squares, free-end crosses, joint dots.</summary>
+    public const int MarkSize = 7, WarnSize = 9, JointSize = 3;
+
+    // Preview cache, built once per value (the joints only when asked for)
     private Polyline[]? _a, _b;
-    private Point3d[]? _onLath, _free;
+    private Point3d[]? _onLath, _free, _joints;
     private BoundingBox _box = BoundingBox.Unset;
 
     public MiteNetGoo() { }
@@ -109,18 +116,28 @@ public sealed class MiteNetGoo : GH_Goo<LathNet>, IGH_PreviewData, IGH_BakeAware
 
     private static Polyline ToPolyline(Vec3d[] line) => new Polyline(line.Select(MeshConvert.ToRhinoPoint));
 
+    /// <summary>The A × B crossings (LathNet.Joints), found once per value when first drawn.</summary>
+    public Point3d[] Joints()
+    {
+        if (_joints == null)
+            _joints = Value == null ? Array.Empty<Point3d>()
+                : Value.Joints().Select(c => MeshConvert.ToRhinoPoint(c.Point)).ToArray();
+        return _joints;
+    }
+
     public BoundingBox ClippingBox { get { EnsureCache(); return _box; } }
 
-    public void DrawViewportWires(GH_PreviewWireArgs args) => Draw(args.Pipeline, null, args.Thickness);
+    public void DrawViewportWires(GH_PreviewWireArgs args) => Draw(args.Pipeline, null, args.Thickness, false);
 
     /// <summary>
     /// Draws the families in the palette's colours for the viewport's background
     /// (or all in <paramref name="selected"/> when the owner is selected), marks
-    /// T-junction ends in the mark colour (ink on a light background, neon
-    /// yellow on a dark one) and free ends in the warning red; border ends need
-    /// no marker.
+    /// T-junction ends with squares in the mark colour (ink on a light
+    /// background, neon yellow on a dark one) and free ends with crosses in the
+    /// warning red, and — when <paramref name="showJoints"/> — every joint with
+    /// a dot in ink; border ends need no marker.
     /// </summary>
-    public void Draw(Rhino.Display.DisplayPipeline pipeline, Color? selected, int thickness)
+    public void Draw(Rhino.Display.DisplayPipeline pipeline, Color? selected, int thickness, bool showJoints)
     {
         EnsureCache();
         if (_a == null) return;
@@ -129,8 +146,13 @@ public sealed class MiteNetGoo : GH_Goo<LathNet>, IGH_PreviewData, IGH_BakeAware
         int w = Math.Max(2, thickness);
         foreach (var pl in _a) pipeline.DrawPolyline(pl, ca, w);
         foreach (var pl in _b!) pipeline.DrawPolyline(pl, cb, w);
-        if (_onLath!.Length > 0) pipeline.DrawPoints(_onLath, Rhino.Display.PointStyle.RoundSimple, 6, pal[(int)ViewportRole.Mark]);
-        if (_free!.Length > 0) pipeline.DrawPoints(_free, Rhino.Display.PointStyle.RoundSimple, 6, pal[(int)ViewportRole.Warn]);
+        if (showJoints)
+        {
+            var joints = Joints();
+            if (joints.Length > 0) pipeline.DrawPoints(joints, Rhino.Display.PointStyle.RoundSimple, JointSize, pal[(int)ViewportRole.Ink]);
+        }
+        if (_onLath!.Length > 0) pipeline.DrawPoints(_onLath, Rhino.Display.PointStyle.Square, MarkSize, pal[(int)ViewportRole.Mark]);
+        if (_free!.Length > 0) pipeline.DrawPoints(_free, Rhino.Display.PointStyle.X, WarnSize, pal[(int)ViewportRole.Warn]);
     }
 
     public void DrawViewportMeshes(GH_PreviewMeshArgs args) { }
@@ -222,6 +244,8 @@ public sealed class MiteNetParameter : GH_Param<MiteNetGoo>, IGH_PreviewObject, 
     }
 
     public bool Hidden { get; set; }
+    /// <summary>Draw a dot in ink at every joint (A × B crossing); off by default, toggled in the parameter's right-click menu.</summary>
+    public bool ShowJoints { get; set; }
     public bool IsPreviewCapable => true;
     public BoundingBox ClippingBox => Preview_ComputeClippingBox();
     public void DrawViewportWires(IGH_PreviewArgs args)
@@ -230,7 +254,36 @@ public sealed class MiteNetParameter : GH_Param<MiteNetGoo>, IGH_PreviewObject, 
         bool selected = Attributes?.GetTopLevel?.Selected ?? false;
         int thickness = args.DefaultCurveThickness + (selected ? 1 : 0);
         foreach (var goo in VolatileData.AllData(true).OfType<MiteNetGoo>())
-            goo.Draw(args.Display, selected ? args.WireColour_Selected : (Color?)null, thickness);
+            goo.Draw(args.Display, selected ? args.WireColour_Selected : (Color?)null, thickness, ShowJoints);
+    }
+
+    public override void AppendAdditionalMenuItems(System.Windows.Forms.ToolStripDropDown menu)
+    {
+        base.AppendAdditionalMenuItems(menu);
+        var item = Menu_AppendItem(menu, "Show joints", (s, e) =>
+        {
+            RecordUndoEvent("Show joints");
+            ShowJoints = !ShowJoints;
+            ExpirePreview(true);
+        }, true, ShowJoints);
+        item.ToolTipText = "Draw a dot in ink at every crossing of the two families (the joints)";
+    }
+
+    // "Show joints" and the preview switch are saved with the definition (Hidden
+    // is a plain property here, so it was not before)
+    public override bool Write(GH_IWriter writer)
+    {
+        writer.SetBoolean("MiteNetShowJoints", ShowJoints);
+        writer.SetBoolean("MiteNetHidden", Hidden);
+        return base.Write(writer);
+    }
+
+    public override bool Read(GH_IReader reader)
+    {
+        bool v = false;
+        if (reader.TryGetBoolean("MiteNetShowJoints", ref v)) ShowJoints = v;
+        if (reader.TryGetBoolean("MiteNetHidden", ref v)) Hidden = v;
+        return base.Read(reader);
     }
     public void DrawViewportMeshes(IGH_PreviewArgs args) => Preview_DrawMeshes(args);
 

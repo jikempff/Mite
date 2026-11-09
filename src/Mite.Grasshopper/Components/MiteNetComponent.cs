@@ -51,8 +51,8 @@ public class MiteNetComponent : MiteComponent
         pManager.AddCurveParameter("CurvesB", "B", "Family B laths (polylines)", GH_ParamAccess.list);
         pManager.AddPointParameter("Joints", "J", "Crossings between the families (the joints)", GH_ParamAccess.list);
         pManager.AddPointParameter("BorderEnds", "Eb", "Lath ends on the surface border (supports)", GH_ParamAccess.list);
-        pManager.AddPointParameter("LathEnds", "El", "Lath ends on another lath (T-junctions; orange in the preview)", GH_ParamAccess.list);
-        pManager.AddPointParameter("FreeEnds", "Ef", "Lath ends that are neither (red in the preview)", GH_ParamAccess.list);
+        pManager.AddPointParameter("LathEnds", "El", "Lath ends on another lath (T-junctions; squares in the Net preview)", GH_ParamAccess.list);
+        pManager.AddPointParameter("FreeEnds", "Ef", "Lath ends that are neither (red crosses in the Net preview)", GH_ParamAccess.list);
         pManager.AddTextParameter("Report", "R", "Summary: laths, lengths, joints, ends, profile", GH_ParamAccess.item);
     }
 

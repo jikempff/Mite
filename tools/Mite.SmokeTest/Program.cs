@@ -1026,6 +1026,9 @@ internal static class Tests
         // lines of family A and one of family B on a 4 × 4 plate: 2 joints; B ends
         // on the border (x = ±2), A's second lath starts on B (a T-junction)
         Check("Mite Net → Net Joints / Lath Labels / Net Topology (one wire)", NetWire());
+        // Viewport palette (ROADMAP B/C): the duplicated outputs start hidden, the Net output shown without joints,
+        // the bake lands on Mite::A / Mite::B in the family colours for the application's viewport background
+        Check("Mite Net preview hides the duplicate outputs; bake to layers Mite::A / Mite::B", NetPreviewAndBake());
         Check("Net Kinetics → Motion → Kinetic State (one moment of the motion)", KineticStateWire());
         Check("Kinetic Supports / Drivers → Mechanism Modes and Net Kinetics (same as direct inputs)", KineticSetupWire());
         // Mode menus (ROADMAP B): the catalogue names live inputs of the right type and default
@@ -1174,6 +1177,52 @@ internal static class Tests
                 && Expect(jw.Count == 9 && dj < 1e-12, $"Net Kinetics through Supports + Drivers = direct: 9 joints, identical; got {jw.Count}, Δ {dj:E1}");
         }
         catch (System.Exception ex) { return Expect(false, "threw " + ex.Message); }
+    }
+
+    private static bool NetPreviewAndBake()
+    {
+        try
+        {
+            var asym = new Mite.Grasshopper.Components.AsymptoticNetComponent();
+            bool hidden0 = asym.Params.Output[0] is Grasshopper.Kernel.IGH_PreviewObject p0 && p0.Hidden;
+            bool hidden1 = asym.Params.Output[1] is Grasshopper.Kernel.IGH_PreviewObject p1 && p1.Hidden;
+            bool netShown = asym.Params.Output[3] is Mite.Grasshopper.MiteNetParameter np && !np.Hidden && !np.ShowJoints;
+            if (!Expect(hidden0 && hidden1 && netShown, $"Asymptotic Net: A/B previews off by default ({hidden0}, {hidden1}), the Net on without joints ({netShown})")) return false;
+            var mite = new Mite.Grasshopper.Components.MiteNetComponent();
+            bool endsHidden = mite.Params.Output[6] is Grasshopper.Kernel.IGH_PreviewObject e6 && e6.Hidden && mite.Params.Output[7] is Grasshopper.Kernel.IGH_PreviewObject e7 && e7.Hidden;
+            bool borderShown = mite.Params.Output[5] is Grasshopper.Kernel.IGH_PreviewObject e5 && !e5.Hidden;
+            if (!Expect(endsHidden && borderShown, $"Mite Net: El / Ef previews off ({endsHidden}), Eb on ({borderShown})")) return false;
+
+            var doc = Rhino.RhinoDoc.ActiveDoc;
+            if (doc == null) return Expect(false, "an active Rhino document for the bake");
+            var a = new[] { new Mite.Core.Geometry.Vec3d(-1, -1, 0), new Mite.Core.Geometry.Vec3d(1, 1, 0) };
+            var b = new[] { new Mite.Core.Geometry.Vec3d(-1, 1, 0), new Mite.Core.Geometry.Vec3d(1, -1, 0) };
+            var goo = new Mite.Grasshopper.MiteNetGoo(new Mite.Core.Gridshells.LathNet(null, new[] { a }, new[] { b }, Mite.Core.Gridshells.NetKind.Custom, 1.0));
+            if (!Expect(goo.Joints().Length == 1, $"one joint at the crossing, got {goo.Joints().Length}")) return false;
+            var ids = goo.BakeAll(doc, null);
+            try
+            {
+                if (!Expect(ids.Count == 2, $"2 baked polylines, got {ids.Count}")) return false;
+                var bgc = Rhino.ApplicationSettings.AppearanceSettings.ViewportBackgroundColor;
+                var bg = new Mite.Core.Display.Rgb(bgc.R, bgc.G, bgc.B);
+                foreach (var (id, role, isA) in new[] { (ids[0], Mite.Core.Display.ViewportRole.FamilyA, true), (ids[1], Mite.Core.Display.ViewportRole.FamilyB, false) })
+                {
+                    var obj = doc.Objects.FindId(id);
+                    var layer = doc.Layers[obj.Attributes.LayerIndex];
+                    string path = Mite.Grasshopper.MiteNetGoo.LayerPath(isA);
+                    var want = Mite.Core.Display.ViewportPalette.Colour(role, bg);
+                    bool onLayer = layer.FullPath == path && obj.Attributes.ColorSource == Rhino.DocObjects.ObjectColorSource.ColorFromLayer;
+                    bool colour = layer.Color.R == want.R && layer.Color.G == want.G && layer.Color.B == want.B;
+                    if (!Expect(onLayer && colour, $"{path} coloured {want.Hex} by layer (background {bg.Hex}), got {layer.FullPath} {layer.Color} {obj.Attributes.ColorSource}")) return false;
+                }
+                return true;
+            }
+            finally
+            {
+                foreach (var id in ids) doc.Objects.Delete(id, true);
+            }
+        }
+        catch (Exception ex) { return Expect(false, "no exception: " + ex.Message); }
     }
 
     private static bool NetWire()

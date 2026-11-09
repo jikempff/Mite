@@ -4751,7 +4751,7 @@
     "name": "LathEnds",
     "nick": "El",
     "type": "Point",
-    "desc": "Lath ends on another lath (T-junctions; orange in the preview)",
+    "desc": "Lath ends on another lath (T-junctions; squares in the Net preview)",
     "access": "list",
     "default": null
    },
@@ -4759,7 +4759,7 @@
     "name": "FreeEnds",
     "nick": "Ef",
     "type": "Point",
-    "desc": "Lath ends that are neither (red in the preview)",
+    "desc": "Lath ends that are neither (red crosses in the Net preview)",
     "access": "list",
     "default": null
    },
