@@ -1608,6 +1608,41 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
             var polys = design.LathPolylines(st);
             depScenes.Add(new { a = polys.Take(design.CountA).Select(l => Line(l)).ToArray(), b = polys.Skip(design.CountA).Select(l => Line(l)).ToArray(), joints = Enumerable.Range(0, design.Nodes.Length).Where(i => design.IsJoint[i]).Select(i => P(st.Nodes[i])).ToArray() });
         }
+        // the same deployment driven to each joint's own design angle (the drive the web app uses: on a minimal surface the
+        // design angles are right angles within a few degrees, so the two drives must agree), and the per-joint targets
+        // exact on the doubly ruled grid: the closed-form hyperboloid at β = 30° driven to the crossing angles of the closed
+        // form at β = 60° (cos θ_m = cos²β cos(2πm/n) − sin²β at level m) must arrive there; one angle for every scissor does not
+        t.Restart();
+        var designAngles = design.RestCrossingAngles();
+        var ownOpt = new Mite.Core.Kinetics.ScissorNet.Options { Fairness = 0.3, Steps = 10, MaxIterations = 80 };
+        var ownNet = flat.DeployFromFlat(ownOpt, centre, up, v => designAngles[v], 0.5, out _);
+        var own = ownNet.Solve(ownOpt).Last;
+        long ownMs = t.ElapsedMilliseconds;
+        var (orms, omax) = Shape(own.Nodes, design.Nodes);
+        var ownTargets = ownOpt.Scissors.Select(v => designAngles[v] * 180 / Math.PI).ToArray();
+        object anglesExact;
+        {
+            int na = 12, la = 2; double rhoA = 1.0, betaLo = 30 * Math.PI / 180, betaHi = 60 * Math.PI / 180;
+            var (n0, lathsA, nrm0) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(na, la, rhoA, betaLo);
+            var (n1, _, nrm1) = Mite.Core.Kinetics.ScissorNet.HyperboloidMechanism(na, la, rhoA, betaHi);
+            var target = new Mite.Core.Kinetics.ScissorNet(n1, lathsA, na, nrm1).RestCrossingAngles();
+            double closedForm = 0;
+            for (int k = 0; k < na; k++) for (int m = -la; m <= la; m++)
+                closedForm = Math.Max(closedForm, Math.Abs(Math.Cos(target[k * (2 * la + 1) + m + la]) - (Math.Cos(betaHi) * Math.Cos(betaHi) * Math.Cos(2 * Math.PI * m / na) - Math.Sin(betaHi) * Math.Sin(betaHi))));
+            Mite.Core.Kinetics.ScissorNet.State DriveTo(Func<int, double> angleAt)
+            {
+                var g = new Mite.Core.Kinetics.ScissorNet(n0, lathsA, na, nrm0);
+                var o = new Mite.Core.Kinetics.ScissorNet.Options { Fairness = 0, Steps = 6, MaxIterations = 200, Tolerance = 1e-12 };
+                var st0 = g.DeployFromFlat(o, la, up, angleAt, 0.0, out _);
+                o.Ground = Array.Empty<int>();
+                return st0.Solve(o).Last;
+            }
+            t.Restart();
+            var perJoint = DriveTo(v => target[v]);
+            var oneAngle = DriveTo(_ => 2 * betaHi);
+            double ErrTo(Vec3d[] a) { double e = 0; for (int i = 0; i < a.Length; i++) for (int j = i + 1; j < a.Length; j++) e = Math.Max(e, Math.Abs((a[i] - a[j]).Length - (n1[i] - n1[j]).Length)); return e; }
+            anglesExact = new { rods = 2 * na, joints = n0.Length, closedForm, waistDeg = R3(2 * betaHi * 180 / Math.PI), levelDeg = R3(target[2 * la] * 180 / Math.PI), perJointErr = ErrTo(perJoint.Nodes), perJointMiss = perJoint.ScissorMiss, perJointDrift = perJoint.LengthDrift, oneAngleErr = ErrTo(oneAngle.Nodes), oneAngleMiss = R3(oneAngle.ScissorMiss), ms = t.ElapsedMilliseconds };
+        }
         // the pull at the singular node (José's sequence): low lobes held on the table, centre pulled to its design height
         t.Restart();
         var ends = design.LathEnds();
@@ -1630,6 +1665,8 @@ static (int ends, int boundary, int onCurve, int floating, double endTurn, doubl
             ["worstDrift"] = dep.States.Max(x => x.LengthDrift), ["worstAsym"] = dep.States.Max(x => x.AsymptoticDeviation), ["contacts"] = dLast.GroundContacts, ["scissorMiss"] = R3(dLast.ScissorMiss), ["depMs"] = depMs, ["rows"] = depRows,
             ["solver"] = new { unknowns = dep.Unknowns, factorizations = dep.Factorizations, iterations = dep.States.Sum(x => x.Iterations), analyses = dep.PatternAnalyses, remaps = dep.PatternRemaps, fill = dep.FactorBlocks, ms = dep.SolverMs },
             ["pull"] = new { rise = R3(rise), lifted = R3(pulled.Nodes[centre].Z - pullNet.Nodes[centre].Z), miss = R3(pulled.TargetMiss), drift = pulled.LengthDrift, asymDeg = pulled.AsymptoticDeviation, rms = R3(prms / design.Scale), held = lowEnds.Length, ms = pullMs },
+            ["own"] = new { rms = R3(orms / design.Scale), max = R3(omax / design.Scale), scissorMiss = R3(own.ScissorMiss), targetMin = R3(ownTargets.Min()), targetMax = R3(ownTargets.Max()), drift = own.LengthDrift, asymDeg = own.AsymptoticDeviation, contacts = own.GroundContacts, rise = R3(own.Nodes.Max(q => q.Z) - own.Nodes.Min(q => q.Z)), converged = own.Converged, ms = ownMs, agree = R3(Shape(own.Nodes, dLast.Nodes).rms / design.Scale) },
+            ["angles"] = anglesExact,
         };
         // the design aligned onto the deployed state for the overlay: mirror if the other branch came out, then the
         // best rotation about the table normal through the centre node (1-D search), the centre nodes coincident

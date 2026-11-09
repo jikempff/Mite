@@ -520,7 +520,10 @@ pattern once per motion):
   `SA` / `SB` from the last state back to the first for the deployment.
 - `Dp` Deploy = 1 deploys the flat kit on a table: every lath end rests on a
   one-sided ground (it may lift off, not sink) and every scissor is opened
-  towards `An` (90° for a web on a minimal surface). With `Fl` on as well the
+  towards `An` (90° for a web on a minimal surface; `An` = 0 opens each joint
+  to its own crossing angle in the input net, which is what reproduces a
+  hyperbolic paraboloid or a hyperboloid, whose angles change from joint to
+  joint — on the Enneper web it also halves the miss). With `Fl` on as well the
   net is pressed flat first and deployed from there, so `SA` / `SB` are the
   deployment and the last state should be the design again (the 3-fold Enneper
   web comes back within a tenth of the joint spacing). `Kk` kicks the flat start
@@ -588,7 +591,12 @@ Sweep, Net Joints or Flat Kit — without solving the motion again. At a solved
 state the reading is exact; between states it is interpolated and `Dr` says how
 far the joint spacing then is from exact (halve the step and it drops four
 times). Right-click the slider › Animate to export the motion frame by frame; in
-the web app the Kinetics block has a **record** button next to *play* that
+the web app the Kinetics block also has a **deploy from flat** drive: it presses
+the net flat, kicks it out of the flat state and opens every scissor to its
+design angle on a table, with the design drawn as a dashed ghost and the shape
+error against it in joint spacings in the stats (a few seconds on a coarse net;
+the percentage runs in the status line). The Kinetics block has a **record**
+button next to *play* that
 downloads the motion there and back as a video.
 
 ## Reviewing a release on the Mite Bench

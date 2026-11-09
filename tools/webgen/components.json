@@ -3611,7 +3611,7 @@
     "name": "Angle",
     "nick": "An",
     "type": "Number",
-    "desc": "Deploy 1: crossing angle (degrees) the scissors are opened to (90 on a minimal surface)",
+    "desc": "Deploy 1: crossing angle (degrees) the scissors are opened to (90 on a minimal surface, where the asymptotic curves cross at right angles). 0 or less = each joint's own crossing angle in the input net — the drive that reproduces any anticlastic design, whose angles change from joint to joint (a hyperbolic paraboloid, a hyperboloid)",
     "access": "item",
     "default": "90.0"
    },

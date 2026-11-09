@@ -583,7 +583,24 @@ public sealed class ScissorNet
     /// shows the lock. Solve the returned net with the same options.
     /// </summary>
     public ScissorNet DeployFromFlat(Options options, int anchor, Vec3d normal, double angle, double kick, out (Vec3d[] positions, Vec3d[] normals, double stiffness)? mode)
+        => DeployFromFlat(options, anchor, normal, _ => angle, kick, out mode);
+
+    /// <summary>
+    /// <see cref="DeployFromFlat(Options, int, Vec3d, double, double, out ValueTuple{Vec3d[], Vec3d[], double}?)"/>
+    /// with a target crossing angle per joint, <paramref name="angleAt"/>(node
+    /// index) in radians (0…π, measured as <see cref="CrossingAngleSigned"/>):
+    /// every scissor opens from its flat angle to its own target as the fold
+    /// goes 0 → 1. The target that reproduces a design is the design's own
+    /// crossing angles (<see cref="RestCrossingAngles"/> of the design net):
+    /// the asymptotic curves of a minimal surface all cross at right angles
+    /// (Schling 2018), but on any other anticlastic surface — a hyperbolic
+    /// paraboloid's rulings, the rays of a web — the angle varies from joint
+    /// to joint, and one angle for every scissor drives the grid to a different
+    /// shape. Joints whose target is NaN keep their flat angle.
+    /// </summary>
+    public ScissorNet DeployFromFlat(Options options, int anchor, Vec3d normal, Func<int, double> angleAt, double kick, out (Vec3d[] positions, Vec3d[] normals, double stiffness)? mode)
     {
+        if (angleAt == null) throw new ArgumentNullException(nameof(angleAt));
         var joints = Enumerable.Range(0, Nodes.Length).Where(v => IsJoint[v] && v != anchor && NodeLaths[v].Length == 2).ToArray();
         options.Scissors = joints;
         LastMode = null;
@@ -591,8 +608,23 @@ public sealed class ScissorNet
         mode = LastMode;
         var rest = new State { Nodes = start.Nodes, Normals = start.Normals };
         var a0 = joints.Select(v => start.CrossingAngleSigned(rest, v)).ToArray();
-        options.ScissorAnglesAt = t => a0.Select(a => a + t * (angle - a)).ToArray();
+        var a1 = joints.Select((v, i) => { double a = angleAt(v); return double.IsNaN(a) ? a0[i] : Math.Max(0, Math.Min(Math.PI, a)); }).ToArray();
+        options.ScissorAnglesAt = t => a0.Select((a, i) => a + t * (a1[i] - a)).ToArray();
         return start;
+    }
+
+    /// <summary>
+    /// The crossing angle at every node in the rest state (radians, 0…π, as
+    /// <see cref="CrossingAngleSigned"/>; NaN where fewer than two laths meet)
+    /// — the design angles a flat kit is deployed to
+    /// (<see cref="DeployFromFlat(Options, int, Vec3d, Func{int, double}, double, out ValueTuple{Vec3d[], Vec3d[], double}?)"/>).
+    /// </summary>
+    public double[] RestCrossingAngles()
+    {
+        var rest = new State { Nodes = Nodes, Normals = Normals };
+        var a = new double[Nodes.Length];
+        for (int v = 0; v < a.Length; v++) a[v] = CrossingAngleSigned(rest, v);
+        return a;
     }
 
     /// <summary>

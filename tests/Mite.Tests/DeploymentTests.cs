@@ -345,6 +345,94 @@ public class DeploymentTests
     }
 
     [Fact]
+    public void HyperboloidGrid_DrivenToAnotherStatesOwnScissorAngles_ReachesItExactly_OneAngleForAllDoesNot()
+    {
+        // Per-joint scissor targets (DeployFromFlat with angleAt): the closed-form grid at β₀ = 30° driven to the
+        // crossing angles of the closed form at β₁ = 60°, cos θ_m = cos²β cos(2πm/n) − sin²β at level m (2β at the
+        // waist), must arrive at the β₁ grid — the mechanism is exact, so every pairwise distance is the closed form.
+        // The same drive with one angle for every scissor (the waist's 2β₁) cannot: the levels ±1, ±2 cross at other
+        // angles, the drivers conflict, and the state that comes out is not the β₁ grid.
+        double beta0 = 30 * Math.PI / 180, beta1 = 60 * Math.PI / 180;
+        var (nodes0, laths, normals0) = ScissorNet.HyperboloidMechanism(N, Levels, Rho, beta0);
+        var (nodes1, _, normals1) = ScissorNet.HyperboloidMechanism(N, Levels, Rho, beta1);
+        var design = new ScissorNet(nodes1, laths, N, normals1);
+        var designAngles = design.RestCrossingAngles();
+        int rows = 2 * Levels + 1;
+        for (int k = 0; k < N; k++)
+            for (int m = -Levels; m <= Levels; m++)
+            {
+                double cosTheta = Math.Cos(beta1) * Math.Cos(beta1) * Math.Cos(2 * Math.PI * m / N) - Math.Sin(beta1) * Math.Sin(beta1);
+                Assert.InRange(Math.Cos(designAngles[k * rows + m + Levels]), cosTheta - 1e-12, cosTheta + 1e-12);
+            }
+        Assert.InRange(designAngles[Levels], 2 * beta1 - 1e-12, 2 * beta1 + 1e-12);   // the waist joint of rod 0
+        // the outer levels cross at other angles than the waist (level 2: 128.7° against 120° at β₁ = 60°)
+        Assert.True(Math.Abs(designAngles[2 * Levels] - designAngles[Levels]) > 0.1, "levels cross at other angles than the waist");
+
+        ScissorNet.State Drive(Func<int, double> angleAt)
+        {
+            var net = new ScissorNet(nodes0, laths, N, normals0);
+            var opt = new ScissorNet.Options { Fairness = 0.0, Steps = 6, MaxIterations = 200, Tolerance = 1e-12 };
+            var start = net.DeployFromFlat(opt, Levels, new Vec3d(0, 0, 1), angleAt, 0.0, out var mode);
+            Assert.Null(mode);
+            Assert.Same(net, start);
+            Assert.Equal(N * rows - 1, opt.Scissors.Count);
+            opt.Ground = Array.Empty<int>();   // free in space: the rings move with β, no table
+            return start.Solve(opt).Last;
+        }
+        var exact = Drive(v => designAngles[v]);
+        Assert.True(exact.Converged);
+        Assert.InRange(ShapeError(exact.Nodes, nodes1), 0, 1e-7);
+        Assert.InRange(exact.ScissorMiss, 0, 1e-6);
+        Assert.InRange(exact.LengthDrift, 0, 1e-9);
+        // free in space the grid may drift as a rigid body, so the waist radius is read about the waist ring's own centre
+        var ring = Enumerable.Range(0, N).Select(k => exact.Nodes[k * rows + Levels]).ToArray();
+        var ringCentre = ring.Aggregate(Vec3d.Zero, (a, b) => a + b) / N;
+        foreach (var q in ring) Assert.InRange((q - ringCentre).Length, Rho * Math.Cos(beta1) - 1e-7, Rho * Math.Cos(beta1) + 1e-7);
+
+        var uniform = Drive(_ => 2 * beta1);
+        Assert.True(ShapeError(uniform.Nodes, nodes1) > 1e-2 * Rho, $"one angle for all reached the β₁ grid to {ShapeError(uniform.Nodes, nodes1):E2}");
+        Assert.True(uniform.ScissorMiss > 1.0, $"the conflicting drivers leave a miss: {uniform.ScissorMiss:0.00}°");
+    }
+
+    [Fact]
+    public void FlatEnneperWeb_DeployedToItsOwnCrossingAngles_AgreesWithTheRightAngleDrive()
+    {
+        // On a minimal surface the asymptotic curves cross at right angles (Schling 2018), so the web's own design
+        // angles are all within a few degrees of 90° (the 60° of the rays is the singular node's, which is the
+        // anchor and carries no scissor driver): driving every scissor to its design angle must deploy the kit as
+        // close to the design as the right-angle drive does — the two targets agree where the design is a minimal
+        // surface, and differ where it is not (the hyperboloid test above).
+        var web = Web.Value;
+        var angles = web.Design.RestCrossingAngles();
+        var joints = Enumerable.Range(0, angles.Length).Where(v => !double.IsNaN(angles[v]) && v != web.Centre).ToArray();
+        Assert.True(joints.Length > 300);
+        double minDeg = joints.Min(v => angles[v]) * 180 / Math.PI, maxDeg = joints.Max(v => angles[v]) * 180 / Math.PI;
+        Assert.InRange(minDeg, 85, 90);
+        Assert.InRange(maxDeg, 90, 95);
+        ScissorNet.State Deploy(Func<int, double> angleAt)
+        {
+            var opt = new ScissorNet.Options { Fairness = 0.3, Steps = 10, MaxIterations = 80 };
+            var start = web.Flat.DeployFromFlat(opt, web.Centre, new Vec3d(0, 0, 1), angleAt, 0.5, out var mode);
+            Assert.NotNull(mode);
+            return start.Solve(opt).Last;
+        }
+        var own = Deploy(v => angles[v]);
+        var right = Deploy(_ => Math.PI / 2);
+        double h = web.Design.Scale;
+        double rmsOwn = RmsShapeError(own.Nodes, web.Design.Nodes) / h, rmsRight = RmsShapeError(right.Nodes, web.Design.Nodes) / h;
+        Assert.True(own.Converged);
+        Assert.InRange(own.LengthDrift, 0, 2e-3);
+        Assert.InRange(own.AsymptoticDeviation, 0, 0.3);
+        Assert.InRange(own.GroundMiss, 0, 1e-6);
+        Assert.InRange(rmsOwn, 0, 0.1);
+        Assert.True(Math.Abs(rmsOwn - rmsRight) < 0.03, $"own angles rms {rmsOwn:0.0000} vs right angles {rmsRight:0.0000} (× spacing); scissor miss {own.ScissorMiss:0.00}° vs {right.ScissorMiss:0.00}°");
+        Assert.InRange(own.ScissorMiss, 0, right.ScissorMiss + 1.0);
+        Assert.InRange(RmsShapeError(own.Nodes, right.Nodes), 0, 0.05 * h);
+        double corr = Correlation(web.DesignHeights, own.Nodes.Select(p => p.Z - own.Nodes[web.Centre].Z).ToArray());
+        Assert.InRange(Math.Abs(corr), 0.99, 1.0);
+    }
+
+    [Fact]
     public void FlatEnneperWeb_PulledAtTheSingularNode_DoesNotDeploy()
     {
         // José's Kangaroo sequence in the kinematic model: the three low lobes held on the table, the singular node

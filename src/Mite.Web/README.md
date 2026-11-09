@@ -8,7 +8,10 @@ algorithms, same numbers as the Grasshopper plugin; nothing is uploaded.
   load + weld, curvature, nets, lath analysis + unroll + sweep, frame analysis.
 - `wwwroot/js/runtime.js` — boots the .NET runtime, fetches the `.gz`
   companions and inflates them in the browser (static hosts do not compress
-  `.wasm`).
+  `.wasm`); registers the `mite` module whose `progress` import carries the
+  percent done of a long solve (`Api.cs` `ProgressToPage`) through
+  `worker.js` (`{working, stage}`) and `kernel.js` (`onWorking`) into the
+  page's status line.
 - `wwwroot/js/viewer.js` — three.js scene: vertex-colour analysis, zebra
   shader, fat-line curve families, picking, draggable loft handles. Colours
   are palette roles (`famA`, `seed`, `mark`, `ink`, `solid`, …) resolved per

@@ -24,7 +24,7 @@ async function fetchGz(uri) {
   return new Response(body, { status: 200, headers: { 'Content-Type': type } });
 }
 
-export async function bootMite(onProgress) {
+export async function bootMite(onProgress, onWorking) {
   const t0 = performance.now();
   let loaded = 0;
   const runtime = await dotnet
@@ -37,6 +37,8 @@ export async function bootMite(onProgress) {
       return defaultUri;
     })
     .create();
+  // percent-done reports of a long solve (Api.cs ProgressToPage → "pressing flat 42 %" in the status line)
+  runtime.setModuleImports('mite', { progress: (fraction, stage) => onWorking?.(fraction, stage) });
   const exports = await runtime.getAssemblyExports(runtime.getConfig().mainAssemblyName);
   const api = exports.Mite.Web.MiteApi;
   const bootMs = Math.round(performance.now() - t0);

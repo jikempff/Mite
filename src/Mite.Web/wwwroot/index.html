@@ -234,7 +234,12 @@
         <button data-drive="scissor" title="The laths through the seed turn about its normal — family A one way, B the other — like opening scissors; everything else follows the joints">scissor at the seed</button>
         <button data-drive="lift" title="The seed node rises; lath ends slide on their ground planes">lift the seed</button>
         <button data-drive="spread" title="The seed is held; every free lath end is pulled outward (or inward)">spread the rim</button>
+        <button data-drive="deploy" title="The erection of the flat-assembled kit: the net is pressed flat into the seed's tangent plane (state 0, the kit as cut), kicked out of the flat state along its softest mode — the flat grid is a bifurcation a solver cannot leave on its own — and deployed on a table by opening every scissor to its design angle while the lath ends rest on the table (they may lift, not sink). The design is drawn as a dashed ghost; the stats say how far the deployed kit misses it">deploy from flat</button>
       </div>
+      <div class="row hidden" id="ktarget-row"><span class="unit">open the scissors to</span><div class="chips small" id="ktarget" role="radiogroup" aria-label="scissor targets of the deployment">
+        <button data-kt="design" class="on" title="Each joint's own crossing angle in the design: the drive that reproduces any anticlastic design — on a hyperbolic paraboloid or a hyperboloid the angle changes from joint to joint">design angles</button>
+        <button data-kt="right" title="90° at every joint: the asymptotic curves of a minimal surface cross at right angles (Schling 2018), so on a minimal surface this is the design; elsewhere it deploys a different shape">right angles</button>
+      </div></div>
       <div class="row slider"><label for="kamp">amplitude</label><input id="kamp" type="range" min="-1" max="1" step="0.05" value="1"><output for="kamp">1</output></div>
       <div class="row slider"><label for="kstiff">lath stiffness</label><input id="kstiff" type="range" min="0" max="2" step="0.05" value="0.3"><output for="kstiff">0.3</output></div>
       <div class="row slider"><label for="ksteps">states</label><input id="ksteps" type="range" min="4" max="20" step="1" value="8"><output for="ksteps">8</output></div>
@@ -250,7 +255,7 @@
         <canvas id="kin-plot" class="plot" height="110"></canvas>
         <div class="caption" id="kin-caption">along the fold — line: peak strain utilization (dashed: the limit 1); shaded: strain energy Π split into bending (A colour) and twist (B colour) on one scale; dot: natural state (least Π)</div>
       </div>
-      <p id="kin-note" class="note">Hinges keep the joint spacing and stay normal to the laths; the laths keep their rest bend as far as the stiffness asks (Schikore et al. 2020; Wan, Crolla &amp; Schling 2025). <b>Press flat</b> at amplitude 1 lays the net on the seed's tangent plane: the 3-fold Enneper web folds into a hexagon — the laths bend in the plane around the six rays and the scissors close towards the rim. Scrub the fold back from 1 to 0 to watch the flat grid deploy.</p>
+      <p id="kin-note" class="note">Hinges keep the joint spacing and stay normal to the laths; the laths keep their rest bend as far as the stiffness asks (Schikore et al. 2020; Wan, Crolla &amp; Schling 2025). <b>Press flat</b> at amplitude 1 lays the net on the seed's tangent plane: the 3-fold Enneper web folds into a hexagon — the laths bend in the plane around the six rays and the scissors close towards the rim. Scrub the fold back from 1 to 0 to watch the flat grid deploy. <b>Deploy from flat</b> runs the erection itself: pressed flat, kicked out of the flat bifurcation along the softest mode, every scissor opened to its design angle on a table (Schling &amp; Schikore 2022 on how the singularities limit this; Wan, Man, Crolla &amp; Schling 2025 erected their canopy from the flat state by cable actuation) — a few seconds on a coarse net, the percentage runs in the status line.</p>
     </section>
 
     <section class="block" id="kit-block">

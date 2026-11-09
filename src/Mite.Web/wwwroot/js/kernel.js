@@ -4,7 +4,7 @@
 // be interrupted without shared memory, which static hosts cannot enable.
 
 export class Kernel {
-  constructor() { this.worker = null; this.pending = new Map(); this.nextId = 1; this.onProgress = null; this.busyCount = 0; }
+  constructor() { this.worker = null; this.pending = new Map(); this.nextId = 1; this.onProgress = null; this.onWorking = null; this.busyCount = 0; }
 
   async boot(onProgress) {
     this.onProgress = onProgress;
@@ -12,6 +12,7 @@ export class Kernel {
     this.worker.onmessage = (e) => {
       const d = e.data;
       if (d.progress !== undefined) { this.onProgress?.(d.progress, d.name); return; }
+      if (d.working !== undefined) { this.onWorking?.(d.working, d.stage); return; }   // percent done of the running solve
       const p = this.pending.get(d.id);
       if (!p) return;
       this.pending.delete(d.id);

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices.JavaScript;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Mite.Core;
 using Mite.Core.Analysis;
 using Mite.Core.Curvature;
 using Mite.Core.Fabrication;
@@ -150,8 +151,12 @@ public class FrameOptions
 
 public class KineticsOptions
 {
-    /// <summary>"flatten" (the seed held, every lath end slides on a plane that moves onto the seed's tangent plane), "scissor" (rotate the laths through the seed about its normal), "lift" (raise the seed node, lath ends slide on the ground), "spread" (rim ends pulled radially, the seed held).</summary>
+    /// <summary>"flatten" (the seed held, every lath end slides on a plane that moves onto the seed's tangent plane), "scissor" (rotate the laths through the seed about its normal), "lift" (raise the seed node, lath ends slide on the ground), "spread" (rim ends pulled radially, the seed held), "deploy" (the net pressed flat into the seed's tangent plane — the kit as assembled — then deployed on a table by opening every scissor to its design angle, after a kick along the softest mode out of the flat bifurcation; state 0 is the flat kit).</summary>
     public string Drive { get; set; } = "flatten";
+    /// <summary>deploy: open the scissors to right angles (the minimal-surface reading, Schling 2018) instead of each joint's own design angle.</summary>
+    public bool RightAngles { get; set; }
+    /// <summary>deploy: the kick out of the flat state along the softest mode, × the mean joint spacing (0.5 default; the sign is chosen so the design's branch comes out, not its mirror image).</summary>
+    public double Kick { get; set; } = 0.5;
     /// <summary>−1…1: flatten 1 = flat (−1 deepens), scissor ±45°, lift ±40 % of the size, spread ±40 %.</summary>
     public double Amplitude { get; set; } = 0.6;
     public double Stiffness { get; set; } = 0.2;
@@ -182,6 +187,12 @@ public class KineticState
     /// <summary>Per lath (A first, then B, as the curves): peak strain utilization in this state.</summary>
     public double[] LathUtil { get; set; } = Array.Empty<double>();
     public bool Converged { get; set; }
+    /// <summary>deploy: rms / largest difference of the pairwise node distances against the design, in joint spacings (what the kit's shape misses, free of any rigid motion); node rms against the design after the best rotation about the table normal through the seed; lath ends resting on the table; how far the scissors are from their targets (degrees).</summary>
+    public double ShapeRms { get; set; }
+    public double ShapeMax { get; set; }
+    public double AlignRms { get; set; }
+    public int Contacts { get; set; }
+    public double ScissorMiss { get; set; }
 }
 
 public class KineticsPayload
@@ -201,6 +212,19 @@ public class KineticsPayload
     /// <summary>The most utilised lath over the motion and its state (−1 without a section).</summary>
     public int WorstLath { get; set; } = -1;
     public int WorstState { get; set; } = -1;
+    /// <summary>deploy: the design web rigidly aligned onto the deployed state (mirrored if the other branch came out, rotated about the table normal), for the overlay; the design's rise above the table; the flat kit's press (joint spacing drift, height left over the plane); the softest mode's stiffness and the kick applied; how many scissors are driven and the span of their target angles (degrees).</summary>
+    public double[][][] DesignA { get; set; } = Array.Empty<double[][]>();
+    public double[][][] DesignB { get; set; } = Array.Empty<double[][]>();
+    public double DesignRise { get; set; }
+    public double PressDrift { get; set; }
+    public double PressHeight { get; set; }
+    public long PressMs { get; set; }
+    public double ModeStiffness { get; set; }
+    public double KickApplied { get; set; }
+    public int Scissors { get; set; }
+    public double TargetMin { get; set; }
+    public double TargetMax { get; set; }
+    public bool Mirrored { get; set; }
     public string? Error { get; set; }
     public long Ms { get; set; }
 }
@@ -533,6 +557,25 @@ internal partial class MiteJson : JsonSerializerContext { }
 
 public static partial class MiteApi
 {
+    /// <summary>
+    /// Percent-done reports of a long solve to the page (worker.js forwards them to the status line as
+    /// "pressing flat 42 %"): Nielsen 1993's 10-second limit asks for a percent-done indicator and a way to
+    /// interrupt (the app's Stop restarts the worker); Myers 1985 for the percentage. Imported from the
+    /// "mite" module that worker.js registers; a page without it gets nothing.
+    /// </summary>
+    [JSImport("progress", "mite")]
+    internal static partial void ProgressToPage(double fraction, string stage);
+
+    private static bool _progressBound = true;
+    private static void Report(double fraction, string stage)
+    {
+        if (!_progressBound) return;
+        try { ProgressToPage(fraction, stage); } catch (Exception) { _progressBound = false; }
+    }
+    private static readonly ProgressHandler PageProgress = Report;
+    /// <summary>The page's progress mapped into [from, to] under one stage word (a stage of a longer operation).</summary>
+    private static ProgressHandler Window(string stage, double from, double to) => (f, _) => Report(from + (to - from) * Math.Max(0, Math.Min(1, f)), stage);
+
     private static MeshData? _mesh;
     private static MeshProjection? _proj;
     private static PrincipalCurvature.Result? _pc;
@@ -1269,10 +1312,59 @@ public static partial class MiteApi
             var c = net.Nodes[centre];
             var nrm = proj.ClosestPoint(c, proj.NearestVertexGlobal(c)).SmoothNormal.Normalized();
             double amp = Math.Max(-1, Math.Min(1, o.Amplitude));
-            var opts = new ScissorNet.Options { Fairness = Math.Max(0, o.Stiffness), Steps = Math.Max(1, Math.Min(24, o.Steps)), MaxIterations = 40 };
+            var opts = new ScissorNet.Options { Fairness = Math.Max(0, o.Stiffness), Steps = Math.Max(1, Math.Min(24, o.Steps)), MaxIterations = 40, Progress = PageProgress };
             var ends = Enumerable.Range(0, net.Nodes.Length).Where(i => !net.IsJoint[i]).ToArray();
+            ScissorNet? design = null, start0 = null; Vec3d[]? designAligned = null; double[] designHeights = Array.Empty<double>();
             switch (o.Drive)
             {
+                case "deploy":
+                {
+                    // 1. the kit as assembled: the press of "flatten" at amplitude 1, its own options (the sliding
+                    //    planes must not carry into the deployment), then exactly flat in the seed's tangent plane
+                    var pressOpt = new ScissorNet.Options { Fairness = opts.Fairness, Steps = 8, MaxIterations = 60, Progress = Window("pressing flat", 0, 0.3) };
+                    net.PressFlat(pressOpt, centre, nrm, 1.0);
+                    var pressed = net.Solve(pressOpt).Last;
+                    p.PressMs = sw.ElapsedMilliseconds;
+                    p.PressDrift = pressed.LengthDrift;
+                    p.PressHeight = pressed.Nodes.Max(q => Math.Abs(Vec3d.Dot(q - c, nrm)));
+                    var flatState = new ScissorNet.State
+                    {
+                        Nodes = pressed.Nodes.Select(q => q - Vec3d.Dot(q - c, nrm) * nrm).ToArray(),
+                        Normals = pressed.Nodes.Select(_ => nrm).ToArray(),
+                    };
+                    design = net;
+                    designHeights = design.Nodes.Select(q => Vec3d.Dot(q - c, nrm)).ToArray();
+                    net = design.AtState(flatState);
+                    start0 = net;
+                    // 2. the kick out of the flat bifurcation along the softest mode, signed so that the design's
+                    //    branch comes out (the mode's heights correlate with the design's), not its mirror image.
+                    //    Nothing is pinned: the kit lies in the table's plane, so a held seed could neither rise to
+                    //    the saddle's middle height nor let the lobes sink — the table alone holds the ends, and the
+                    //    rigid motions left in the plane are taken out by the alignment below
+                    opts.MaxIterations = 80;
+                    opts.Progress = Window("deploying", 0.3, 1);
+                    double kick = Math.Abs(o.Kick) > 1e-9 ? Math.Abs(o.Kick) : 0.5;
+                    var modes = net.SoftestModes(new ScissorNet.Options { Fairness = opts.Fairness, SlideNormal = nrm }, 1);
+                    var start = net;
+                    if (modes.Count > 0)
+                    {
+                        var md = modes[0];
+                        double corr = 0, d1 = 0, d2 = 0;
+                        for (int i = 0; i < md.positions.Length; i++) { double h = Vec3d.Dot(md.positions[i], nrm); corr += h * designHeights[i]; d1 += h * h; d2 += designHeights[i] * designHeights[i]; }
+                        double sign = corr < 0 ? -1 : 1;
+                        start = net.AtState(net.Kick(md, sign * kick * net.Scale));
+                        p.ModeStiffness = md.stiffness; p.KickApplied = sign * kick;
+                    }
+                    // 3. every scissor opens to its own design angle (or to 90°) on a one-sided table through the lath ends
+                    var angles = design.RestCrossingAngles();
+                    Func<int, double> target = o.RightAngles ? (_ => Math.PI / 2) : (v => angles[v]);
+                    net = start.DeployFromFlat(opts, centre, nrm, target, 0.0, out _);
+                    var driven = opts.Scissors.Select(v => target(v)).Where(a => !double.IsNaN(a)).ToArray();
+                    p.Scissors = opts.Scissors.Count; p.Drivers = opts.Scissors.Count;
+                    p.TargetMin = driven.Length > 0 ? driven.Min() * 180 / Math.PI : 0; p.TargetMax = driven.Length > 0 ? driven.Max() * 180 / Math.PI : 0;
+                    p.DesignRise = designHeights.Max() - designHeights.Min();
+                    break;
+                }
                 case "lift":
                 {
                     opts.Driven = new[] { centre };
@@ -1318,6 +1410,28 @@ public static partial class MiteApi
                 }
             }
             var res = net.Solve(opts);
+            if (design != null)
+            {
+                // state 0 is the kit as cut, flat on the table; the solve's own first state is the kicked kit settled
+                var flatKit = new ScissorNet.State { Fold = 0, Nodes = start0!.Nodes, Normals = start0.Normals, Converged = true, GroundContacts = opts.Ground.Count };
+                res.States.Insert(0, flatKit);
+                // the design aligned onto the deployed state for the overlay: mirrored through the table plane if the other
+                // branch came out, then the best rotation about the table normal through the seed (1-D search); and per state
+                // the pairwise-distance error against the design (free of rigid motion) and the node rms after that alignment
+                var last = res.Last;
+                var dNodes = (Vec3d[])design.Nodes.Clone();
+                double cc = 0; for (int i = 0; i < dNodes.Length; i++) cc += designHeights[i] * Vec3d.Dot(last.Nodes[i] - last.Nodes[centre], nrm);
+                if (cc < 0) { dNodes = dNodes.Select(q => q - 2 * Vec3d.Dot(q - c, nrm) * nrm).ToArray(); p.Mirrored = true; }
+                var lc = last.Nodes[centre];
+                Vec3d Rot(Vec3d q, double ang) { var r = q - c; var par = Vec3d.Dot(r, nrm) * nrm; var perp = r - par; var cross = Vec3d.Cross(nrm, perp); return perp * Math.Cos(ang) + cross * Math.Sin(ang) + par + lc; }
+                double AlignErr(double ang) { double e = 0; for (int i = 0; i < dNodes.Length; i++) e += (Rot(dNodes[i], ang) - last.Nodes[i]).LengthSquared; return e; }
+                double best = 0, bestE = double.MaxValue;
+                for (int k = 0; k < 360; k++) { double a = k * Math.PI / 180; double e = AlignErr(a); if (e < bestE) { bestE = e; best = a; } }
+                for (double h = Math.PI / 360; h > 1e-7; h /= 2) { if (AlignErr(best + h) < AlignErr(best)) best += h; else if (AlignErr(best - h) < AlignErr(best)) best -= h; }
+                designAligned = dNodes.Select(q => Rot(q, best)).ToArray();
+                var dPolys = design.LathPolylines(new ScissorNet.State { Nodes = designAligned });
+                p.DesignA = ToJagged(dPolys.Take(design.CountA).ToList()); p.DesignB = ToJagged(dPolys.Skip(design.CountA).ToList());
+            }
             List<KineticStrain.StateResult>? elastic = null;
             if (o.Width > 0 && o.Thickness > 0)
             {
@@ -1349,6 +1463,10 @@ public static partial class MiteApi
                     Bending = elastic != null ? elastic[k].BendingEnergy : 0,
                     Twist = elastic != null ? elastic[k].TwistEnergy : 0,
                     LathUtil = elastic != null ? elastic[k].LathUtilization : Array.Empty<double>(),
+                    Contacts = st.GroundContacts, ScissorMiss = st.ScissorMiss,
+                    ShapeRms = design != null ? ShapeError(st.Nodes, design.Nodes).rms / design.Scale : 0,
+                    ShapeMax = design != null ? ShapeError(st.Nodes, design.Nodes).max / design.Scale : 0,
+                    AlignRms = designAligned != null ? Math.Sqrt(designAligned.Zip(st.Nodes, (a, b) => (a - b).LengthSquared).Average()) / design!.Scale : 0,
                 });
             }
             p.States = states.ToArray();
@@ -1569,6 +1687,15 @@ public static partial class MiteApi
         var o = new Vec3d[a.Length / 3];
         for (int i = 0; i < o.Length; i++) o[i] = new Vec3d(a[3 * i], a[3 * i + 1], a[3 * i + 2]);
         return o;
+    }
+
+    /// <summary>rms and largest difference of all pairwise node distances between two configurations of one net — the shape error free of any rigid motion.</summary>
+    private static (double rms, double max) ShapeError(Vec3d[] a, Vec3d[] b)
+    {
+        double e = 0, mx = 0; long n = 0;
+        for (int i = 0; i < a.Length; i++)
+            for (int j = i + 1; j < a.Length; j++) { double d = (a[i] - a[j]).Length - (b[i] - b[j]).Length; e += d * d; mx = Math.Max(mx, Math.Abs(d)); n++; }
+        return (n > 0 ? Math.Sqrt(e / n) : 0, mx);
     }
 
     private static double[][][] ToJagged(List<Vec3d[]> lines) =>

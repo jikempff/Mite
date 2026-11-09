@@ -1,6 +1,6 @@
 // Web Worker hosting the .NET/WebAssembly kernel so long traces never block
 // the page. Messages: {id, method, args} → {id, result} | {id, error};
-// boot progress arrives as {progress, name}.
+// boot progress arrives as {progress, name}; the percent done of a long solve as {working, stage}.
 
 import { bootMite } from './runtime.js';
 
@@ -10,7 +10,7 @@ self.onmessage = async (e) => {
   const { id, method, args } = e.data;
   try {
     if (method === 'boot') {
-      mite = await bootMite((n, name) => self.postMessage({ progress: n, name }));
+      mite = await bootMite((n, name) => self.postMessage({ progress: n, name }), (working, stage) => self.postMessage({ working, stage }));
       self.postMessage({ id, result: { bootMs: mite.bootMs, version: mite.version() } });
       return;
     }

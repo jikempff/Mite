@@ -281,6 +281,37 @@ const check = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (
     return worst;
   });
   check(hex < 0.04, `the flat web is a hexagon (support function 60°-periodic to ${(hex * 100).toFixed(2)} %)`);
+  // 8b. the deployment from the flat kit: pressed flat, kicked out of the flat bifurcation, every scissor opened to its
+  //     design angle on a table — the deployed kit within a tenth of the joint spacing of the design (pairwise distances),
+  //     the design drawn as a ghost, and the percent done forwarded from the worker to the status line while it runs
+  await page.evaluate(() => { const k = window.__mite.kernel, f = k.onWorking; window.__prog = []; k.onWorking = (a, b) => { window.__prog.push([a, b]); f?.(a, b); }; });
+  await page.click('#drives [data-drive="deploy"]');
+  const t0 = Date.now();
+  await page.click('#kinrun'); await idle(600000);
+  const dep = await page.evaluate(() => ({ r: window.__mite.kin, prog: window.__prog, ghost: window.__mite.viewer.overlayGroup.children.filter((c) => c.userData.tag === 'design').length, stats: document.getElementById('kin-stats').textContent, targetRow: !document.getElementById('ktarget-row').classList.contains('hidden'), ampRow: document.getElementById('kamp').closest('.row').classList.contains('hidden') }));
+  const dr = dep.r, d0 = dr?.states?.[0], dl = dr?.states?.at(-1);
+  const depText = dr?.error || `${dr?.states.length} states, ${dr?.scissors} scissors to ${dr?.targetMin.toFixed(0)}° … ${dr?.targetMax.toFixed(0)}°, ${((Date.now() - t0) / 1000).toFixed(1)} s in the browser, kernel ${dr?.ms} ms of which the press ${dr?.pressMs} ms`;
+  check(dr && !dr.error && dr.states.length >= 6 && dr.scissors > 50 && dr.designA.length > 0, `deployment ran (${depText})`);
+  const d1 = dr?.states?.[1];
+  // state 1 is the solve's own first state: the kicked kit settled onto the constraints at fold 0, which takes most of the
+  // kick back (the bench's 451-node kit settles to 1e-4 of its rise) and leaves the asymmetry the first step grows from
+  check(d0 && d0.height < 1e-6 * dr.designRise && d0.contacts > 10 && dr.pressDrift < 5e-3 && d1 && d1.fold === 0 && d1.height < 0.5 * dr.designRise && dr.states[2].height > 0.2 * dr.designRise, `state 0 is the flat kit on the table (height ${d0?.height.toExponential(1)}, ${d0?.contacts} ends down, press drift ${dr?.pressDrift.toExponential(1)}); state 1 the kick settled (height ${d1?.height.toFixed(3)}), the first step rises to ${dr?.states[2].height.toFixed(3)}`);
+  // the coarse web (preset 8) is a rougher mechanism than the bench's 451-node kit (rms 0.047 there): a fifth of the spacing
+  check(dl && dl.converged && dl.shapeRms < 0.2 && dl.shapeMax < 1.0 && dl.drift < 5e-3 && dl.asymptotic < 0.5, `deployed kit within a fifth of the spacing of the design (rms ${dl?.shapeRms.toFixed(3)}, largest ${dl?.shapeMax.toFixed(2)}, nodes ${dl?.alignRms.toFixed(3)} after alignment, drift ${dl?.drift.toExponential(1)}, ${dl?.asymptotic.toFixed(2)}° off asymptotic)`);
+  check(dl && dl.height > 0.85 * dr.designRise && dl.height < 1.15 * dr.designRise && dl.contacts >= 1 && dl.scissorMiss < 10, `it stands on the table at the design's rise (${dl?.height.toFixed(3)} of ${dr?.designRise.toFixed(3)}, ${dl?.contacts} ends down — the table is one-sided and nothing weighs, scissors within ${dl?.scissorMiss.toFixed(1)}°)`);
+  check(dr && Math.abs(dr.kickApplied) === 0.5 && dr.modeStiffness > 0 && dr.modeStiffness < 1e-2 && !dr.mirrored, `kicked along the softest mode into the design's branch (stiffness ${dr?.modeStiffness.toExponential(1)}, kick ${dr?.kickApplied})`);
+  check(dep.ghost === dr.designA.length + dr.designB.length && /shape against the design/.test(dep.stats) && dep.targetRow && dep.ampRow, `design ghost drawn (${dep.ghost} laths) and the deployment line in the stats; the target chips replace the amplitude`);
+  const stages = [...new Set(dep.prog.map((x) => x[1]))], mono = dep.prog.every((x, i) => i === 0 || x[0] >= dep.prog[i - 1][0] - 1e-9);
+  check(dep.prog.length >= 4 && stages.includes('pressing flat') && stages.includes('deploying') && mono && dep.prog.at(-1)[0] <= 1, `percent done forwarded from the worker while it ran (${dep.prog.length} reports, stages ${stages.join(' → ')}, never backwards)`);
+  // and the right-angle target on the minimal surface deploys the same shape
+  await page.click('#ktarget [data-kt="right"]');
+  await page.click('#kinrun'); await idle(600000);
+  const dep2 = await page.evaluate(() => window.__mite.kin);
+  const dl2 = dep2?.states?.at(-1);
+  check(dep2 && !dep2.error && Math.abs(dep2.targetMin - 90) < 1e-9 && Math.abs(dep2.targetMax - 90) < 1e-9 && dl2 && dl2.shapeRms < 0.25 && dl.shapeRms <= dl2.shapeRms + 0.01 && Math.abs(dl2.shapeRms - dl.shapeRms) < 0.06, `right angles deploy the minimal surface's web nearly alike, the design angles no worse (rms ${dl2?.shapeRms.toFixed(3)} vs ${dl?.shapeRms.toFixed(3)} with the design angles)`);
+  await page.click('#ktarget [data-kt="design"]');
+  await page.click('#drives [data-drive="flatten"]');
+  await page.click('#kinrun'); await idle(300000);
   // record: the motion there and back, captured from the viewport and downloaded as a video
   {
     const canRecord = await page.evaluate(() => !document.getElementById('krecord').disabled);

@@ -68,7 +68,14 @@ const S = {
 function busy(on, text) {
   S.busy += on ? 1 : -1;
   $('busy').classList.toggle('hidden', S.busy <= 0);
-  if (text) $('busy-text').textContent = text;
+  if (text) { S.busyText = text; $('busy-text').textContent = text; }
+}
+// percent done of the running solve (the kernel's progress reports): "moving the mechanism… · pressing flat 42 %"
+// — Nielsen's 10-second limit asks for a percent-done indicator and a way to interrupt (the stop button beside it)
+function working(fraction, stage) {
+  if (S.busy <= 0) return;
+  const pct = Math.floor(100 * Math.max(0, Math.min(1, fraction)));
+  $('busy-text').textContent = `${S.busyText || 'computing…'} · ${stage ? stage + ' ' : ''}${pct} %`;
 }
 async function withBusy(text, fn) {
   busy(true, text);
@@ -827,22 +834,25 @@ async function recordKinetics() {
 
 function stopKinetics(clear = false) {
   if (S.kinTimer) { clearInterval(S.kinTimer); S.kinTimer = null; $('kplay').textContent = 'play'; }
-  if (clear && S.kin) { S.kin = null; $('kin-result').classList.add('hidden'); S.viewer.setMeshOpacity(surfaceOpacity()); S.viewer.colorCurves(null, null, null); showUtilLegend(false); }
+  if (clear && S.kin) { S.kin = null; $('kin-result').classList.add('hidden'); S.viewer.setMeshOpacity(surfaceOpacity()); S.viewer.colorCurves(null, null, null); showUtilLegend(false); S.viewer.clearOverlay('design'); }
 }
 
 async function runKinetics() {
   if (!S.netData || S.net !== 'asymptotic') { $('kin-note').textContent = 'Kinetics needs an asymptotic net (two families): pick Asymptotic in the Net block.'; return; }
   stopKinetics();
   const o = lathOpts();
-  const opts = { drive: S.drive, amplitude: +$('kamp').value, stiffness: +$('kstiff').value, steps: +$('ksteps').value, width: o.width, thickness: o.thickness, maxStrain: o.maxStrain, toMetres: toMetres() };
+  const opts = { drive: S.drive, amplitude: +$('kamp').value, stiffness: +$('kstiff').value, steps: +$('ksteps').value, width: o.width, thickness: o.thickness, maxStrain: o.maxStrain, toMetres: toMetres(), rightAngles: $('ktarget').querySelector('.on')?.dataset.kt === 'right', kick: 0.5 };
   const gen = S.gen;
-  await withBusy('moving the mechanism…', async () => {
+  S.viewer.clearOverlay('design');
+  await withBusy(S.drive === 'deploy' ? 'pressing the kit flat and deploying it…' : 'moving the mechanism…', async () => {
     const r = await K('kinetics', opts);
     if (gen !== S.gen) return;
     if (r.error) { $('kin-note').innerHTML = `<span class="bad">${r.error}</span>`; return; }
     S.kin = r;
     $('kin-result').classList.remove('hidden');
     $('kfold').max = r.states.length - 1; $('kfold').value = r.states.length - 1;
+    // the deployment: the design as a dashed ghost in ink, aligned onto the deployed kit, so the eye reads the miss
+    if (r.designA?.length) S.viewer.showPolylines('design', [...r.designA, ...r.designB], S.viewer.ink(), 1.0, true);
     showKinState(r.states.length - 1);
     drawKinPlot();
   });
@@ -880,9 +890,18 @@ function showKinState(k) {
       ` · over the limit in this state: <b class="${over ? 'bad' : 'ok'}">${over}</b>` +
       (st.utilization > 0 ? ` · energy <b>${fmt(st.bending, 1)}</b> J bending + <b>${fmt(st.twist, 1)}</b> J twist` : '');
   }
+  let deploy = '';
+  if (r.designA?.length) {
+    // the deployment from the flat kit: how far the deployed shape is from the design, in joint spacings, and the table
+    const okShape = st.shapeRms <= 0.1;
+    deploy = `\nflat kit pressed in <b>${r.pressMs} ms</b> (joint drift <b>${r.pressDrift.toExponential(1)}</b>, ${fmt(r.pressHeight * m * 1000, 1)} mm off the plane) · kicked <b>${fmt(r.kickApplied, 2)}</b> × spacing along the softest mode (stiffness ${r.modeStiffness.toExponential(1)})` +
+      ` · <b>${r.scissors}</b> scissors opened to <b>${fmt(r.targetMin, 0)}° … ${fmt(r.targetMax, 0)}°</b>\n` +
+      `shape against the design: rms <b class="${okShape ? 'ok' : 'bad'}">${fmt(st.shapeRms, 3)}</b> × spacing (largest ${fmt(st.shapeMax, 2)}; nodes ${fmt(st.alignRms, 3)} after alignment${r.mirrored ? ', the mirror branch' : ''})` +
+      ` · rise <b>${fmt(st.height * m, 2)} m</b> of <b>${fmt(r.designRise * m, 2)} m</b> · <b>${st.contacts}</b> lath ends on the table · scissors within <b>${fmt(st.scissorMiss, 1)}°</b> of their targets`;
+  }
   $('kin-stats').innerHTML = `${r.nodes} nodes · ${r.joints} joints · ${r.laths} laths · ${r.drivers} driven · ${r.ms} ms\n` +
     `fold <b>${st.fold.toFixed(2)}</b> · height <b>${fmt(st.height * m, 2)} m</b> · span <b>${fmt(st.span * m, 2)} m</b> · crossing <b>${fmt(st.minAngle, 0)}° … ${fmt(st.maxAngle, 0)}°</b>\n` +
-    `joint drift <b>${st.drift.toExponential(1)}</b> · off asymptotic <b>${fmt(st.asymptotic, 2)}°</b> · driver miss <b>${fmt(st.miss * m * 1000, 0)} mm</b>` +
+    `joint drift <b>${st.drift.toExponential(1)}</b> · off asymptotic <b>${fmt(st.asymptotic, 2)}°</b> · driver miss <b>${fmt(st.miss * m * 1000, 0)} mm</b>` + deploy +
     (st.utilization > 0 ? ` · strain utilization <b class="${st.utilization <= 1 ? 'ok' : 'bad'}">${fmt(st.utilization, 2)}</b>` : '') + (r.natural === k ? ' · <b>natural state</b> (least energy)' : '') + (st.converged ? '' : ' · <span class="bad">not converged</span>') + env;
 }
 
@@ -1153,6 +1172,7 @@ async function main() {
   showNetParams();
 
   S.kernel = new Kernel();
+  S.kernel.onWorking = working;
   const info = await S.kernel.boot(bootProgress);
   $('version').textContent = info.version + ' · wasm worker · boot ' + info.bootMs + ' ms';
   $('boot').classList.add('hidden');
@@ -1291,9 +1311,15 @@ async function main() {
     const b = e.target.closest('button'); if (!b) return;
     $('drives').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
     S.drive = b.dataset.drive;
-    // each drive has its own natural amplitude: 1 = completely flat for the press, ±0.35 for the others
+    // each drive has its own natural amplitude: 1 = completely flat for the press, ±0.35 for the others; the deployment has none
     const amp = S.drive === 'flatten' ? 1 : 0.35;
     $('kamp').value = amp; $('kamp').nextElementSibling.value = amp;
+    $('kamp').closest('.row').classList.toggle('hidden', S.drive === 'deploy');
+    $('ktarget-row').classList.toggle('hidden', S.drive !== 'deploy');
+  });
+  $('ktarget').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $('ktarget').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
   });
   for (const id of ['kamp', 'kstiff', 'ksteps']) $(id).addEventListener('input', (e) => { e.target.nextElementSibling.value = e.target.value; });
   $('kinrun').addEventListener('click', runKinetics);

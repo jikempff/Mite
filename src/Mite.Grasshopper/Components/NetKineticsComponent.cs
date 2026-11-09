@@ -82,7 +82,7 @@ public class NetKineticsComponent : MiteComponent
             "0 = off. 1 = open every scissor to Angle (a hub motor, the hands that open the kit; 90° for a web on a minimal surface): the flat 3-fold Enneper hexagon comes back to its web within a tenth of the joint spacing. " +
             "2 = the Move / To and Cable drivers act with the net on the table — pulling the singular node alone does not deploy a grid, the drivers' miss says so. " +
             "With Flatten on, the net is pressed flat first and deployed from there (the states are the deployment); otherwise the input curves are taken as the flat state (a Flat Kit's flat assembly).", GH_ParamAccess.item, 0);
-        pManager.AddNumberParameter("Angle", "An", "Deploy 1: crossing angle (degrees) the scissors are opened to (90 on a minimal surface)", GH_ParamAccess.item, 90.0);
+        pManager.AddNumberParameter("Angle", "An", "Deploy 1: crossing angle (degrees) the scissors are opened to (90 on a minimal surface, where the asymptotic curves cross at right angles). 0 or less = each joint's own crossing angle in the input net — the drive that reproduces any anticlastic design, whose angles change from joint to joint (a hyperbolic paraboloid, a hyperboloid)", GH_ParamAccess.item, 90.0);
         pManager.AddNumberParameter("Kick", "Kk", "Deploy: the flat state is a bifurcation — a solver started exactly flat never leaves the plane — so the start is kicked along the net's softest mode by Kick × the mean joint spacing; the sign picks the branch (the deployment or its mirror image), 0 shows the lock", GH_ParamAccess.item, 0.5);
         // one-wire setups (appended 2026-11-04): their points join Fixed / Slide / Move / To / Cables / Lengths
         pManager.AddGenericParameter("Supports", "Su", "Kinetic Supports output: its fixed and sliding points join Fixed and Slide (its plane normal is used when it has sliding points)", GH_ParamAccess.item); // 30
@@ -243,6 +243,10 @@ public class NetKineticsComponent : MiteComponent
             AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"A Fixed / Move point is {snap:G3} away from the nearest joint (mean joint spacing {net.Scale:G3}).");
 
         var restStart = driven.Select(n => net.Nodes[n]).ToArray();
+        // the input net's own crossing angles: the deployment targets when Angle ≤ 0 (read before any press re-bases the net)
+        var designAngles = deploy == 1 && deployAngle <= 0 ? net.RestCrossingAngles() : null;
+        if (designAngles != null && net.IsFlat())
+            AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, "Angle ≤ 0 opens every scissor to its crossing angle in the input net, and the input net is flat: nothing opens. Feed the curved design with Flatten = true (it is pressed flat first), or give the Angle.");
         var opt = new ScissorNet.Options
         {
             Fixed = fixedIdx,
@@ -299,8 +303,19 @@ public class NetKineticsComponent : MiteComponent
             {
                 if (deploy == 1)
                 {
-                    net = net.DeployFromFlat(opt, anchor, normal, deployAngle * Math.PI / 180, kick, out var mode);
-                    deployLine += $"Deploy 1: {opt.Scissors.Count} scissors opened to {deployAngle:0.#}° on a table of {opt.Ground.Count} lath ends";
+                    (Vec3d[] positions, Vec3d[] normals, double stiffness)? mode;
+                    if (designAngles != null)
+                    {
+                        var da = designAngles;
+                        net = net.DeployFromFlat(opt, anchor, normal, v => da[v], kick, out mode);
+                        var targets = opt.Scissors.Select(v => da[v]).Where(a => !double.IsNaN(a)).Select(a => a * 180 / Math.PI).ToList();
+                        deployLine += $"Deploy 1: {opt.Scissors.Count} scissors opened to their design angles ({(targets.Count > 0 ? targets.Min() : 0):0.#}° … {(targets.Count > 0 ? targets.Max() : 0):0.#}°) on a table of {opt.Ground.Count} lath ends";
+                    }
+                    else
+                    {
+                        net = net.DeployFromFlat(opt, anchor, normal, deployAngle * Math.PI / 180, kick, out mode);
+                        deployLine += $"Deploy 1: {opt.Scissors.Count} scissors opened to {deployAngle:0.#}° on a table of {opt.Ground.Count} lath ends";
+                    }
                     if (mode.HasValue) deployLine += $", kicked {kick:G3} × spacing along the softest mode (stiffness {mode.Value.stiffness:E1})";
                 }
                 else
@@ -376,7 +391,7 @@ public class NetKineticsComponent : MiteComponent
             sb.AppendLine(deployLine);
             double rise = last.Nodes.Max(p => Vec3d.Dot(p, normal)) - last.Nodes.Min(p => Vec3d.Dot(p, normal));
             sb.AppendLine($"Deployed at Fold {last.Fold:0.##}: rise {rise:G4} above the table, {last.GroundContacts} of {opt.Ground.Count} lath ends on it, sunk {last.GroundMiss:E1}" +
-                (deploy == 1 ? $", scissors within {last.ScissorMiss:0.#}° of {deployAngle:0.#}°" : $", driver miss {Math.Max(last.TargetMiss, last.CableMiss):G3}"));
+                (deploy == 1 ? $", scissors within {last.ScissorMiss:0.#}° of {(designAngles != null ? "their design angles" : $"{deployAngle:0.#}°")}" : $", driver miss {Math.Max(last.TargetMiss, last.CableMiss):G3}"));
             if (deploy == 2 && driven.Count > 0 && last.TargetMiss > 0.25 * targetEnd.Zip(restStart, (a, b) => (a - b).Length).DefaultIfEmpty(0).Max())
                 AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, $"The pull is resisted: the moved joint misses its target by {last.TargetMiss:G3}. A flat asymptotic grid deploys along its softest mode, which does not move a singular node relative to the lath ends — open the scissors (Deploy 1) or lift the lath ends (Flatten read backwards) instead.");
         }

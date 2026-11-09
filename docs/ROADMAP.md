@@ -40,10 +40,10 @@ where they overlap
    grid — 2026-10-23, session 2, in the core and Grasshopper: the flat state is
    a bifurcation, the kit deploys by opening its scissors, and pulling the
    singular node alone does not deploy it, see E; speed done 2026-11-07:
-   the block LDLᵀ, press + deploy 18 → 3.3 s natively on 451 nodes, see E);
-   next: strain colouring per state, the deployment in the browser (not
-   timed in wasm this session; the damping and Jacobian follow-ups of the E
-   speed item come first), the physical prototype dimensions.
+   the block LDLᵀ, press + deploy 18 → 3.3 s natively on 451 nodes, see E;
+   the deployment in the browser — 2026-11-09, the app's *deploy from flat*
+   drive, see C); next: strain colouring per state, the design-angle
+   deployment in the bench's 3D viewer, the physical prototype dimensions.
 6. The kit to build it (done 1.3.1: Flat Kit — flat assembly 1 : 1, strips
    with slots / holes / hub on laser sheets, deployment sequence, cut list,
    SVG / DXF / CSV); next: a physical prototype of the 3-fold Enneper to
@@ -956,6 +956,77 @@ remains the self-test review page.
 - [ ] App: the kinetic "fold" slider of E (core `ScissorNet` is ready, the
       wasm binding and a worker call are missing); custom section curves in
       the lath views; a "buildable" summary that waits for the colouring pass.
+- [x] App: the deployment from the flat kit — 2026-11-09 (session 1, C;
+      José's priority 3 "the deployment in the browser"). A fifth drive in the
+      Kinetics block, *deploy from flat* (`Api.cs` `Kinetics`, drive "deploy"):
+      the press of *press flat* at amplitude 1 with its own options, the kit
+      made exactly flat in the seed's tangent plane (state 0), the softest mode
+      (`SoftestModes`, nothing pinned) kicked by 0.5 × spacing with the sign
+      that correlates with the design's heights (the design's branch, not its
+      mirror image), and `DeployFromFlat` with a target per joint — each
+      joint's crossing angle in the design, or 90° on request — on the
+      one-sided table through the lath ends. The design is aligned onto the
+      deployed kit (mirrored if the other branch came out anyway, rotated
+      about the table normal through the seed, 1-D search) and drawn as a
+      dashed ghost in ink; per state the stats carry the pairwise-distance
+      error against the design (rms, largest, in joint spacings), the node
+      rms after alignment, the ends on the table and the scissors' miss. The
+      percent done of any kinetic solve runs from the worker to the status
+      line through a `[JSImport]` (`ProgressToPage`, module `mite` registered
+      in `runtime.js`, `{working, stage}` messages, `Kernel.onWorking`):
+      Nielsen's 10-second limit asks for a percent-done indicator and a way to
+      interrupt (the stop button restarts the worker). Core: `DeployFromFlat(…,
+      Func<int, double> angleAt, …)` and `RestCrossingAngles()` (additions;
+      the single-angle call delegates). Net Kinetics: `Angle` ≤ 0 = the design
+      angles, with a warning when the input net is already flat.
+      Literature: Schling & Schikore 2022 (DMS 2022, singularities limit the
+      transformability), Wan, Man, Crolla & Schling 2025 (Automation in
+      Construction 180, 106508: the Kinetic Canopy "transformed from a flat
+      configuration into an arched gridshell using an integrated cable
+      actuation system, without support movements"; initial stresses,
+      actuation forces and energy shifts evaluated — abstract; the paper is
+      paywalled), Wan, Crolla & Schling 2025 (AEI 68: "geometries for
+      subsequent service stages", strain energy tracked through the
+      transformation — abstract), Pillwein & Musialski 2021 (arXiv
+      2111.08883, deployable elastic geodesic grids erected from the planar
+      state by fixing the ends to anchors; RMS and max distance of the grid
+      vertices to the target as the deviation metric; "results in a matter of
+      seconds" as the bar for a designer's tool), Nishimoto & Tachi 2023 (DMS
+      2023: asymptotic grid shells "still have a high degree of freedom" and
+      "require the control of diagonal braces" — one driven parameter is not
+      enough, every scissor is driven here), Nielsen 1993 / Sherwin 2014 (NN/g:
+      percent-done past 10 s, a looped indicator for 2–10 s, a way to stop).
+      Measured:
+      - The design's own angles are the right targets, one angle for all is
+        not: the closed-form hyperboloid grid (24 rods, 60 joints) at β = 30°
+        driven to the closed form's crossing angles at β = 60° (cos θ_m =
+        cos²β cos(2πm/n) − sin²β: 120° at the waist, 128.7° at level 2)
+        arrives at the β = 60° grid to 1.4e-14 in every pairwise distance
+        (scissor miss 1e-12°, drift 4e-16); the waist angle 2β for every
+        scissor leaves it 0.076 ρ off with 5.4° of scissor miss.
+      - The 3-fold Enneper kit (451 nodes, bench) deployed to its own angles
+        (88.2° … 92.9°: the discrete web's crossings are not exactly right
+        angles) comes back to rms 0.047 × spacing against 0.070 with 90°
+        (largest 0.23 vs 0.33), scissors within 2.2° instead of 5.8°, the two
+        deployed shapes 0.023 × spacing apart, rise 0.900 of 0.905, drift
+        7e-4, 0.05° off asymptotic, 6 ends on the table.
+      - A pinned seed locks the deployment: the flat kit lies in the table's
+        plane, so a held centre can neither rise to the saddle's middle height
+        nor let the lobes sink — the first app version did this and the kit
+        stayed at 0.19 of the design's rise with the scissors 27° short.
+        Nothing is pinned now; the table holds the ends and the alignment
+        takes the in-plane rigid motions out.
+      - In the browser (AOT, this sandbox's Chromium), the coarse Enneper web
+        of the smoke test (preset 8, 101 scissors): see the session report for
+        the seconds; natively the 451-node kit takes 2.6 s to press and 10.1 s
+        to deploy with the 1.6.0 envelope solver (the unmerged 11-07b block
+        LDLᵀ patch measured 0.9 + 2.4 s on the same motion).
+      Open: the deployment in the bench's 3D viewer with the design-angle
+      drive (the bench's scene still plays the 90° one); the kick and the
+      target as app controls (0.5 and the design angles are fixed); the
+      press + deploy as one `KineticMotion` so Kinetic State can read it;
+      the AEI and Automation in Construction papers' full texts (stage
+      definitions, actuation forces) once reachable.
 - [ ] App: run `tools/web-smoke.js` from `tools/build-web.sh` (needs a
       Playwright install on the deploying machine).
 - [ ] Bench to reuse the app's typologies once the shape generators are
@@ -2283,8 +2354,8 @@ Plan
         drift); its deployment therefore "costs" that much and the LM weights
         decide whether a weak drive is followed — one singularity, as Schling
         & Schikore say, limits the transformability.
-      Open: the deployment in the web app (press + deploy ≈ 15 s natively,
-      far too slow in wasm without the speed item); a second-order
+      Open: the deployment in the web app — done 2026-11-09 (the app's *deploy
+      from flat* drive, C above; per-joint design angles in the core); a second-order
       predictor (Kumar & Pellegrino's higher-order compatibility) instead of
       the kick, which would also give the branch tangent at any bifurcation
       along a motion; the scissor drive on a chosen ring of joints (a hub
